@@ -1,0 +1,6 @@
+# libcspice.so is the NAIF CSPICE toolkit compiled as a single position-independent
+# shared object. It has no versioned soname (NAIF does not use one) and is used
+# exclusively via ctypes by p_spice.py — no shlibs/symbols entry is appropriate.
+planetary-cspice: shared-library-lacks-prerequisites usr/local/lib/libcspice.so
+planetary-cspice: no-symbols-control-file usr/local/lib/libcspice.so
+planetary-cspice: non-standard-dir-in-usr usr/local/

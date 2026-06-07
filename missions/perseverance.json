@@ -1,0 +1,52 @@
+{
+  "mission": "Perseverance (Mars 2020)",
+  "body": "Mars",
+  "lander_type": "robotic_rover",
+  "landing_site": {
+    "name": "Jezero crater",
+    "lat_deg": 18.4447,
+    "lon_deg": 77.4508,
+    "lon_convention": "east_positive_0_360_planetocentric",
+    "epoch_utc": "2021-02-18T20:55:00",
+    "status": "landed_success"
+  },
+  "ellipse_major_m": 7700,
+  "ellipse_minor_m": 6600,
+  "top_percentile": 70.0,
+  "scan_res": 30,
+  "ephemeris": "auto",
+  "illum_nsteps": 1000,
+  "vis_nsteps": 1000,
+  "slope_thresholds_deg": {
+    "30": 10,
+    "100": 7,
+    "1000": 5,
+    "10000": 3
+  },
+  "roughness_rms_max_m": 0.5,
+  "min_illumination_fraction": 0.0,
+  "earth_visibility_min_fraction": 0.0,
+  "earth_elevation_min_deg": 3.0,
+  "orbiter_altitude_km": 100,
+  "orbiter_inclination_deg": 90,
+  "hard_exclusion": {
+    "slope_max_deg": 15,
+    "roughness_rms_max_m": 1.0,
+    "illumination_min": 0.0,
+    "earth_vis_min": 0.0
+  },
+  "start_epoch": "2021-02-18T20:55:00",
+  "science_targets": [
+    "astrobiology",
+    "geology",
+    "sample_cache"
+  ],
+  "criteria_weights": {
+    "slope": 0.35,
+    "roughness": 0.25,
+    "illumination": 0.1,
+    "earth_vis": 0.1,
+    "science": 0.2
+  },
+  "notes": "TRN/range-trigger; small ellipse near a delta. Coordinates are approximate published landing-site values; region must be set from a DEM covering this site (no region_bounds is prescribed)."
+}

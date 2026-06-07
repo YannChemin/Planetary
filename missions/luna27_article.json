@@ -1,0 +1,49 @@
+{
+  "mission": "Luna-27 (article sector)",
+  "body": "Moon",
+  "lander_type": "soft_lander",
+  "ellipse_major_m": 30000,
+  "ellipse_minor_m": 15000,
+  "top_percentile": 70.0,
+  "scan_res": 30,
+  "ephemeris": "auto",
+  "start_epoch": "2028-01-01T00:00:00",
+  "illum_nsteps": 1000,
+  "vis_nsteps": 1000,
+  "region_bounds": {
+    "n":  337590,
+    "s":  130740,
+    "e":  263040,
+    "w":   -8850,
+    "res": 30,
+    "_comment": "Lunar south-polar stereographic metres (sphere R=1737400, lat_0=-90, lat_ts=-90, lon_0=0). Bounding box of the Turchinskaya & Slyuta 2024 study sector (lon 1W-51E, lat 79-83S), computed with pyproj and aligned to a 30 m grid with a 3 km margin. Requires the LOLA polar DEM ldem_75s_30m_float (covers 75-90S at 30 m); the box lies well outside the bundled ldem_875s_5m_float (which only reaches 87.5S)."
+  },
+  "study_area_note": "This mission reproduces the actual Turchinskaya & Slyuta 2024 study sector (51E to 1W, 83S to 79S) using the NASA PDS LOLA polar DEM ldem_75s_30m_float (75-90S, 30 m, south polar stereographic). The sector lies 213-335 km from the south pole, in the latitude band that falls between SLDEM2015 (<=60S) and the LOLA 5 m polar cap product (>=87.5S); the 30 m ldem_75s product bridges that gap. The Malapert Massif candidate (~81.4S) from the original article IS reachable with this DEM. Import the DEM with p.in.dem, then run p.landing with this mission file.",
+  "slope_thresholds_deg": {
+    "30":   10,
+    "100":   7,
+    "1000":  5,
+    "10000": 3
+  },
+  "roughness_rms_max_m": 0.5,
+  "min_illumination_fraction": 0.35,
+  "earth_visibility_min_fraction": 0.50,
+  "earth_elevation_min_deg": 3.0,
+  "orbiter_altitude_km": 100,
+  "orbiter_inclination_deg": 90,
+  "science_targets": ["volatile_ice", "weh", "geology"],
+  "criteria_weights": {
+    "slope":          0.25,
+    "roughness":      0.15,
+    "illumination":   0.20,
+    "earth_vis":      0.15,
+    "science":        0.25
+  },
+  "hard_exclusion": {
+    "slope_max_deg":        15,
+    "roughness_rms_max_m":   1.0,
+    "illumination_min":      0.0,
+    "earth_vis_min":         0.0
+  },
+  "notes": "Per Turchinskaya & Slyuta 2024. Reproduces the article's actual polar sector 51E-1W, 83-79S (incl. Malapert ~81.4S), 2028 planned landing, using ldem_75s_30m_float. Methodology (1000 timesteps, 30 m scan_res, 35% illum, 50% Earth vis) follows the article."
+}

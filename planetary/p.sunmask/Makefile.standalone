@@ -1,0 +1,60 @@
+# Standalone Makefile for p.sunmask — no GRASS build system required.
+# Usage:  make -f Makefile.standalone [GISBASE=/usr/local/grass86]
+
+GISBASE   ?= /usr/local/grass86
+GRASS_INC  = $(GISBASE)/include
+GRASS_LIB  = $(GISBASE)/lib
+
+CC        = gcc
+CFLAGS    = -I$(GRASS_INC) -fopenmp -O2 -Wall
+LDFLAGS   = -L$(GRASS_LIB) -lgrass_gis -lgrass_raster -fopenmp -lm \
+            -Wl,-rpath,$(GRASS_LIB)
+
+# ── optional OpenCL ───────────────────────────────────────────────────────────
+OCL_CFLAGS :=
+OCL_LIBS   :=
+
+OCL_PKG_LIBS := $(shell pkg-config --libs OpenCL 2>/dev/null)
+ifneq ($(OCL_PKG_LIBS),)
+    OCL_CFLAGS := -DHAVE_OPENCL $(shell pkg-config --cflags OpenCL 2>/dev/null)
+    OCL_LIBS   := $(OCL_PKG_LIBS)
+    $(info p.sunmask: OpenCL enabled)
+else
+    OCL_DIRECT := $(shell echo "int main(){}" | gcc -x c - -lOpenCL -o /dev/null 2>/dev/null && echo yes || echo no)
+    ifeq ($(OCL_DIRECT),yes)
+        OCL_CFLAGS := -DHAVE_OPENCL
+        OCL_LIBS   := -lOpenCL
+        $(info p.sunmask: OpenCL enabled (direct -lOpenCL))
+    else
+        $(info p.sunmask: OpenCL NOT found — building OpenMP-only)
+    endif
+endif
+
+CFLAGS  += $(OCL_CFLAGS)
+LDFLAGS += $(OCL_LIBS)
+
+TARGET = p.sunmask
+LIB    = libpsunmask.so
+
+all: $(TARGET) $(LIB)
+
+$(TARGET): main.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+# Pure C+OpenMP (+ optional OpenCL) shared library exposing
+# psunmask_cast()      — CPU path, always present
+# psunmask_gpu_open/_cast/_close — GPU path when built with HAVE_OPENCL
+# Used by p.illumination.sunfraction's in-RAM ctypes loop to avoid per-step
+# process startup and (if a GPU is available) to run the shadow cast on it.
+# No GRASS dependency — keep it that way so it can ship as /usr/local/lib/.
+LIB_OCL_CFLAGS := $(OCL_CFLAGS)
+LIB_OCL_LIBS   := $(OCL_LIBS)
+$(LIB): psunmask_lib.c psunmask_gpu.c psunmask_lib.h
+	$(CC) -shared -fPIC -fopenmp -O2 -Wall $(LIB_OCL_CFLAGS) \
+	    -o $@ psunmask_lib.c psunmask_gpu.c \
+	    -lm -fopenmp $(LIB_OCL_LIBS)
+
+clean:
+	rm -f $(TARGET) $(LIB)
+
+.PHONY: all clean

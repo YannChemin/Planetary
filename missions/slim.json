@@ -1,0 +1,50 @@
+{
+  "mission": "SLIM",
+  "body": "Moon",
+  "lander_type": "robotic_lander",
+  "landing_site": {
+    "name": "Near Shioli crater",
+    "lat_deg": -13.31,
+    "lon_deg": 25.25,
+    "lon_convention": "east_positive_0_360_planetocentric",
+    "epoch_utc": "2024-01-19T15:20:00",
+    "status": "landed_success"
+  },
+  "ellipse_major_m": 100,
+  "ellipse_minor_m": 100,
+  "top_percentile": 70.0,
+  "scan_res": 30,
+  "ephemeris": "auto",
+  "illum_nsteps": 1000,
+  "vis_nsteps": 1000,
+  "slope_thresholds_deg": {
+    "30": 10,
+    "100": 7,
+    "1000": 5,
+    "10000": 3
+  },
+  "roughness_rms_max_m": 0.5,
+  "min_illumination_fraction": 0.0,
+  "earth_visibility_min_fraction": 0.0,
+  "earth_elevation_min_deg": 3.0,
+  "orbiter_altitude_km": 100,
+  "orbiter_inclination_deg": 90,
+  "hard_exclusion": {
+    "slope_max_deg": 15,
+    "roughness_rms_max_m": 1.0,
+    "illumination_min": 0.0,
+    "earth_vis_min": 0.0
+  },
+  "start_epoch": "2024-01-19T15:20:00",
+  "science_targets": [
+    "geology"
+  ],
+  "criteria_weights": {
+    "slope": 0.3,
+    "roughness": 0.2,
+    "illumination": 0.2,
+    "earth_vis": 0.15,
+    "science": 0.15
+  },
+  "notes": "JAXA pinpoint-landing demo (~100 m target). Landed but tipped; precision landing technology. Coordinates are approximate published landing-site values; region must be set from a DEM covering this site (no region_bounds is prescribed)."
+}

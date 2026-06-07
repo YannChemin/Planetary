@@ -1,0 +1,66 @@
+/* horizon_kernel.h — OpenCL kernel embedded as C string.
+ *
+ * Mirrors horizon_kernel.cl exactly; that file remains the canonical
+ * source for the pyopencl prototype. Keep the two in sync.
+ */
+#ifndef P_HORIZON_GPU_KERNEL_H
+#define P_HORIZON_GPU_KERNEL_H
+
+static const char *HORIZON_KERNEL_SRC =
+"/* Nearest-neighbor: matches r.horizon's cell-centre walking semantic. */\n"
+"__constant sampler_t NEAR =\n"
+"    CLK_NORMALIZED_COORDS_FALSE |\n"
+"    CLK_ADDRESS_CLAMP_TO_EDGE   |\n"
+"    CLK_FILTER_NEAREST;\n"
+"\n"
+"__kernel void horizon_at_azimuth(\n"
+"    __read_only image2d_t dem,\n"
+"    __global    const float *rotation,\n"
+"    __global    const float *metric_x,\n"
+"    __global    const float *metric_y,\n"
+"    __global          float *out,\n"
+"    const float az_rad,\n"
+"    const float cell_m,\n"
+"    const float step_m,\n"
+"    const float max_dist_m,\n"
+"    const float proj_envelope,\n"
+"    const float inv_2R,\n"
+"    const int   nx,\n"
+"    const int   ny)\n"
+"{\n"
+"    const int x = get_global_id(0);\n"
+"    const int y = get_global_id(1);\n"
+"    if (x >= nx || y >= ny) return;\n"
+"    const float z0 = read_imagef(dem, NEAR, (float2)(x + 0.5f, y + 0.5f)).x;\n"
+"    const float az_local = az_rad + rotation[y * nx + x];\n"
+"    /* CCW-from-(geographic-)east azimuth; GRASS row 0 = NORTH ⇒ dy negated. */\n"
+"    const float dx =  cos(az_local);\n"
+"    const float dy = -sin(az_local);\n"
+"    float max_elev = 0.0f;\n"
+"    int   any_sample = 0;\n"
+"    int   last_ix = x, last_iy = y;\n"
+"    for (float s = step_m; s <= proj_envelope; s += step_m) {\n"
+"        float fx = (float)x + s * dx / cell_m;\n"
+"        float fy = (float)y + s * dy / cell_m;\n"
+"        if (fx < 0.0f || fy < 0.0f || fx >= (float)nx || fy >= (float)ny)\n"
+"            break;\n"
+"        int ix = (int)fx;\n"
+"        int iy = (int)fy;\n"
+"        if (ix == last_ix && iy == last_iy) continue;\n"
+"        last_ix = ix; last_iy = iy;\n"
+"        float sx = metric_x[iy];\n"
+"        float sy = metric_y[iy];\n"
+"        float ddx = (float)(ix - x) * cell_m * sx;\n"
+"        float ddy = (float)(iy - y) * cell_m * sy;\n"
+"        float dist = sqrt(ddx * ddx + ddy * ddy);\n"
+"        if (dist > max_dist_m) break;\n"
+"        any_sample = 1;\n"
+"        float z = read_imagef(dem, NEAR, (int2)(ix, iy)).x;\n"
+"        float dz = (z - z0) - dist * dist * inv_2R;\n"
+"        float elev = atan2(dz, dist);\n"
+"        if (elev > max_elev) max_elev = elev;\n"
+"    }\n"
+"    out[y * nx + x] = any_sample ? max_elev : NAN;\n"
+"}\n";
+
+#endif /* P_HORIZON_GPU_KERNEL_H */

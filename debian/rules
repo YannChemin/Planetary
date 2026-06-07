@@ -1,0 +1,136 @@
+#!/usr/bin/make -f
+SHELL := /bin/bash
+export DH_VERBOSE = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+# Make p_lib.py / p_spice.py importable when GRASS runs scripts for HTML docs
+export PYTHONPATH := $(CURDIR)/planetary
+
+# Auto-detect GRASS installation (newest version)
+GRASS_PREFIX := $(shell ls -d /usr/local/grass[0-9]* 2>/dev/null | sort -V | tail -1)
+ifeq ($(GRASS_PREFIX),)
+  GRASS_PREFIX := /usr/local/grass86
+endif
+
+CSPICE_SRC   := $(CURDIR)/cspice-pkg/cspice
+CSPICE_BUILD := $(CURDIR)/cspice-pkg/build
+
+# Addons staging tree root for the deb
+ADDONS := $(CURDIR)/debian/grass-planetary-addons/usr/lib/grass/addons
+
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	# GRASS modules use their own build system; no configure step needed
+
+override_dh_auto_build:
+	# ── libcspice.so ─────────────────────────────────────────────────────
+	mkdir -p $(CSPICE_BUILD)
+	gcc -shared -fPIC -O2 -w -std=gnu89 -DNON_UNIX_STDIO \
+	    -I$(CSPICE_SRC)/include \
+	    -o $(CSPICE_BUILD)/libcspice.so \
+	    $(CSPICE_SRC)/src/cspice/*.c -lm
+	echo "=== libcspice.so built ==="
+	# ── all GRASS modules (C + Python) via standard GRASS build system ────
+	# (libs/ sub-objects are compiled on demand by each module's DEPENDENCIES)
+	find planetary -maxdepth 2 -name 'OBJ.*' -type d -exec rm -rf {} + 2>/dev/null || true
+	$(MAKE) -C planetary MODULE_TOPDIR=$(GRASS_PREFIX)
+	# ── libpsunmask.so (ctypes library, standalone build) ─────────────────
+	$(MAKE) -C planetary/p.sunmask -f Makefile.standalone \
+	    GISBASE=$(GRASS_PREFIX)
+
+override_dh_auto_install:
+	# ── planetary-cspice ──────────────────────────────────────────────────
+	mkdir -p debian/planetary-cspice/usr/local/lib
+	mkdir -p debian/planetary-cspice/usr/local/include/cspice
+	mkdir -p debian/planetary-cspice/usr/local/share/doc/planetary-cspice
+	install -m 0644 $(CSPICE_BUILD)/libcspice.so \
+	    debian/planetary-cspice/usr/local/lib/libcspice.so
+	install -m 0644 $(CSPICE_SRC)/include/*.h \
+	    debian/planetary-cspice/usr/local/include/cspice/
+	install -m 0644 cspice-pkg/DEBIAN/copyright \
+	    debian/planetary-cspice/usr/local/share/doc/planetary-cspice/copyright
+	# ── grass-planetary-addons ─────────────────────────────────────────────
+	mkdir -p $(ADDONS)/bin
+	mkdir -p $(ADDONS)/scripts
+	mkdir -p $(ADDONS)/docs/html
+	mkdir -p $(ADDONS)/docs/man/man1
+	mkdir -p $(ADDONS)/etc
+	mkdir -p $(ADDONS)/g.gui.landing
+	mkdir -p $(ADDONS)/landing.qt
+	mkdir -p $(ADDONS)/bodies
+	mkdir -p $(ADDONS)/missions
+	mkdir -p debian/grass-planetary-addons/usr/lib/x86_64-linux-gnu
+	mkdir -p debian/grass-planetary-addons/usr/share/grass-planetary-addons/scripts
+	# Install all modules (C binaries + Python scripts + HTML docs) via GRASS install
+	# C modules  → $(ADDONS)/bin/
+	# Python scripts → $(ADDONS)/scripts/   (Script.make convention)
+	# HTML docs  → $(ADDONS)/docs/html/
+	$(MAKE) -C planetary MODULE_TOPDIR=$(GRASS_PREFIX) \
+	    INST_DIR=$(ADDONS) install
+	# libpsunmask.so — ctypes shadow-cast library (private, no soname)
+	install -m 0644 planetary/p.sunmask/libpsunmask.so \
+	    debian/grass-planetary-addons/usr/lib/x86_64-linux-gnu/libpsunmask.so
+	# Shared Python libraries
+	# Scripts land in addons/scripts/; dirname(dirname(scripts/p.module)) = addons/
+	install -m 0644 planetary/p_lib.py   $(ADDONS)/p_lib.py
+	install -m 0644 planetary/p_spice.py $(ADDONS)/p_spice.py
+	# GUI helpers
+	install -m 0644 planetary/g.gui.landing/landing_wizard_wx.py \
+	    $(ADDONS)/g.gui.landing/landing_wizard_wx.py
+	install -m 0755 planetary/p.landing.qt/p_landing_qt.py \
+	    $(ADDONS)/landing.qt/p_landing_qt.py
+	ln -sf /usr/lib/grass/addons/landing.qt/p_landing_qt.py \
+	    $(ADDONS)/bin/p-landing-qt
+	# Body and mission JSON data
+	for f in bodies/moon.json bodies/mars.json bodies/venus.json; do \
+	    install -m 0644 $$f $(ADDONS)/$$f; \
+	done
+	for f in missions/*.json missions/README.md; do \
+	    [ -f "$$f" ] && install -m 0644 $$f \
+	        $(ADDONS)/missions/$$(basename $$f) || true; \
+	done
+	# Optional helper scripts
+	if [ -f scripts/train_p3.py ]; then \
+	    install -m 0755 scripts/train_p3.py \
+	        debian/grass-planetary-addons/usr/share/grass-planetary-addons/scripts/; \
+	fi
+	# wxGUI toolboxes (postinst copies these to ~/.grass8/toolboxes/)
+	mkdir -p debian/grass-planetary-addons/usr/share/grass-planetary-addons/toolboxes
+	install -m 0644 toolboxes/main_menu.xml \
+	    debian/grass-planetary-addons/usr/share/grass-planetary-addons/toolboxes/
+	install -m 0644 toolboxes/toolboxes.xml \
+	    debian/grass-planetary-addons/usr/share/grass-planetary-addons/toolboxes/
+
+override_dh_usrlocal:
+	# planetary-cspice installs to /usr/local/ (NAIF convention) — allow it
+	@true
+
+override_dh_dwz:
+	# skip dwz: prevents .dwz debug file conflict on reinstall
+	@true
+
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
+override_dh_makeshlibs:
+	# libpsunmask.so is a private ctypes library (no soname needed)
+	# libcspice.so is a private NAIF library (no standard soname)
+	dh_makeshlibs --exclude=libpsunmask --exclude=libcspice
+
+override_dh_shlibdeps:
+	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info \
+	             -l$(CURDIR)/debian/grass-planetary-addons/usr/lib/x86_64-linux-gnu \
+	             -l$(CURDIR)/debian/planetary-cspice/usr/local/lib \
+	    2>&1 | grep -Fv "can't extract name and version from library name 'libgrass_" >&2; \
+	    exit $${PIPESTATUS[0]}
+
+clean:
+	dh_clean
+	rm -f $(CSPICE_BUILD)/libcspice.so
+	find planetary -maxdepth 2 -name 'OBJ.*' -type d -exec rm -rf {} + 2>/dev/null || true
+	$(MAKE) -C planetary MODULE_TOPDIR=$(GRASS_PREFIX) clean 2>/dev/null || true
+	$(MAKE) -C planetary/p.sunmask -f Makefile.standalone clean 2>/dev/null || true
+	$(MAKE) -C planetary/p.horizon.gpu -f Makefile.standalone clean 2>/dev/null || true
+	find planetary -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true

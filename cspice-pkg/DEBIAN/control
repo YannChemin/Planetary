@@ -1,0 +1,18 @@
+Package: planetary-cspice
+Version: 0.67.0
+Section: libs
+Priority: optional
+Architecture: amd64
+Maintainer: Yann Chemin <dr.yann.chemin@gmail.com>
+Depends: libc6
+Installed-Size: 4616
+Description: NAIF CSPICE toolkit built as a shared library
+ The NASA NAIF CSPICE toolkit (N0067) compiled as a position-independent
+ shared object (libcspice.so) plus its C headers, installed under
+ /usr/local. Used by p-landing-grass (and other planetary GIS tools) for
+ real-ephemeris sub-solar and sub-observer computations through a thin
+ ctypes wrapper.
+ .
+ CSPICE itself is produced by NASA/JPL NAIF and distributed under the NAIF
+ license; see /usr/local/share/doc/planetary-cspice/copyright. This package
+ only repackages the upstream sources as a shared library; it adds no code.

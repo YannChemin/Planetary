@@ -1,0 +1,34 @@
+#!/bin/sh
+set -e
+
+SHARE_TBDIR=/usr/share/grass-planetary-addons/toolboxes
+
+case "$1" in
+    configure)
+        # Register libpsunmask.so with the dynamic linker
+        if command -v ldconfig >/dev/null 2>&1; then
+            ldconfig 2>/dev/null || true
+        fi
+
+        # Install wxGUI toolboxes for the invoking user (SUDO_USER if present,
+        # otherwise the current user).  Backs up any pre-existing files.
+        REAL_USER="${SUDO_USER:-$(id -un)}"
+        REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+        if [ -n "$REAL_HOME" ] && [ -d "$REAL_HOME" ]; then
+            TBDIR="$REAL_HOME/.grass8/toolboxes"
+            mkdir -p "$TBDIR"
+            for f in "$SHARE_TBDIR"/*.xml; do
+                dest="$TBDIR/$(basename "$f")"
+                if [ -f "$dest" ] && ! diff -q "$dest" "$f" >/dev/null 2>&1; then
+                    cp "$dest" "$dest.bak"
+                    echo "grass-planetary-addons: backed up $dest → $dest.bak"
+                fi
+                cp "$f" "$dest"
+                echo "grass-planetary-addons: installed $(basename "$f") → $dest"
+            done
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

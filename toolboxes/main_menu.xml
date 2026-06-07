@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE toolbox SYSTEM "main_menu.dtd">
+<!--
+  User main menu: extends the default GRASS wxGUI menu bar with a
+  top-level "Planetary" menu placed before Help.
+  Placed in ~/.grass8/toolboxes/main_menu.xml
+-->
+<toolbox name="MainMenu">
+  <label>Main menu</label>
+  <items>
+    <subtoolbox name="File"/>
+    <subtoolbox name="Settings"/>
+    <subtoolbox name="Raster"/>
+    <subtoolbox name="Vector"/>
+    <subtoolbox name="Imagery"/>
+    <subtoolbox name="Volumes"/>
+    <subtoolbox name="Database"/>
+    <subtoolbox name="Temporal"/>
+    <subtoolbox name="Planetary"/>
+    <subtoolbox name="Help"/>
+  </items>
+</toolbox>

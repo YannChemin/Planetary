@@ -1,0 +1,89 @@
+Source: grass-planetary-addons
+Section: science
+Priority: optional
+Maintainer: Yann Chemin <dr.yann.chemin@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ grass-dev (>= 8.0),
+ gcc,
+ libxml2-dev,
+ libgdal-dev,
+ pandoc,
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://grass.osgeo.org
+Vcs-Git: https://github.com/yann-chemin/Planetary.git
+Vcs-Browser: https://github.com/yann-chemin/Planetary
+
+Package: planetary-cspice
+Architecture: any
+Section: libs
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: NAIF CSPICE toolkit built as a shared library
+ The NASA NAIF CSPICE toolkit (N0067) compiled as a position-independent
+ shared object (libcspice.so) plus its C headers, installed under /usr/local.
+ Used by grass-planetary-addons and other planetary GIS tools for real-ephemeris
+ sub-solar and sub-observer computations through a thin ctypes wrapper.
+ .
+ CSPICE is produced by NASA/JPL NAIF and distributed under the NAIF license.
+ This package only repackages the upstream sources as a shared library.
+
+Package: grass-planetary-addons
+Architecture: any
+Pre-Depends:
+ planetary-cspice (>= ${binary:Version}),
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ python3,
+ python3-numpy,
+Recommends:
+ grass (>= 8.0),
+Suggests:
+ python3-wxpython4 | python3-wx,
+ python3-pyqt6,
+ cspice-kernels,
+Description: GRASS GIS addons for planetary science and landing site analysis
+ Planetary bridge: complete suite of GRASS addon modules for planetary
+ image processing, photometric correction, spectral analysis, geometric
+ operations, and landing site evaluation on planetary science data.
+ .
+ Includes 55 modules across 11 categories:
+  - I/O: PDS3/PDS4/ISIS3 import-export, DEM and ancillary data import,
+    SPICE kernel management
+  - Photometric: photocube, normalization, atmospheric correction
+  - Geometry: sensor-to-map reprojection, slope/shadow, DEM processing
+  - Spectral: mineral indices, continuum removal, band operations
+  - Rings: ring-plane projection, radial brightness statistics
+  - Cratering: rim auto-delineation (p.crater.draw), size-frequency
+    dating, impact-scaling on vector rims with a built-in 48-body
+    planetary database
+  - Terrain hazard: multi-scale slope, roughness, composite hazard maps,
+    and moving landing-ellipse footprint scanner
+  - Illumination: time-averaged solar illumination (p.illumination.sunfraction),
+    per-step shadow casting with OpenMP + optional OpenCL (p.sunmask),
+    and horizon elevation raster (p.horizon.gpu)
+  - Visibility: Earth-contact fraction, LOS horizon map, relay-orbiter
+    contact fraction
+  - Decision support: AHP weight elicitation, WLC/TOPSIS scoring,
+    top-candidate ranking with Monte Carlo sensitivity
+  - Pipeline: end-to-end orchestrator (p.landing), wxPython GUI wizard
+    (g.gui.landing), Qt6 wizard (p-landing-qt)
+ .
+ Body descriptors (Moon, Mars, Venus) and mission JSON files are
+ installed alongside the modules for use with the landing pipeline.
+ .
+ All modules are released into the public domain under the Unlicense.
+ .
+ Supports 7 fundamental C libraries plus 2 shared Python libraries:
+  - p_pds: PDS3/PDS4 label parsing and image I/O
+  - p_photomodel: 7 photometric models (Hapke, Minnaert, etc.)
+  - p_atmosmodel: 4 atmospheric radiative transfer models
+  - p_shapemodel: Ellipsoid, DEM, and plane ray-surface intersections
+  - p_projection_planet: Ring and high-latitude map projections
+  - p_spectra: Band depth, continuum removal, SAM analysis
+  - p_spice: NAIF CSPICE geometry toolkit wrapper
+  - p_lib.py: Landing-pipeline core utilities (DEM, illumination, AHP)
+  - p_spice.py: SPICE kernel management and subpoint calculations

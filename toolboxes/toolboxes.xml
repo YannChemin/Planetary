@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE toolboxes SYSTEM "toolboxes.dtd">
+<!--
+  Planetary Bridge for GRASS GIS — wxGUI menu extension.
+  Modules are ordered by keyword[1] (category) then keyword[2] (topic).
+  Placed in ~/.grass8/toolboxes/toolboxes.xml
+-->
+<toolboxes>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TOP-LEVEL Planetary menu
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="Planetary">
+    <label>P&amp;lanetary</label>
+    <items>
+      <subtoolbox name="PlanetaryLanding"/>
+      <separator/>
+      <subtoolbox name="PlanetaryImportExport"/>
+      <separator/>
+      <subtoolbox name="PlanetarySpice"/>
+      <subtoolbox name="PlanetaryCameraGeometry"/>
+      <separator/>
+      <subtoolbox name="PlanetaryTerrain"/>
+      <subtoolbox name="PlanetaryIllumination"/>
+      <subtoolbox name="PlanetaryVisibility"/>
+      <separator/>
+      <subtoolbox name="PlanetaryDecisionSupport"/>
+      <separator/>
+      <subtoolbox name="PlanetaryPhotometric"/>
+      <subtoolbox name="PlanetarySpectral"/>
+      <separator/>
+      <subtoolbox name="PlanetaryCrater"/>
+      <subtoolbox name="PlanetaryRings"/>
+      <separator/>
+      <subtoolbox name="PlanetaryNoiseCalibration"/>
+      <subtoolbox name="PlanetaryMosaic"/>
+      <separator/>
+      <subtoolbox name="PlanetaryUtilities"/>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Landing Pipeline
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryLanding">
+    <label>Landing pipeline</label>
+    <items>
+      <module-item name="g.gui.landing">
+        <label>Landing-site evaluation wizard (wxPython)</label>
+      </module-item>
+      <module-item name="p.landing">
+        <label>End-to-end evaluation pipeline</label>
+      </module-item>
+      <module-item name="p.landing.qt">
+        <label>Landing-site evaluation wizard (Qt6)</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Import & Export
+       Ordered by keyword[2]: PDS → ISIS → DEM → fetch
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryImportExport">
+    <label>Import &amp; Export</label>
+    <items>
+      <module-item name="p.in.pds">
+        <label>Import PDS3 / PDS4 / ISIS3 file (auto-detect)</label>
+      </module-item>
+      <module-item name="p.in.pds3">
+        <label>Import PDS3 image</label>
+      </module-item>
+      <module-item name="p.in.pds4">
+        <label>Import PDS4 image</label>
+      </module-item>
+      <module-item name="p.in.isis">
+        <label>Import ISIS3 cube (.cub)</label>
+      </module-item>
+      <module-item name="p.out.isis">
+        <label>Export to ISIS3 cube (.cub)</label>
+      </module-item>
+      <separator/>
+      <module-item name="p.in.dem">
+        <label>Import and prepare planetary DEM</label>
+      </module-item>
+      <module-item name="p.in.lroc.nac">
+        <label>Fetch LROC NAC stereo DTM from ASU archive</label>
+      </module-item>
+      <module-item name="p.in.astropedia">
+        <label>Fetch PDS4 product from USGS Astropedia / NASA PDS</label>
+      </module-item>
+      <module-item name="p.in.ancillary">
+        <label>Import ancillary data (mineralogy, craters, WEH …)</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = SPICE & Ephemeris
+       Ordered by keyword[2]: kernel → config → subpoint
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetarySpice">
+    <label>SPICE &amp; Ephemeris</label>
+    <items>
+      <module-item name="p.in.spice">
+        <label>Download and manage NAIF SPICE kernels</label>
+      </module-item>
+      <module-item name="p.spice.config">
+        <label>Configure SPICE for the current mapset</label>
+      </module-item>
+      <module-item name="p.spice.subpoint">
+        <label>Sub-solar / sub-observer point at a UTC epoch</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Camera & Geometry
+       Ordered by keyword[2]: SPICE init → camera → map
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryCameraGeometry">
+    <label>Camera &amp; Geometry</label>
+    <items>
+      <module-item name="p.spiceinit">
+        <label>Attach SPICE kernels to raster metadata</label>
+      </module-item>
+      <module-item name="p.caminfo">
+        <label>Camera geometry report (sub-solar, sub-spacecraft, lat/lon)</label>
+      </module-item>
+      <module-item name="p.cam2map">
+        <label>Project sensor image to map coordinates</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Terrain Analysis
+       Ordered by keyword[2]: DEM prep → slope → roughness →
+                              hazard → ellipse → shadow → horizon
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryTerrain">
+    <label>Terrain Analysis</label>
+    <items>
+      <module-item name="p.dem.prep">
+        <label>Prepare DEM (fill, rescale, CRS check)</label>
+      </module-item>
+      <separator/>
+      <module-item name="p.terrain.slope">
+        <label>Multi-scale slope hazard maps</label>
+      </module-item>
+      <module-item name="p.slope.planet">
+        <label>Slope and aspect (planet-aware)</label>
+      </module-item>
+      <separator/>
+      <module-item name="p.terrain.roughness">
+        <label>Roughness metrics (RMS, CV, Moran's I)</label>
+      </module-item>
+      <separator/>
+      <module-item name="p.terrain.hazard">
+        <label>Composite terrain hazard map</label>
+      </module-item>
+      <module-item name="p.terrain.ellipse">
+        <label>Landing-ellipse suitability scan</label>
+      </module-item>
+      <separator/>
+      <module-item name="p.shadow.planet">
+        <label>Ray-marching shadow mask</label>
+      </module-item>
+      <module-item name="p.horizon.gpu">
+        <label>Horizon-elevation raster (OpenMP + OpenCL)</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Illumination
+       Ordered by keyword[2]: shadow (fast) → sunfraction → shadow freq
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryIllumination">
+    <label>Illumination</label>
+    <items>
+      <module-item name="p.sunmask">
+        <label>Instantaneous shadow mask (OpenMP + OpenCL)</label>
+      </module-item>
+      <module-item name="p.illumination.sunfraction">
+        <label>Time-averaged illumination fraction and PSR mask</label>
+      </module-item>
+      <module-item name="p.illumination.shadow">
+        <label>Shadow frequency and extreme-lighting masks</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Visibility
+       Ordered by keyword[2]: Earth → LOS → orbiter
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryVisibility">
+    <label>Visibility</label>
+    <items>
+      <module-item name="p.visibility.earth">
+        <label>Earth / relay visibility fraction</label>
+      </module-item>
+      <module-item name="p.visibility.los">
+        <label>Horizon masking and line-of-sight map</label>
+      </module-item>
+      <module-item name="p.visibility.orbiter">
+        <label>Orbiter contact fraction</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Decision Support  (MCDM → ranking)
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryDecisionSupport">
+    <label>Decision Support</label>
+    <items>
+      <module-item name="p.mcdm.weight">
+        <label>AHP weight elicitation</label>
+      </module-item>
+      <module-item name="p.mcdm.score">
+        <label>Suitability scoring (WLC + TOPSIS)</label>
+      </module-item>
+      <separator/>
+      <module-item name="p.rank">
+        <label>Rank candidate sites with Monte-Carlo sensitivity</label>
+      </module-item>
+      <module-item name="p.rank.cross">
+        <label>Cross-region ranking of candidate sets</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Photometric Analysis
+       Ordered by keyword[2]: backplane → model → correction → mask → albedo
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryPhotometric">
+    <label>Photometric Analysis</label>
+    <items>
+      <module-item name="p.phocube">
+        <label>Geometry backplanes (incidence, emission, phase, lat/lon)</label>
+      </module-item>
+      <module-item name="p.photomet">
+        <label>Photometric normalisation (7 models)</label>
+      </module-item>
+      <module-item name="p.atcorr.hapke">
+        <label>Hapke atmospheric correction</label>
+      </module-item>
+      <module-item name="p.photrim">
+        <label>Mask by incidence / emission / phase angle limits</label>
+      </module-item>
+      <module-item name="p.albedo">
+        <label>Albedo computation</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Spectral & Mineral Mapping
+       Ordered by keyword[2]: spectral indices → mineral → special pixels
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetarySpectral">
+    <label>Spectral &amp; Mineral Mapping</label>
+    <items>
+      <module-item name="p.spectral.planet">
+        <label>Spectral analysis (band depth, continuum removal, SAM)</label>
+      </module-item>
+      <module-item name="p.mineral.indices">
+        <label>Mineralogy spectral indices</label>
+      </module-item>
+      <module-item name="p.specpix">
+        <label>Special-pixel classification (NULL / LRS / LIS / HIS / HRS)</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Crater Analysis
+       Ordered by keyword[2]: detection → population → frequency
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryCrater">
+    <label>Crater Analysis</label>
+    <items>
+      <module-item name="p.crater.draw">
+        <label>ML crater detection (DEM + image, OpenCL)</label>
+      </module-item>
+      <module-item name="p.crater">
+        <label>Crater population model and chronology</label>
+      </module-item>
+      <module-item name="p.crater.freq">
+        <label>Crater size-frequency distribution</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Ring Plane Analysis
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryRings">
+    <label>Ring Plane Analysis</label>
+    <items>
+      <module-item name="p.rings.project">
+        <label>Ring-plane projection</label>
+      </module-item>
+      <module-item name="p.rings.stats">
+        <label>Ring-plane statistics</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Noise & Calibration
+       Ordered by keyword[2]: stripes → smear → per-sample → per-band
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryNoiseCalibration">
+    <label>Noise &amp; Calibration</label>
+    <items>
+      <module-item name="p.dstripe">
+        <label>Column / row median destriping</label>
+      </module-item>
+      <module-item name="p.desmear">
+        <label>TDI / push-broom smear correction</label>
+      </module-item>
+      <module-item name="p.cubenorm">
+        <label>Per-line / per-sample normalisation</label>
+      </module-item>
+      <module-item name="p.bandnorm">
+        <label>Multi-band normalisation to reference band</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Mosaic
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryMosaic">
+    <label>Mosaic</label>
+    <items>
+      <module-item name="p.automos">
+        <label>Multi-image mosaic with feathering</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Utilities
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryUtilities">
+    <label>Utilities</label>
+    <items>
+      <module-item name="p.target.info">
+        <label>Body physical constants (radius, gravity, tilt, day length)</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+</toolboxes>

@@ -1,0 +1,4 @@
+# libpsunmask.so is a private ctypes library used only by p.illumination.sunfraction;
+# it is not a public soname and intentionally has no shlibs/symbols entry.
+grass-planetary-addons: shared-library-lacks-prerequisites usr/lib/x86_64-linux-gnu/libpsunmask.so
+grass-planetary-addons: no-symbols-control-file usr/lib/x86_64-linux-gnu/libpsunmask.so

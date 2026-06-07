@@ -1,0 +1,20 @@
+{
+  "name": "Mars",
+  "isis_target": "MARS",
+  "semi_major_axis_m": 3396190,
+  "semi_minor_axis_m": 3376200,
+  "ellipsoid": "oblate",
+  "gravity_ms2": 3.72,
+  "solar_day_hours": 24.66,
+  "sidereal_period_days": 686.97,
+  "synodic_period_days": 779.94,
+  "axial_tilt_deg": 25.19,
+  "orbital_inclination_deg": 1.85,
+  "nutation_period_years": 0,
+  "solar_constant_Wm2": 586.2,
+  "atmosphere": true,
+  "proj4_longlat": "+proj=longlat +a=3396190 +b=3376200 +no_defs",
+  "proj4_south_stereo": "+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 +a=3396190 +b=3376200 +units=m +no_defs",
+  "proj4_north_stereo": "+proj=stere +lat_0=90 +lat_ts=90 +lon_0=0 +a=3396190 +b=3376200 +units=m +no_defs",
+  "notes": "IAU 2015 values. MOLA reference surface (areoid). Atmosphere: mean surface pressure 600 Pa."
+}

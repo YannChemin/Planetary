@@ -1,0 +1,20 @@
+{
+  "name": "Venus",
+  "isis_target": "VENUS",
+  "semi_major_axis_m": 6051800,
+  "semi_minor_axis_m": 6051800,
+  "ellipsoid": "sphere",
+  "gravity_ms2": 8.87,
+  "solar_day_hours": 2802.0,
+  "sidereal_period_days": -243.025,
+  "synodic_period_days": 116.75,
+  "axial_tilt_deg": 2.64,
+  "orbital_inclination_deg": 3.39,
+  "nutation_period_years": 0,
+  "solar_constant_Wm2": 2601.3,
+  "atmosphere": true,
+  "proj4_longlat": "+proj=longlat +a=6051800 +b=6051800 +no_defs",
+  "proj4_south_stereo": "+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 +a=6051800 +b=6051800 +units=m +no_defs",
+  "proj4_north_stereo": "+proj=stere +lat_0=90 +lat_ts=90 +lon_0=0 +a=6051800 +b=6051800 +units=m +no_defs",
+  "notes": "IAU 2015 mean radius 6051.8 km. Retrograde rotation (sidereal period negative, 243 d). Dense CO2 atmosphere (~9.2 MPa surface): direct solar illumination and Earth-visibility analysis do NOT apply at the surface; radar topography (Magellan) is the usable DEM. Solar day ~116.75 Earth days."
+}

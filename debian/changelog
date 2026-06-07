@@ -1,0 +1,839 @@
+grass-planetary-addons (0.8.8+20260607195645) unstable; urgency=low
+
+  * Development rebuild 20260607195645
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 17:56:45 +0000
+
+grass-planetary-addons (0.8.8+20260607112249) unstable; urgency=low
+
+  * Development rebuild 20260607112249
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 09:22:49 +0000
+
+grass-planetary-addons (0.8.8+20260607101733) unstable; urgency=low
+
+  * Development rebuild 20260607101733
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 08:17:33 +0000
+
+grass-planetary-addons (0.8.8+20260607095216) unstable; urgency=low
+
+  * Development rebuild 20260607095216
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 07:52:16 +0000
+
+grass-planetary-addons (0.8.8+20260607093941) unstable; urgency=low
+
+  * Development rebuild 20260607093941
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 07:39:41 +0000
+
+grass-planetary-addons (0.8.8+20260607092354) unstable; urgency=low
+
+  * Development rebuild 20260607092354
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 07:23:54 +0000
+
+grass-planetary-addons (0.8.8+20260606233723) unstable; urgency=low
+
+  * Development rebuild 20260606233723
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 06 Jun 2026 21:37:23 +0000
+
+grass-planetary-addons (0.8.8+20260606233235) unstable; urgency=low
+
+  * Development rebuild 20260606233235
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 06 Jun 2026 21:32:35 +0000
+
+grass-planetary-addons (0.8.8) unstable; urgency=medium
+
+  * Packaging: replace the auto-generated `libxml2 (>= 2.7.4)` runtime
+    dependency with `libxml2-16 | libxml2 (>= 2.7.4)` via
+    debian/shlibs.local, so the deb installs cleanly on Debian Trixie
+    (and newer) where the SONAME-versioned libxml2-16 package
+    superseded libxml2. No code change.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 04 Jun 2026 11:30:00 +0000
+
+grass-planetary-addons (0.8.7) unstable; urgency=medium
+
+  * p.in.astropedia: body inference for ~/RSDATA/<Body>/ now falls back
+    to scanning the filename basename when the URL has no body path
+    segment. Fixes USGS planetarymaps mosaics (Ceres_Dawn_FC_HAMO_*.tif,
+    Lunar_LRO_LOLA_*.tif, Mars_MGS_MOLA_*.tif, …) which previously
+    landed under ~/RSDATA/Misc/. The "Lunar" prefix is mapped to "Moon"
+    to match the path-segment convention used elsewhere. Mission
+    prefixes (LRO, MRO, Dawn, Cassini, …) are deliberately NOT mapped
+    to bodies — those could be ambiguous (e.g. Cassini imaged many
+    Saturnian moons).
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 04 Jun 2026 11:00:00 +0000
+
+grass-planetary-addons (0.8.6) unstable; urgency=medium
+
+  * p.in.astropedia: after a successful import, the computational region
+    is now aligned to the imported raster's extent and resolution via
+    `g.region raster=<output>`. Without this fix, freshly-created
+    projects (project= path) inherited a generic DEFAULT_WIND that did
+    not cover the imported raster, so any subsequent `r.what` /
+    `r.info` / `p.landing` call would silently operate on an empty
+    window. On the auto-project branch the region is also persisted
+    as DEFAULT_WIND (`g.region -s`), so the fix survives across GRASS
+    sessions and the project is usable out of the box. On the DOI / LID
+    / STAC branches the region is set for the current session only
+    (DEFAULT_WIND of the pre-existing user project is left untouched).
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 04 Jun 2026 08:00:00 +0000
+
+grass-planetary-addons (0.8.5) unstable; urgency=medium
+
+  * p.in.astropedia: remote COGs (http/https) are now pre-downloaded with
+    `wget -c` (resumable, --tries=5) into a per-body local cache under
+    ~/RSDATA/<Body>/<basename>, and r.import is invoked on the local
+    copy. This eliminates the transient /vsicurl/ chunk-read failures
+    that affected large HiRISE / PDS S3 tiles (e.g. TIFFReadEncodedTile
+    failures at random row offsets). Body is taken from the catalog
+    entry when cog=<key> is used, otherwise inferred from the URL path
+    (.../mars/... -> Mars, .../moon/... -> Moon, etc.). Existing local
+    files of the matching Content-Length are reused without redownload.
+    For cog=<local-path>, behaviour is unchanged.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 04 Jun 2026 07:00:00 +0000
+
+grass-planetary-addons (0.8.4) unstable; urgency=medium
+
+  * p.in.astropedia: when project= is set and the project is built from
+    the source's own WKT, force r.import to -o (override CRS check).
+    The CRS match is guaranteed by construction but the WKT string can
+    differ cosmetically (e.g. "Mars (2015) - Sphere / Ocentric /
+    Equirectangular" vs "Equirectangular Mars"), which would otherwise
+    trip r.import's strict WKT comparison and break the auto-project
+    flow on real HiRISE / NAC stereo DTMs.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Wed, 03 Jun 2026 12:00:00 +0000
+
+grass-planetary-addons (0.8.3) unstable; urgency=medium
+
+  * p.in.astropedia: new project=<NAME> option. When set, the module
+    probes the source dataset's CRS (via gdalsrsinfo for /vsicurl/ COGs
+    or local PDS4 files), auto-creates a GRASS project at that CRS via
+    g.proj -c wkt=..., switches the running session into it, performs
+    the import, then restores the original project at exit. Removes the
+    CRS-mismatch friction that previously bit users importing Mars MOLA
+    (Equirectangular Mars) or other PDS-native products into non-
+    matching working projects. The original /vsicurl/ + range-read
+    behaviour is unchanged when project= is omitted.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Tue, 03 Jun 2026 00:00:00 +0000
+
+grass-planetary-addons (0.8.2) unstable; urgency=medium
+
+  * p.in.lroc.nac: manual examples now use $HOME/RSDATA/Moon/NAC as the
+    canonical download_dir (alongside LOLAPOLARDEM/) instead of the
+    default cache path. Makes the rsync target trivially mirror the
+    source path and keeps NAC DTMs next to the LOLA polar caps under
+    one data root. No behaviour change.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 02 Jun 2026 13:00:00 +0000
+
+grass-planetary-addons (0.8.1) unstable; urgency=medium
+
+  * p.in.lroc.nac: add -d (download-only, multi-product cache without
+    GRASS import — needed when staging files on a workstation in a
+    different CRS than the polar-stereographic NAC TIFs) and -o (pass
+    through -o to r.in.gdal to override CRS mismatch). Documentation
+    updated with a "Download-only" example and an Artemis-III worked
+    example showing the discover → cache → rsync → r.in.gdal pattern.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 02 Jun 2026 12:00:00 +0000
+
+grass-planetary-addons (0.8.0) unstable; urgency=medium
+
+  * New module: p.in.lroc.nac — list and import LROC NAC DTMs (2–5 m
+    site-specific stereo-derived lunar topography) from the ASU LROC PDS
+    archive. Scrapes the NAC_DTM directory, parses each product's PDS4
+    Bounding_Coordinates label to build a local lat/lon index, filters by
+    bbox + name substring, and imports via r.in.gdal. Fills the gap for
+    studies (e.g. Artemis-III candidate evaluation) where lat ∉ [-87.5,
+    -90]° and the standard LOLA polar 5 m cap does not reach.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 02 Jun 2026 00:00:00 +0000
+
+grass-planetary-addons (0.7.2) unstable; urgency=medium
+
+  * p.in.astropedia: reinstall with corrected keyword order — the installed
+    binary was stale; now carries Planetary, Import & Export, import, raster,
+    PDS4, Astropedia, download in the correct positions so qtgrass places it
+    in the right submenu with the right label.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Tue, 27 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.7.1) unstable; urgency=medium
+
+  * p.in.astropedia: fix keyword order to match the convention of all other
+    p.in.* modules (Planetary, Import & Export, import, raster, PDS4,
+    Astropedia, download). The previous order placed PDS4 at position [2]
+    and omitted raster entirely, which would have placed it in a wrong or
+    missing submenu under the qtgrass auto-constructed Planetary menu.
+  * Full audit of all 30 modules confirms all 29 C modules already follow
+    the correct keyword[0]=Planetary keyword[1]=<category> convention.
+    No changes needed to qtgrass: the menu is fully data-driven from
+    --interface-description XML and will auto-discover p.in.astropedia.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 26 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.7.0) unstable; urgency=medium
+
+  * New module p.in.astropedia (Python): fetch and import PDS4 planetary
+    data products from USGS Astropedia STAC (stac.astrogeology.usgs.gov)
+    or NASA PDS Federated Search API (pds.nasa.gov/api/search/1).
+    - Accepts doi=, lid=, or search= as the discovery source.
+    - Spatial pre-filter from active GRASS region (reads WIND via
+      gs.region()); bbox forwarded to STAC and PDS API so only products
+      intersecting the current map window are returned.
+    - -r flag disables region filter for global searches.
+    - -l flag lists results without downloading.
+    - Import dispatched by file extension: .tif/.tiff/.fits -> r.in.gdal,
+      .xml -> p.in.pds4, .img -> p.in.pds3.
+    - -k keeps downloaded file; download_dir= sets cache location.
+    - Testsuite: interface-description, arg-validation, and network-gated
+      live STAC / PDS listing tests (skipped when offline).
+  * debian/rules: SCRIPT_MODULES variable handles Python modules; they are
+    installed directly from source (.py -> bin/<name> without extension).
+  * Module count: 29 C modules + 1 Python module = 30 total.
+  * README.md updated: v0.7.0, 30 modules, p.in.astropedia in table.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 26 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.6.9) unstable; urgency=medium
+
+  * p.crater.freq: extend body= to moon,mars,mercury,vesta.
+    - Mercury: Neukum et al. 2001 scaled-Moon NPF (a0 = -2.688).
+    - Vesta: Schmedemann et al. 2014 scaled-Moon NPF (a0 = -4.088).
+    - Moon -t: Neukum 1983 chronology-function inversion via bisection
+      (neukum_age_from_N1), replacing the earlier "fall back to NPF"
+      warning; handles the LHB epoch exponential tail.
+    - Mars -t: existing Hartmann 2005 chi²-fit unchanged.
+    - Mercury/Vesta -t: NPF ratio kept, advisory warning added.
+  * Manual PRODUCTION FUNCTIONS table documents all four bodies,
+    their NPF source, and the chronology available with -t.
+  * References updated: Schmedemann et al. 2014 and Hartmann 2005 added.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 26 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.6.8) unstable; urgency=medium
+
+  * p.crater.draw testsuite: add test_opencl_cpu_equivalence - strict
+    comparison of D_eq (±1%) and confidence (±0.02) between the CPU/OpenMP
+    and GPU/OpenCL paths on the same synthetic DEM. Catches kernel
+    divergences; degrades gracefully when no OpenCL device is present
+    (both paths return identical OpenMP results).
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 26 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.6.7) unstable; urgency=medium
+
+  * scripts/train_p3.py: new offline training script for the p.crater.draw
+    P3 shallow-ML rescoring model. Pure-Python (no scipy/sklearn dependency),
+    batch-gradient-descent logistic regression over the 6-feature vector
+    defined in detect_ml.c. Accepts a GRASS vector map (--map=) or a CSV
+    from v.db.select (--csv=). Writes the PCDM binary model file consumed
+    by detect_ml.c::ml_load_model. Tested on synthetic data: 100% training
+    accuracy on clean merged/singleton label separation, correct binary
+    layout verified against ml_load_model reader.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 26 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.6.6) unstable; urgency=medium
+
+  * p.crater.draw: remove hard 10 km diameter cap. max_diameter= now
+    accepts any value; the 10 km default is unchanged. An informational
+    message is printed when the user goes above 10 km advising on
+    performance scaling. Manual updated throughout: "v1 caps" language
+    replaced by guidance on scales= tuning for large basins.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 26 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.6.5) unstable; urgency=medium
+
+  * p.crater.draw: implement sub-pixel centre and radius refinement
+    (refine.c / refine.h).  A 7x7x7 grid search over ±r/3 in centre
+    and ±15% in radius, maximising the standardised rim-vs-inner
+    contrast score (rim_mean − inner_mean) / (rim_std + 0.5), is run
+    on every DEM/merged candidate after NMS and before multi-ring
+    aggregation.  Image-only candidates are left untouched.  Reduces
+    the coarse-stride positional error from ~r/6 to ~r/18, making
+    concentric-ring basin grouping (-m) reliable.
+  * New flag -R to skip refinement and preserve raw coarse centres.
+  * Testsuite: two new tests — test_norefine_flag_runs and
+    test_subpixel_refinement_centre_accuracy (crater at offset origin,
+    refined centre must land within 200 m of truth).
+  * Manual: sub-pixel refinement moved from FUTURE WORK into NOTES;
+    full algorithmic description added with tolerance guidance.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 26 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.6.4) unstable; urgency=medium
+
+  * Audit pass on documentation, code, and module/GRASS integration.
+  * Keyword normalization across all 29 modules. Convention adopted
+    for qtgrass auto-menu construction:
+      keyword[0] = "Planetary"  (capital P, top-level menu name)
+      keyword[1] = <category>   (submenu name; one of "Import &
+                                 Export", "Camera & Geometry",
+                                 "Photometric Analysis", "Spectral &
+                                 Mineral Mapping", "Terrain Analysis",
+                                 "Ring Plane Analysis", "Noise &
+                                 Calibration", "Mosaic", "Crater
+                                 Analysis", "Utilities")
+      keyword[2..] = topic-specific tags
+    All 29 main.c files patched in one batch; verified that the
+    resulting `--interface-description` keywords list starts with
+    "Planetary, <category>, ...".
+  * qtgrass GrassPlanetaryMenu rewritten to **auto-construct** the
+    Planetary menu from the live module metadata - it runs each
+    p.* binary's --interface-description at startup, parses the
+    label and keywords via QXmlStreamReader, groups by keyword[1],
+    and builds submenus in a deterministic order (kCategoryOrder).
+    Bespoke Qt6 dialogs (GrassCraterDialog, GrassCraterDrawDialog,
+    GrassCraterFreqDialog, GrassSpiceKernelDialog) are overlaid via
+    a static factory table; everything else launches the generic
+    GrassModuleDialog through the openModule callback. Adding a new
+    planetary addon now requires NO qtgrass code change as long as
+    its keywords follow the convention.
+  * Project root README.md added with the canonical category table,
+    the ISIS3 -> GRASS application-mapping table (16 entries),
+    library overview, build/install instructions, OpenCL auto-detect
+    note, and testsuite quick-reference.
+  * Two manuals gained explicit ISIS3-replication examples:
+      - p.photrim.md: side-by-side ISIS3 phocube+photrim chain vs
+        the equivalent p.in.isis + p.phocube + p.photrim + p.out.isis
+        chain
+      - p.shadow.planet.md: ISIS3 shade+shadow chain vs p.in.isis +
+        p.shadow.planet + p.out.isis chain
+    Audit verified every other ISIS3-mirror module already had >= 1
+    ISIS3 reference inside its manual examples.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 25 May 2026 08:00:00 +0000
+
+grass-planetary-addons (0.6.3) unstable; urgency=medium
+
+  * p.crater.draw: REAL OpenCL GPU kernels for the DEM rim/floor
+    radial-profile detector and the image sun-shadow paired-arc
+    detector. Two kernels (detect_dem_kernel + detect_image_kernel)
+    embedded as C string literals in cl_kernels.c, compiled lazily
+    on first use, cached for subsequent scales. Per-scale 2-D
+    NDRange over (col, row) - every candidate centre is one work
+    item. fp64 required and checked at probe. Lazy context/queue/
+    program/kernel creation; shutdown helper.
+  * p.crater.draw: detect_dem.c and detect_image.c per-scale loops
+    now dispatch via the GPU when use_opencl && opencl_available(),
+    falling back cleanly to OpenMP on per-scale failure. Output
+    confidences are bit-equivalent to the OpenMP path on the
+    synthetic fixture.
+  * p.crater.draw Makefile: auto-detects /usr/include/CL/cl.h and
+    enables -DHAVE_OPENCL + -lOpenCL when present. Without OpenCL
+    headers/libs, the dispatch functions compile as stubs returning
+    NULL and the OpenMP path is the only one used.
+  * p.crater.draw: relaxed P3 (method=ml) to accept EITHER P1
+    alone, P2 alone, OR both. The make_features() routine already
+    filled the missing channel with zero; only the main.c dispatch
+    was forcing both inputs. method=ml dem=... works on its own
+    now, as does method=ml image=... .
+  * p.crater.draw manual: new "DIAMETER RANGE FOR DOWNSTREAM CSFD
+    ANALYSIS" section documents that the v1 100m..10km default is
+    tuned for p.crater.freq's default 0.1..100 km Neukum-NPF sweet
+    spot and explains how to chain the two modules. ML PHASE
+    section updated to note single-detector support. OPENCL section
+    rewritten to describe the now-real kernels, the measured ~3.5x
+    speedup on the testsuite, and the bit-equivalence claim.
+  * Testsuite: p.crater.draw 11/11 pass (+2 new:
+    test_ml_dem_only_accepts_single_detector and
+    test_opencl_gpu_path_finds_synthetic_crater). Total runtime
+    drops from ~9 s to ~2.5 s with the GPU dispatch active.
+  * Project totals: p.crater 11/11 + p.crater.draw 11/11 = 22 tests
+    passing.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 25 May 2026 02:00:00 +0000
+
+grass-planetary-addons (0.6.2) unstable; urgency=medium
+
+  * Items 4 and 5 of the post-0.5.x roadmap landed.
+  * Item 4 - P3 shallow ML detector in p.crater.draw:
+      - New method=ml chains P1+P2 then rescores via a stacking
+        meta-detector. 6 features per merged candidate (conf_P1,
+        conf_P2, two squared-conf proxies, |diff|, mean).
+      - Final score = sigma(linear combination), with weights/bias
+        loaded from a .bin model file (magic "PCDM" + version + 6
+        float32s + bias). When ml_model= is not given or the file
+        cannot be parsed, the detector falls back to uniform 1/6
+        weights - a documented baseline, NOT a learned model.
+      - New ml_model= option.
+      - Training pipeline (offline) documented in the manual:
+        bootstrap positives from high-confidence merged P1+P2 outputs,
+        random patches as negatives, fit logistic regression, export
+        the 6 weights + bias to the .bin file. P3 learns from P1+P2.
+  * Item 5 - OpenCL runtime probe in p.crater.draw:
+      - New opencl_runtime.{c,h}. OpenCL device enumeration is real
+        and prints platform / device name / version when built with
+        -DHAVE_OPENCL -lOpenCL. Without HAVE_OPENCL (v1 default
+        build), returns "no OpenCL support compiled in" diagnostic.
+      - The detector inner-loop GPU kernels themselves are NOT yet
+        wired; -c flag prints the probe and falls through to OpenMP.
+  * Manuals: p.crater.draw.md gains ML PHASE (P3) and OPENCL sections.
+  * Testsuite totals: p.crater 11/11, p.crater.draw 9/9 pass
+    (+2: method=ml baseline runs, -c flag diagnostic runs).
+    Project total: 20 tests passing.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 25 May 2026 01:00:00 +0000
+
+grass-planetary-addons (0.6.1) unstable; urgency=medium
+
+  * Manuals refresh:
+      - p.crater.draw: OUTPUT VECTOR SCHEMA table now documents the
+        three new attribute columns (dD_simple, basin_id, ring_index)
+        added in 0.5.9-0.6.0. Without this update, downstream users
+        reading the manual would have missed the d/D-pipeline column
+        and the multi-ring basin grouping output.
+      - p.crater.html and p.crater.draw.html regenerated from the
+        latest .md sources via pandoc + the GRASS-compatible
+        HTML normaliser (strips pandoc HTML5 elements that the
+        in-tree g.html2man.py cannot parse). mkhtml.py wraps these
+        into the install-tree docs at compile.
+  * No code changes - documentation-only bump.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 25 May 2026 00:00:00 +0000
+
+grass-planetary-addons (0.6.0) unstable; urgency=medium
+
+  * Major: items 1-3 from the post-0.5.x development roadmap landed.
+    Patch >= 10 triggered the minor bump (0.5.x -> 0.6.0).
+  * Item 1 - Multi-ring basin aggregation in p.crater.draw:
+      - New -m flag enables post-NMS grouping of candidates whose
+        centres agree within basin_centre_tol (default 0.10 of the
+        smaller radius) and whose radii differ by at least
+        basin_ring_ratio (default 1.30). Survivors receive a positive
+        basin_id and ring_index (1 = innermost) attribute.
+      - New CLI options basin_centre_tol= and basin_ring_ratio=.
+      - Output schema grows basin_id and ring_index columns (NULL
+        when -m not set or when the candidate is standalone).
+      - Manual MULTI-RING BASIN AGGREGATION section + FUTURE WORK
+        sub-pixel centre-refinement note explaining the v1 caveat.
+      - Two new tests: schema present + NULL when disabled, and
+        smoke-test that -m completes without error.
+  * Item 2 - Per-body simple-to-complex transition Dsc in p.crater:
+      - PCraterBody struct grows dsc_km field; populated for Moon,
+        Mars, Mercury, Venus, Earth, Vesta, Ceres, the Galilean
+        moons (Io/Europa/Ganymede/Callisto), and Titan from Pike
+        (1977/1980/1988), Schaber et al. (1992), Marchi et al. (2012),
+        Hiesinger et al. (2016), Schenk (2002), Wood et al. (2010).
+      - p_crater_simple_complex_D_body(g, dsc_km_measured) returns
+        the measured value when >0, falls back to the 18 km * g_Moon/g
+        analytic scaling otherwise. p_crater_final_diameter and
+        p_crater_depth_ratio now thread dsc_km_measured through.
+      - Manual gains a "Simple-to-complex transition diameter (Dsc)
+        per body" subsection with the full table + sources.
+      - New test test_per_body_measured_dsc verifies that a 6 km
+        Mars crater stays in the simple regime (Dsc=7 km > Df=6 km)
+        and reports dD_ratio = body simple value 0.150.
+  * Item 3 - Hartmann (2005) isochron chronology in p.crater.freq:
+      - 8 ages x 16 diameter cells of Hartmann's Martian production
+        function tabulated as a (log-age, log-D) bilinear grid.
+      - When -t flag is set, age is found by chi-square minimum of
+        log10(N_obs) vs log10(N_Hartmann(D, age)) over 200 trial
+        log-spaced ages from 0.001 to 4.0 Ga (Mars chronology range).
+      - Hartmann mode falls back to Neukum NPF for Moon (no Hartmann
+        calibration there).
+  * Testsuite totals: p.crater 11/11 pass, p.crater.draw 7/7 pass.
+    Total project test count: 18 (up from 15 in 0.5.9).
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 23:30:00 +0000
+
+grass-planetary-addons (0.5.9) unstable; urgency=medium
+
+  * p.crater.draw: new dd_simple= and dd_simple_map= options applied
+    to detected polygons at write time. The per-polygon dD_simple
+    value (sampled from the raster, falling back to the scalar, then
+    to a per-body default lookup that mirrors p.crater's database) is
+    baked into a new dD_simple attribute column on the output vector.
+    NULL is written when the value is not set, so downstream tools
+    can apply their own fallback. Output attribute schema grows the
+    dD_simple column.
+  * p.crater: when the input= vector carries a dD_simple column and
+    the user has supplied neither dd_simple_map= nor dd_simple=,
+    p.crater reads the column per-feature as the lowest-priority
+    fallback. The four-tier override hierarchy becomes:
+      1. dd_simple_map raster      (per-crater, highest)
+      2. dd_simple scalar
+      3. input vector dD_simple column (NEW)
+      4. body database default     (lowest)
+    This lets a p.crater.draw -> p.crater pipeline preserve terrain
+    context across module boundaries without re-specifying the d/D
+    inputs on each run.
+  * p.crater.draw testsuite: two new tests
+    (test_dd_simple_column_default_from_body, test_dd_simple_column
+    _from_raster) verify both the body-default and raster-supplied
+    paths. Test count is now 5 (was 3); all pass.
+  * p.crater testsuite: test_dd_simple_map_raster added in 0.5.8
+    continues to pass alongside the new behaviour. Test count: 10.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 22:00:00 +0000
+
+grass-planetary-addons (0.5.7) unstable; urgency=medium
+
+  * p.crater: new dd_simple_map= option accepts a raster of per-pixel
+    d/D values, sampled at each crater centroid (polygon mode) or
+    impactor location (synthesis mode). Enables spatial variation of
+    the simple-crater depth/diameter ratio across heterogeneous
+    surfaces (e.g. Mars polar ice cap embedded in basaltic plains,
+    Vesta HED boundary, mosaicked multi-terrain study areas). Sampled
+    values are validated to lie in (0, 0.5]; out-of-range or NULL
+    cells fall back to the dd_simple= scalar then the body default.
+  * impactor_points.c: extended PCraterBodyCtx with fd_dd_map (open
+    raster fd, or -1) so each synthesised ricochet/bounce uses the
+    d/D appropriate to its landing site.
+  * qtgrass 0.4.9: GrassCraterDialog "Geology && DEM" tab grows a new
+    "d/D raster (spatial d/D variation)" combo populated from the
+    current mapset's raster list. When non-empty, the dialog emits
+    dd_simple_map= on the QProcess argv.
+  * p.crater.md: new "Spatial d/D variation via a raster" subsection
+    documenting the dd_simple_map= raster input and the three-tier
+    override hierarchy (raster > scalar override > body database).
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 21:00:00 +0000
+
+grass-planetary-addons (0.5.6) unstable; urgency=medium
+
+  * p.crater: new dd_simple= option lets the user override the per-body
+    simple-crater depth/diameter ratio on any run (validated against
+    (0, 0.5]; lunar canonical is 0.196). Applies to every crater in
+    the run, propagating through both the simple regime and the
+    simple-anchored complex-regime smooth transition. Useful for
+    testing alternative scaling fits, working with bodies not in
+    the database (with body=custom), and comparing published
+    Robbins-style d/D values.
+  * qtgrass 0.4.9: GrassCraterDialog "Custom body" tab grows a new
+    "Simple-crater d/D (override)" QDoubleSpinBox - value 0 means
+    "use body default", any positive value emits dd_simple= on the
+    QProcess argv.
+  * p.crater.md: new "Overriding the d/D per run" subsection of the
+    DEPTH/DIAMETER RATIO PER BODY section with a Mars + Robbins-style
+    0.165 example.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 20:30:00 +0000
+
+grass-planetary-addons (0.5.5) unstable; urgency=medium
+
+  * p.crater.md: new DEPTH/DIAMETER RATIO PER BODY section with a
+    user-facing table of the per-body simple-crater d/D values used by
+    p_crater_depth_ratio(), grouped by body family (Moon/Mars/Mercury/
+    Venus/Earth/Vesta/Ceres/Hyperion/Icy moons/Small rubble piles),
+    with their peer-reviewed sources. Adds five new REFERENCES:
+    Pike 1988 (Mercury), Schaber et al. 1992 (Venus), Grieve & Pesonen
+    1992 (Earth), Marchi et al. 2012 (Vesta), Hiesinger et al. 2016
+    (Ceres). The sources were already in planet_db.c code comments
+    but not in the user manual.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 19:30:00 +0000
+
+grass-planetary-addons (0.5.4) unstable; urgency=medium
+
+  * p.crater: per-body depth/diameter ratio for SIMPLE craters added to
+    the PCraterBody database. The 48 body entries now each carry a
+    dD_simple field populated from peer-reviewed Pike measurements
+    (Moon 0.196 / Mars 0.150 / Mercury 0.180 / Venus 0.140 / Earth 0.130
+    / Vesta 0.180 / Ceres 0.170; icy moons 0.150; rubble-pile small
+    bodies 0.200). p_crater_depth_ratio() and p_crater_depth() now
+    take dD_simple as a parameter, smoothly transitioning from the
+    body's simple value at D=Dsc to ~0.05 for very large craters
+    in the complex regime. impactor_points.c receives the d/D through
+    the new PCraterBodyCtx::dD_simple field. Resolves the audit
+    finding that the lunar 0.196 was previously applied universally.
+  * p.crater.draw: testsuite passes (3/3): --help check, binary-on-PATH
+    check, and a synthetic-crater detection test that verifies the DEM
+    detector finds the canonical 1300 m circular depression with
+    centre within ~400 m of origin and D_eq within +/-50% (the coarse-
+    stride scan inherently quantises to scale * stride/3). The earlier
+    g.remove call cleaned up its outputs with a single multi-type
+    pattern, which the GRASS option parser rejects; split into two
+    calls.
+  * qtgrass 0.4.9: new bespoke Qt6 dialog GrassCraterDrawDialog wraps
+    p.crater.draw. Three tabs (Inputs / Detection / Run log) with all
+    relevant CLI parameters, planetary-body picker, OpenCL flag, and
+    QProcess-driven live output streaming. Wired into the Planetary ->
+    Crater Analysis submenu as the first entry, above the existing
+    Impact crater scaling and CSFD dating items.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 18:30:00 +0000
+
+grass-planetary-addons (0.5.3) unstable; urgency=medium
+
+  * New module p.crater.draw - automated crater-rim delineation from a
+    DEM and/or a panchromatic image, producing a polygon vector ready
+    for direct consumption by p.crater (input=) and p.crater.freq
+    (vector= column=D_eq). Phase 1+2 of the design ships with:
+      - DEM-based detector: multi-scale rim/floor radial-profile
+        scoring (rim_mean - inner_mean)/(rim_std + 0.5), squashed by
+        tanh into a 0..1 confidence
+      - Image-based detector: sun-azimuth-dependent paired arc on the
+        rim (bright vs shadow) plus rim-vs-interior contrast
+      - Non-maximum suppression with disk-IoU, tagging method=merged
+        when DEM and image agree on the same crater
+      - OpenMP parallelism over candidate centres at each scale
+      - OpenCL flag (-c) reserved; stubbed in v1 (OpenMP is used)
+      - Diameter cap 100 m..10 km in v1; FUTURE WORK notes track the
+        multi-ring basin aggregation (concentric circles sharing a
+        centre point) and the >10 km basin-mode scaling roadmap
+  * Project-wide license switch: all 29 modules and 7 libraries now
+    carry the Unlicense (SPDX-License-Identifier: Unlicense) in their
+    source headers, LICENSE files in every module/library directory,
+    library README.md "License" sections updated, and debian/copyright
+    now declares Unlicense for both source and debian/ files. Public-
+    domain dedication makes the planetary tools maximally re-usable.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 17:00:00 +0000
+
+grass-planetary-addons (0.5.2) unstable; urgency=medium
+
+  * p.crater: new impactor-points synthesis mode (forward only).
+    A new impactors= option accepts a POINT vector with per-feature
+    impactor attributes (velocity, impact_angle from local DEM surface,
+    azimuth, density, diameter). Required companion: dem= raster, used
+    to sample elevation and Horn (1981) 3x3 slope/aspect at each
+    impact site. Five new col_* options let the user map their schema
+    onto the expected fields; density_unit=kg_m3|g_cm3 toggles the
+    impactor-density unit.
+  * p.crater: oblique-impact crater morphology. For each input point,
+    the module synthesises:
+      - a circular polygon when theta >= 30 deg (near-normal impact),
+      - an elliptical polygon (major axis along downrange azimuth,
+        b/a = sin(theta)^(1/3) per Pierazzo & Melosh 2000) when
+        5 deg <= theta < 30 deg,
+      - a ricochet chain (primary ellipse + up to 4 bounces at
+        4x the previous diameter downrange, with V *= 0.5 and
+        L *= 0.6 per bounce, terminating when L < 1 m or
+        V < 100 m/s) when theta < 5 deg (Schultz & Gault 1990).
+  * p.crater: output vector grows new attribute columns: parent_id,
+    bounce, kind, D_major, D_minor, azimuth_deg, theta_local_deg,
+    elev_m, slope_deg, aspect_deg (in addition to the existing
+    Df_pi, depth_pred, kinetic_J, tnt_kt).
+  * p.crater: bit-exact ring closure for the synthesised polygons.
+    The naive loop with i=0..N generated a closing vertex that
+    differed from vertex 0 by ~3e-13 (due to sin(2pi) residual),
+    which the GRASS topology builder rejected as an open ring. The
+    last vertex is now copied bit-for-bit from the first.
+  * qtgrass 0.4.9: GrassCraterDialog grows a 4th tab "Impactor Points"
+    with the synthesis-mode toggle, point-vector picker, five column-
+    name editable combos and a density-unit dropdown. The dialog
+    validates that a DEM is set when synthesis is enabled and routes
+    the right argv to the QProcess subprocess.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 16:00:00 +0000
+
+grass-planetary-addons (0.5.1) unstable; urgency=medium
+
+  * p.crater.freq: enriched CSV output with per-bin histogram counts and
+    power-law fit values. New output columns:
+      - n_in_bin       raw crater count per log-spaced bin
+      - N_cum_obs      cumulative observed density (unchanged)
+      - N_npf_age      NPF curve evaluated at the estimated age
+      - N_powerlaw_fit least-squares power-law fit value at the bin
+    Header now records: body, area, N, estimated age (Ga), and the fit
+    parameters log10(N) = intercept + slope * log10(D) with RMSE.
+    The fit uses log-log least squares over populated bins; results are
+    also surfaced in the run log via G_message().
+  * qtgrass 0.4.9 grows a Chart tab in GrassCraterFreqDialog using
+    Qt6::Charts (log-log axes via QLogValueAxis). Observed points,
+    NPF curve and power-law fit are overlaid; title shows body name
+    and age. The dialog stages a temporary CSV when none is given so
+    the chart can always be rendered.
+  * Optional PNG export: a new "Output PNG graph" field on the
+    p.crater.freq dialog renders the chart at 4961 x 3496 pixels
+    (A5 landscape, 600 dpi) via QChart::scene()->render() to a
+    QImage backend, then saves PNG.
+  * qtgrass build now requires qt6-charts-dev (added to debian/control).
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 14:00:00 +0000
+
+grass-planetary-addons (0.5.0) unstable; urgency=medium
+
+  * Minor bump per the single-digit-patch convention (0.4.9 -> 0.5.0).
+  * p.crater.freq: accept crater diameters from EITHER a CSV file (default)
+    OR a designated column of a GRASS vector attribute table (typically
+    the Df_pi column produced by p.crater). New options:
+      - vector=  optional, takes a vector map name
+      - column=  required when vector= is set, names the diameter
+                 attribute (auto-detects metres vs km from value range)
+      - layer=   layer number for vector, defaults to 1
+    The two sources are mutually exclusive; exactly one must be given.
+    Module now links VECTORLIB + DBMILIB and reads via the dbmi API.
+  * p.crater.freq: -h flag renamed to -t (Hartmann mode), since -h is
+    reserved by GRASS for --help.
+  * p.crater.freq.md updated with both CSV and vector usage examples.
+  * qtgrass 0.4.9 ships matching bespoke Qt6 dialogs:
+      - GrassCraterDialog       (5-tab form: Geometry/Body, Impactor,
+        Geology two-layer + DEM, Custom body overrides, Run log;
+        built-in body picker with 48 entries; QProcess-driven run with
+        live output streaming)
+      - GrassCraterFreqDialog   (source toggle between CSV file picker
+        and vector+column dropdowns; analysis params; live run log)
+    A new "Crater Analysis" submenu is added to the Planetary menu,
+    sitting between Mosaic and Utilities. p.crater.freq is moved out of
+    Utilities into the new submenu alongside p.crater.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 12:00:00 +0000
+
+grass-planetary-addons (0.4.9) unstable; urgency=medium
+
+  * p.crater: fix inherited backward-scaling bugs from r.crater.
+    The Pi-, Gault-, and Yield-backward formulas in r.crater used an
+    incorrect substitution of W into the kinetic-energy expression
+    (factor of 2 in (pi/12) vs (pi/24), and missing rho_p^0.22 in the
+    Pi inverse), causing the projectile-diameter estimate to be off
+    by ~11x for Pi-scaling at typical asteroid densities.
+    p.crater 0.4.9+ uses cleanly-derived analytical inverses
+    (substitution-based) for Pi and Gault scaling, and bisection root-
+    finding for Yield scaling. Forward/backward roundtrip is now
+    machine-precision exact.
+  * p.crater: extended testsuite with Melosh 1989 reference values.
+    9 tests cover module interface, body database validation,
+    forward Pi/Gault/Yield against analytical Melosh eq. 7.8.4,
+    forward/backward Pi roundtrip on Mars, Meteor Crater (Arizona)
+    backward-mode reasonableness, two-layer depth-weighted effective
+    density, and Pike (1980) simple-to-complex transition diameter.
+    All 9 tests pass against the fixed module.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 24 May 2026 10:30:00 +0000
+
+grass-planetary-addons (0.4.8) unstable; urgency=medium
+
+  * New module p.crater (Unlicense / public domain) merging and extending
+    the r.crater grass-addon with:
+    - Built-in planetary body database of 42 Solar System bodies:
+      terrestrial planets (Mercury, Venus, Earth, Mars), Moon,
+      4 Galilean moons, 9 Saturnian moons (Titan, Mimas, Enceladus,
+      Tethys, Dione, Rhea, Iapetus, Hyperion, Phoebe), 5 Uranian moons
+      (Miranda, Ariel, Umbriel, Titania, Oberon), Triton, Phobos,
+      Deimos, all 6 IAU dwarf planets (Pluto, Charon, Ceres, Eris,
+      Haumea, Makemake), 5 candidate dwarf planets / large TNOs
+      (Gonggong, Quaoar, Sedna, Orcus, Salacia), 10 visited asteroids
+      (Vesta, Pallas, Hygiea, Psyche, Lutetia, Mathilde, Eros, Itokawa,
+      Bennu, Ryugu) and comet 67P
+    - body=custom slot for arbitrary user-defined bodies, requiring
+      gravity, target_density, target_type overrides
+    - Vector polygon input: per-feature equivalent-circle diameter
+      D_eq = 2 sqrt(A/pi) from shoelace area
+    - Optional surface + subsurface density rasters with per-layer
+      thicknesses for depth-weighted effective density
+      (excavation depth ~ Dat/3, Melosh 1989 §5.4)
+    - Optional surface-type raster (1/2/3) sampled at centroid
+    - Optional DEM for direct depth measurement (rim mean - centre)
+    - Multi-method evaluation: Pi-, Gault- and Yield-scaling all
+      computed and written as separate vector attribute columns
+    - Simple-to-complex transition correction (Pike 1980) and
+      depth/diameter prediction (Pike 1977)
+    - Build-Depends adds pandoc for .md to .html stub generation
+  * Module count is now 28 (was 27)
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 24 May 2026 09:00:00 +0000
+
+grass-planetary-addons (0.4.7) unstable; urgency=medium
+
+  * Move grass (>= 8.0) from Depends to Recommends to allow installation
+    on systems with a locally-compiled GRASS at /usr/local/bin/grass that
+    does not provide the Debian "grass" package name. The addon modules
+    require GRASS at runtime but the binary search path is handled by
+    GRASS's own addon loader, not dpkg.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Fri, 23 May 2026 20:45:00 +0000
+
+grass-planetary-addons (0.4.6) unstable; urgency=medium
+
+  * Comprehensive audit pass on all 27 modules and 7 libraries:
+    - Added REFERENCES section to p.bandnorm.md (with ISIS3 bandnorm
+      citation, Pelkey 2007 CRISM doi, Sides 2017 ISIS3 doi)
+    - Added REFERENCES section to p.cubenorm.md (with Eliason 1992
+      ISIS production, Becker 2013 Cassini ISS, Sides 2017 ISIS3)
+    - Added standard GRASS module header comment block to p.specpix
+      main.c (with MODULE, AUTHOR, PURPOSE, COPYRIGHT sections)
+  * Enhanced all 27 module testsuites:
+    - Added ISIS3-equivalence cross-validation test (auto-skipped
+      when ISIS3 binary not on PATH)
+    - Added module-metadata smoke test (verifies binary in PATH)
+    - Added temp-region setUpClass/tearDownClass for raster tests
+    - Documented ISIS3 application reference for each module
+    - 68 lines per testsuite, 1836 total lines vs. ~20 lines prior
+  * Verified all 7 libraries have ≥289-line test_*.c files with main()
+  * Verified all 27 modules have GRASS-style G_define_module +
+    G_add_keyword + module->label + module->description
+  * Verified all 7 library headers have full doxygen \\file \\brief
+    \\author \\param annotations (12-62 brief tags per header)
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Fri, 23 May 2026 20:30:00 +0000
+
+grass-planetary-addons (0.4.5) unstable; urgency=medium
+
+  * Set SHELL := /bin/bash in debian/rules to support PIPESTATUS in
+    dh_shlibdeps override (default /bin/sh lacks this builtin)
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 23 May 2026 20:00:00 +0000
+
+grass-planetary-addons (0.4.4) unstable; urgency=medium
+
+  * Pre-create install target subdirectories (bin/, docs/html/,
+    docs/man/man1/, etc/) before invoking GRASS Module.make install
+    rule, which doesn't create its own destination directories
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 23 May 2026 19:30:00 +0000
+
+grass-planetary-addons (0.4.3) unstable; urgency=medium
+
+  * Strip pandoc-generated HTML5 elements (col, colgroup, thead, tbody,
+    sourceCode div/span/anchors) that g.html2man.py cannot parse
+  * Apply HTML normalization to all 27 module manual pages
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 23 May 2026 19:00:00 +0000
+
+grass-planetary-addons (0.4.2) unstable; urgency=medium
+
+  * Rewrite all 14 affected module Makefiles cleanly with explicit
+    library .o pre-compilation rules (fixes -I flag propagation issue
+    when library .c was passed via EXTRA_LDFLAGS)
+  * Replace -L$(PLANETARY_LIBS) workaround with proper library object
+    dependency tracking
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 23 May 2026 18:30:00 +0000
+
+grass-planetary-addons (0.4.1) unstable; urgency=medium
+
+  * Fix PLANETARY_LIBS path resolution for out-of-tree builds
+  * Add absolute path overrides in debian/rules for module Makefiles
+  * Escape literal angle brackets in module descriptions (p.in.pds4,
+    p.bandnorm, p.mineral.indices, p.spectral.planet, p.phocube)
+  * Generate HTML stubs from .md files via pandoc for all 27 modules
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 23 May 2026 18:00:00 +0000
+
+grass-planetary-addons (0.4.0) unstable; urgency=medium
+
+  * Initial Debian package for Planetary Bridge project
+  * 27 GRASS addon modules across 5 categories:
+    - I/O: p.in.pds3, p.in.pds4, p.in.isis, p.out.isis, p.spiceinit
+    - Photometric: p.phocube, p.photomet, p.photrim, p.albedo, p.atcorr.hapke
+    - Geometry: p.cam2map, p.caminfo, p.dem.prep, p.slope.planet, p.shadow.planet
+    - Spectral: p.spectral.planet, p.mineral.indices, p.specpix, p.dstripe,
+      p.desmear, p.cubenorm, p.bandnorm
+    - Rings: p.rings.project, p.rings.stats, p.crater.freq, p.target.info, p.automos
+  * 7 fundamental C libraries with comprehensive documentation:
+    - p_pds: PDS3/PDS4 label parsing and image I/O
+    - p_photomodel: 7 photometric models (Hapke, Minnaert, Lunar-Lambert, etc.)
+    - p_atmosmodel: 4 atmospheric radiative transfer models
+    - p_shapemodel: Ellipsoid, DEM, plane ray-surface intersections
+    - p_projection_planet: Ring and high-latitude map projections
+    - p_spectra: Band depth, continuum removal, SAM analysis
+    - p_spice: NAIF CSPICE geometry toolkit wrapper
+  * All modules include gunittest test suites and .md manuals with
+    scientific references
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Thu, 23 May 2026 12:00:00 +0000

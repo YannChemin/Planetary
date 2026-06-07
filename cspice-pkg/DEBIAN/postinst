@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+# Register the freshly-installed shared library with the dynamic loader.
+if command -v ldconfig >/dev/null 2>&1; then
+    ldconfig 2>/dev/null || true
+fi
+
+echo "planetary-cspice: libcspice.so installed in /usr/local/lib"
+echo "  Headers in /usr/local/include/cspice"
+
+#DEBHELPER#
+exit 0

@@ -1,0 +1,36 @@
+planetary-cspice
+=================
+
+This package repackages the NASA/JPL NAIF CSPICE toolkit (version N0067) as a
+shared library (libcspice.so) plus headers. No source code is added or
+modified; the library is compiled directly from the upstream CSPICE C sources.
+
+Upstream / source
+------------------
+NAIF (Navigation and Ancillary Information Facility), Jet Propulsion
+Laboratory, California Institute of Technology.
+  https://naif.jpl.nasa.gov/naif/toolkit.html
+  https://naif.jpl.nasa.gov/pub/naif/toolkit/C/
+
+License (NAIF / Caltech)
+------------------------
+The CSPICE toolkit is distributed by NAIF under the following terms (summary;
+see the full statement shipped with the toolkit and at
+https://naif.jpl.nasa.gov/naif/rules.html):
+
+  Copyright (C) Caltech/JPL.
+
+  Users may copy, modify and redistribute the SPICE software and data, in
+  source and binary forms, for any purpose, provided that the origin of the
+  materials is not misrepresented and that the materials are not sold for
+  profit beyond a reasonable reproduction/distribution cost. The materials are
+  provided "AS IS" with no warranty, and Caltech/JPL accept no liability.
+
+NOTE for Debian packagers: the NAIF license is permissive but is **not**
+OSI/DFSG-approved (the non-profit clause). This package is therefore intended
+for a local apt repository or build-from-source distribution, not Debian main.
+
+Packaging
+---------
+The packaging glue (Makefile, control, postinst) is by Yann Chemin and is
+released into the public domain (Unlicense, https://unlicense.org).

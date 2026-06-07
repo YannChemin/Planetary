@@ -1,0 +1,49 @@
+{
+  "mission": "Luna-27",
+  "body": "Moon",
+  "lander_type": "soft_lander",
+  "ellipse_major_m": 30000,
+  "ellipse_minor_m": 15000,
+  "top_percentile": 70.0,
+  "scan_res": 30,
+  "ephemeris": "auto",
+  "start_epoch": "2028-01-01T00:00:00",
+  "illum_nsteps": 1000,
+  "vis_nsteps": 1000,
+  "region_bounds": {
+    "n":  75840,
+    "s": -75840,
+    "e":  75840,
+    "w": -75840,
+    "res": 30,
+    "_comment": "Lunar south-polar stereographic metres (sphere R=1737400, lat_0=-90, lon_0=0). Full extent of NASA PDS LOLA polar DEM ldem_875s_5m_float (±75.84 km from pole; lat -86.47° at corners to -90° at centre)."
+  },
+  "study_area_note": "The bundled Luna-27 evaluation runs on the LOLA polar cap (±75.84 km square around the south pole, latitudes -86.5° to -90°) instead of the Turchinskaya & Slyuta 2024 study sector (51°E to 1°W, 83°S to 79°S). The article's sector falls in the data gap between SLDEM2015 (which stops at 60°S) and the LOLA 5 m polar product (which starts at 87.5°S). With only the bundled LOLA polar DEM available locally, the analysis is reproduced on the deepest polar region instead, where data is available and the same scientific question (PSR boundaries, illumination, Earth visibility, slope safety) can be answered. Cite this divergence in any derived publication; the Malapert Massif candidate (~81.4°S) from the original article is not reachable with this DEM coverage.",
+  "slope_thresholds_deg": {
+    "30":   10,
+    "100":   7,
+    "1000":  5,
+    "10000": 3
+  },
+  "roughness_rms_max_m": 0.5,
+  "min_illumination_fraction": 0.35,
+  "earth_visibility_min_fraction": 0.50,
+  "earth_elevation_min_deg": 3.0,
+  "orbiter_altitude_km": 100,
+  "orbiter_inclination_deg": 90,
+  "science_targets": ["volatile_ice", "weh", "geology"],
+  "criteria_weights": {
+    "slope":          0.25,
+    "roughness":      0.15,
+    "illumination":   0.20,
+    "earth_vis":      0.15,
+    "science":        0.25
+  },
+  "hard_exclusion": {
+    "slope_max_deg":        15,
+    "roughness_rms_max_m":   1.0,
+    "illumination_min":      0.0,
+    "earth_vis_min":         0.0
+  },
+  "notes": "Per Turchinskaya & Slyuta 2024. Article target: polar sector 51E-1W, 83-79S, 2028 planned landing. The bundled run instead uses the LOLA polar cap (-86.5° to -90°) — see study_area_note. Methodology (1000 timesteps, 30 m scan_res, 35% illum, 50% Earth vis) follows the article."
+}

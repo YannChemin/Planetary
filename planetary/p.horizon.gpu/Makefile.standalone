@@ -1,0 +1,61 @@
+# Standalone Makefile for p.horizon.gpu — no GRASS build system required.
+# Mirrors p.sunmask/Makefile.standalone: auto-detect OpenCL via pkg-config,
+# fall through to -lOpenCL, fall through to OpenMP-only build.
+#
+# Usage:  make -f Makefile.standalone [GISBASE=/usr/local/grass86]
+
+GISBASE   ?= /usr/local/grass86
+GRASS_INC  = $(GISBASE)/include
+GRASS_LIB  = $(GISBASE)/lib
+
+CC        = gcc
+GDAL_CFLAGS := $(shell pkg-config --cflags gdal 2>/dev/null || gdal-config --cflags 2>/dev/null)
+GDAL_LIBS   := $(shell pkg-config --libs   gdal 2>/dev/null || gdal-config --libs   2>/dev/null)
+
+CFLAGS    = -I. -I$(GRASS_INC) $(GDAL_CFLAGS) -fopenmp -O2 -Wall -Wextra -Wno-unused-parameter
+LDFLAGS   = -L$(GRASS_LIB) -lgrass_gis -lgrass_raster -lgrass_gproj \
+            $(GDAL_LIBS) -fopenmp -lm \
+            -Wl,-rpath,$(GRASS_LIB)
+
+# ── optional OpenCL ──────────────────────────────────────────────────────
+OCL_CFLAGS :=
+OCL_LIBS   :=
+
+OCL_PKG_LIBS := $(shell pkg-config --libs OpenCL 2>/dev/null)
+ifneq ($(OCL_PKG_LIBS),)
+    OCL_CFLAGS := -DHAVE_OPENCL $(shell pkg-config --cflags OpenCL 2>/dev/null)
+    OCL_LIBS   := $(OCL_PKG_LIBS)
+    $(info p.horizon.gpu: OpenCL enabled (pkg-config))
+else
+    OCL_DIRECT := $(shell echo "int main(){}" | gcc -x c - -lOpenCL -o /dev/null 2>/dev/null && echo yes || echo no)
+    ifeq ($(OCL_DIRECT),yes)
+        OCL_CFLAGS := -DHAVE_OPENCL
+        OCL_LIBS   := -lOpenCL
+        $(info p.horizon.gpu: OpenCL enabled (direct -lOpenCL))
+    else
+        $(info p.horizon.gpu: OpenCL NOT found — building OpenMP-only)
+    endif
+endif
+
+CFLAGS  += $(OCL_CFLAGS)
+LDFLAGS += $(OCL_LIBS)
+
+TARGET = p.horizon.gpu
+
+OBJS = main.o backend_openmp.o
+ifneq ($(OCL_CFLAGS),)
+    OBJS += backend_opencl.o
+endif
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+%.o: %.c horizon_backend.h horizon_kernel.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+clean:
+	rm -f $(TARGET) *.o
+
+.PHONY: all clean

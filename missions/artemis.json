@@ -1,0 +1,34 @@
+{
+  "mission": "Artemis",
+  "body": "Moon",
+  "lander_type": "human_lander",
+  "ellipse_major_m": 100,
+  "ellipse_minor_m": 100,
+  "slope_thresholds_deg": {
+    "2":    10,
+    "5":     8,
+    "10":    5,
+    "100":   3
+  },
+  "roughness_rms_max_m": 0.3,
+  "min_illumination_fraction": 0.70,
+  "earth_visibility_min_fraction": 0.80,
+  "earth_elevation_min_deg": 5.0,
+  "orbiter_altitude_km": 100,
+  "orbiter_inclination_deg": 90,
+  "science_targets": ["volatile_ice", "geology", "regolith"],
+  "criteria_weights": {
+    "slope":          0.20,
+    "roughness":      0.15,
+    "illumination":   0.30,
+    "earth_vis":      0.20,
+    "science":        0.15
+  },
+  "hard_exclusion": {
+    "slope_max_deg":        10,
+    "roughness_rms_max_m":   0.5,
+    "illumination_min":      0.50,
+    "earth_vis_min":         0.50
+  },
+  "notes": "NASA Artemis human landing, South Polar region. High illumination requirement for solar power."
+}
