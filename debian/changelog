@@ -1,52 +1,118 @@
-grass-planetary-addons (0.8.8+20260607195645) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260608095358) unstable; urgency=low
+
+  * Development rebuild 20260608095358
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 07:53:58 +0000
+
+grass-planetary-addons (1.0.0+20260608093619) unstable; urgency=low
+
+  * Development rebuild 20260608093619
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 07:36:19 +0000
+
+grass-planetary-addons (1.0.0+20260608091427) unstable; urgency=low
+
+  * Development rebuild 20260608091427
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 07:14:27 +0000
+
+grass-planetary-addons (1.0.0+20260608084741) unstable; urgency=low
+
+  * Development rebuild 20260608084741
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 06:47:41 +0000
+
+grass-planetary-addons (1.0.0+20260608084006) unstable; urgency=low
+
+  * Development rebuild 20260608084006
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 06:40:06 +0000
+
+grass-planetary-addons (1.0.0+20260608081815) unstable; urgency=low
+
+  * Development rebuild 20260608081815
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 06:18:15 +0000
+
+grass-planetary-addons (1.0.0+20260608080317) unstable; urgency=low
+
+  * Development rebuild 20260608080317
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 06:03:17 +0000
+
+grass-planetary-addons (1.0.0+20260608080032) unstable; urgency=low
+
+  * Development rebuild 20260608080032
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 06:00:32 +0000
+
+grass-planetary-addons (1.0.0+20260608075058) unstable; urgency=low
+
+  * Development rebuild 20260608075058
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 05:50:58 +0000
+
+grass-planetary-addons (1.0.0+20260608074459) unstable; urgency=low
+
+  * Development rebuild 20260608074459
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 05:44:59 +0000
+
+grass-planetary-addons (1.0.0+20260608071808) unstable; urgency=low
+
+  * Development rebuild 20260608071808
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Mon, 08 Jun 2026 05:18:08 +0000
+
+grass-planetary-addons (1.0.0+20260607195645) unstable; urgency=low
 
   * Development rebuild 20260607195645
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 17:56:45 +0000
 
-grass-planetary-addons (0.8.8+20260607112249) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260607112249) unstable; urgency=low
 
   * Development rebuild 20260607112249
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 09:22:49 +0000
 
-grass-planetary-addons (0.8.8+20260607101733) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260607101733) unstable; urgency=low
 
   * Development rebuild 20260607101733
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 08:17:33 +0000
 
-grass-planetary-addons (0.8.8+20260607095216) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260607095216) unstable; urgency=low
 
   * Development rebuild 20260607095216
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 07:52:16 +0000
 
-grass-planetary-addons (0.8.8+20260607093941) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260607093941) unstable; urgency=low
 
   * Development rebuild 20260607093941
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 07:39:41 +0000
 
-grass-planetary-addons (0.8.8+20260607092354) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260607092354) unstable; urgency=low
 
   * Development rebuild 20260607092354
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sun, 07 Jun 2026 07:23:54 +0000
 
-grass-planetary-addons (0.8.8+20260606233723) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260606233723) unstable; urgency=low
 
   * Development rebuild 20260606233723
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 06 Jun 2026 21:37:23 +0000
 
-grass-planetary-addons (0.8.8+20260606233235) unstable; urgency=low
+grass-planetary-addons (1.0.0+20260606233235) unstable; urgency=low
 
   * Development rebuild 20260606233235
 
  -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 06 Jun 2026 21:32:35 +0000
 
-grass-planetary-addons (0.8.8) unstable; urgency=medium
+grass-planetary-addons (1.0.0) unstable; urgency=medium
 
   * Packaging: replace the auto-generated `libxml2 (>= 2.7.4)` runtime
     dependency with `libxml2-16 | libxml2 (>= 2.7.4)` via

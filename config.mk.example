@@ -1,0 +1,14 @@
+# Copy this file to config.mk and edit for your local setup.
+# config.mk is gitignored — safe to put local paths here.
+
+# Path to the GRASS GIS source tree (used for MODULE_TOPDIR).
+# Default: $(HOME)/dev/grass
+#MODULE_TOPDIR = /path/to/grass
+
+# Path to the grass-addons source tree (informational; used by update.sh).
+# Default: $(HOME)/dev/grass-addons
+#GRASS_ADDONS_TOPDIR = /path/to/grass-addons
+
+# System GRASS installation prefix (used for INST_DIR in make install).
+# Default: auto-detected from /usr/local/grass*/
+#GRASS_PREFIX = /usr/local/grass86

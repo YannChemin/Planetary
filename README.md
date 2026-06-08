@@ -1,6 +1,8 @@
 # Planetary Bridge for GRASS GIS
 
-**Status:** v0.8.8 — 55 modules, 7 C libraries + 2 Python libraries, 30+ testsuite tests passing,
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20588644.svg)](https://doi.org/10.5281/zenodo.20588644)
+
+**Status:** v1.0.0 — 55 modules, 7 C libraries + 2 Python libraries, 30+ testsuite tests passing,
 public-domain (Unlicense).
 
 This project brings planetary-science image processing — historically the
@@ -9,6 +11,20 @@ GRASS GIS workflow. It also provides a complete landing-site evaluation
 pipeline covering terrain, illumination, visibility, and multi-criteria
 decision support. Each addon module is a self-contained GRASS binary or
 Python script that reads/writes ordinary GRASS rasters and vectors.
+
+## GRASS wxGUI integration
+
+After installation the **Planetary** menu appears in the wxPython GUI between
+the *Temporal* and *Help* menus. Every submenu is driven by the module's
+keyword declarations — no hand-written menu file is needed for new modules.
+
+![Planetary menu in GRASS GIS wxPython GUI](doc/images/Planetary_Menu_WxGUI_GRASSGIS.png)
+
+*Planetary top-level menu open on a Ceres Global mapset, with the
+Import & Export submenu expanded showing the full set of PDS / ISIS / DEM
+import commands.*
+
+---
 
 ## Processing examples
 
@@ -261,7 +277,7 @@ cd ~/dev/Planetary
 make clean && make deb
 ```
 
-`make deb` stamps a datetime suffix onto the version (`0.8.8+YYYYMMDDHHMMSS`),
+`make deb` stamps a datetime suffix onto the version (`1.0.0+YYYYMMDDHHMMSS`),
 so every rebuild produces a strictly higher version and `dpkg -i` always
 overwrites installed files without manual removal.
 
@@ -269,8 +285,8 @@ Install in dependency order (`Pre-Depends` enforces it automatically):
 
 ```bash
 cd ~/dev
-sudo dpkg -i planetary-cspice_0.8.8+<timestamp>_amd64.deb
-sudo dpkg -i grass-planetary-addons_0.8.8+<timestamp>_amd64.deb
+sudo dpkg -i planetary-cspice_1.0.0+<timestamp>_amd64.deb
+sudo dpkg -i grass-planetary-addons_1.0.0+<timestamp>_amd64.deb
 ```
 
 ### Option B — Direct build alongside GRASS and grass-addons

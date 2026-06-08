@@ -1,0 +1,112 @@
+#!/bin/sh
+set -e
+
+SHARE_TBDIR=/usr/share/grass-planetary-addons/toolboxes
+ADDON_DIR=/usr/lib/grass/addons
+
+case "$1" in
+    configure)
+        # Register libpsunmask.so with the dynamic linker
+        if command -v ldconfig >/dev/null 2>&1; then
+            ldconfig 2>/dev/null || true
+        fi
+
+        # Patch GRASS toolboxes.py write_text→write_bytes bug in the live install.
+        # Without this fix GRASS silently falls back to the default menu and the
+        # Planetary menu entry never appears.  The original is backed up alongside.
+        for gisbase in /usr/local/grass[0-9]* /usr/local/grass[0-9]*.[0-9]*; do
+            _tb="$gisbase/gui/wxpython/core/toolboxes.py"
+            [ -f "$_tb" ] || continue
+            if grep -q 'write_text(xml)' "$_tb" 2>/dev/null; then
+                cp "$_tb" "$_tb.planetary.bak"
+                sed -i 's/Path(menudataFile)\.write_text(xml)/Path(menudataFile).write_bytes(xml)/' "$_tb"
+                echo "grass-planetary-addons: patched $_tb"
+            fi
+        done
+
+        # Delete stale menudata.xml for all users so GRASS regenerates it with
+        # the Planetary menu on next launch.
+        for homedir in /home/*; do
+            md="$homedir/.grass8/toolboxes/menudata.xml"
+            [ -f "$md" ] && rm -f "$md" && \
+                echo "grass-planetary-addons: cleared $md (will regenerate)"
+        done
+        [ -f /root/.grass8/toolboxes/menudata.xml ] && \
+            rm -f /root/.grass8/toolboxes/menudata.xml || true
+
+        # Symlink every addon into each found GISBASE so modules are immediately
+        # findable by GRASS regardless of GRASS_ADDON_PATH or session type.
+        # Scripts do: sys.path.insert(0, dirname(dirname(abspath(__file__))))
+        # so when invoked from GISBASE/scripts/, they look for p_lib at GISBASE/.
+        for gisbase in /usr/local/grass[0-9]* /usr/local/grass[0-9]*.[0-9]*; do
+            [ -d "$gisbase/scripts" ] || continue
+
+            # Remove stale real files from a prior direct 'make install'
+            for s in "$gisbase"/scripts/p.* "$gisbase/scripts/g.gui.landing"; do
+                [ -L "$s" ] && continue      # already a symlink — skip
+                [ -f "$s" ] || continue
+                echo "grass-planetary-addons: removing stale $s"
+                rm -f "$s"
+            done
+            for lib in "$gisbase/p_lib.py" "$gisbase/p_spice.py"; do
+                [ -L "$lib" ] && continue
+                [ -f "$lib" ] && rm -f "$lib"
+            done
+
+            # Link support libraries at GISBASE root
+            ln -sf "$ADDON_DIR/p_lib.py"   "$gisbase/p_lib.py"
+            ln -sf "$ADDON_DIR/p_spice.py" "$gisbase/p_spice.py"
+            echo "grass-planetary-addons: linked p_lib.py p_spice.py → $gisbase/"
+
+            # Link Python script modules
+            for f in "$ADDON_DIR"/scripts/p.* "$ADDON_DIR/scripts/g.gui.landing"; do
+                [ -f "$f" ] || continue
+                ln -sf "$f" "$gisbase/scripts/$(basename "$f")"
+            done
+
+            # Link compiled binary modules
+            for f in "$ADDON_DIR"/bin/p.* "$ADDON_DIR"/bin/g.gui.*; do
+                [ -f "$f" ] || continue
+                ln -sf "$f" "$gisbase/bin/$(basename "$f")"
+            done
+
+            echo "grass-planetary-addons: linked addons into $gisbase"
+        done
+
+        # Install wxGUI toolboxes for the invoking user (SUDO_USER if present,
+        # otherwise the current user).  Backs up any pre-existing files.
+        REAL_USER="${SUDO_USER:-$(id -un)}"
+        REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+        if [ -n "$REAL_HOME" ] && [ -d "$REAL_HOME" ]; then
+            TBDIR="$REAL_HOME/.grass8/toolboxes"
+            mkdir -p "$TBDIR"
+            for f in "$SHARE_TBDIR"/*.xml; do
+                dest="$TBDIR/$(basename "$f")"
+                if [ -f "$dest" ] && ! diff -q "$dest" "$f" >/dev/null 2>&1; then
+                    cp "$dest" "$dest.bak"
+                    echo "grass-planetary-addons: backed up $dest → $dest.bak"
+                fi
+                cp "$f" "$dest"
+                echo "grass-planetary-addons: installed $(basename "$f") → $dest"
+            done
+        fi
+
+        # Write GRASS_ADDON_PATH to /etc/environment as a belt-and-suspenders
+        # fallback for GRASS installations not covered by the GISBASE symlinks above
+        # (e.g., GRASS installed via apt to a non-/usr/local path).
+        _ETC_ENV=/etc/environment
+        sed -i '/^GRASS_ADDON_PATH=/d' "$_ETC_ENV" 2>/dev/null || true
+        printf 'GRASS_ADDON_PATH="/usr/lib/grass/addons/bin:/usr/lib/grass/addons/scripts"\n' \
+            >> "$_ETC_ENV"
+
+        # Remove stale profile.d from old p-landing-grass package if present.
+        rm -f /etc/profile.d/p-landing-grass.sh 2>/dev/null || true
+
+        echo "grass-planetary-addons: installation complete."
+        echo "  Planetary modules are now available in GRASS."
+        echo "  Restart GRASS (or delete ~/.grass8/toolboxes/menudata.xml) to refresh the GUI menu."
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

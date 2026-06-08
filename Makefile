@@ -1,8 +1,11 @@
 #!/usr/bin/make -f
 SHELL := /bin/bash
 
+# Local path overrides — copy config.mk.example to config.mk and edit.
+-include config.mk
+
 # Point at the GRASS GIS source tree.
-# Override on the command line: make MODULE_TOPDIR=/path/to/grass
+# Override in config.mk or on the command line: make MODULE_TOPDIR=/path/to/grass
 MODULE_TOPDIR ?= $(HOME)/dev/grass
 
 # Derived GRASS paths (mirrors grass-addons convention)
@@ -18,7 +21,13 @@ INST_DIR ?= $(GRASS_PREFIX)
 CSPICE_SRC   := $(CURDIR)/cspice-pkg/cspice
 CSPICE_BUILD := $(CURDIR)/cspice-pkg/build
 
-.PHONY: all cspice libs modules install clean clean-obj deb
+# GRASS toolboxes.py has a Python 3 bug: write_text(bytes) instead of write_bytes.
+# This prevents user toolboxes (Planetary menu) from ever being written to disk.
+# We patch the GRASS source before building and restore it afterwards.
+GRASS_TOOLBOXES := $(MODULE_TOPDIR)/gui/wxpython/core/toolboxes.py
+GRASS_TOOLBOXES_BAK := $(GRASS_TOOLBOXES).planetary.bak
+
+.PHONY: all cspice libs modules install clean clean-obj deb patch-grass unpatch-grass
 
 # ── default ───────────────────────────────────────────────────────────────────
 all: cspice modules
@@ -34,11 +43,32 @@ $(CSPICE_BUILD)/libcspice.so:
 	    $(CSPICE_SRC)/src/cspice/*.c -lm
 	@echo "=== libcspice.so built ==="
 
+# ── GRASS toolboxes.py patch (apply before build, always restore after) ──────
+patch-grass:
+	@if grep -q 'write_text(xml)' $(GRASS_TOOLBOXES) 2>/dev/null; then \
+	    cp $(GRASS_TOOLBOXES) $(GRASS_TOOLBOXES_BAK); \
+	    sed -i 's/Path(menudataFile)\.write_text(xml)/Path(menudataFile).write_bytes(xml)/' \
+	        $(GRASS_TOOLBOXES); \
+	    echo "=== Patched $(GRASS_TOOLBOXES) ==="; \
+	fi
+
+unpatch-grass:
+	@if [ -f $(GRASS_TOOLBOXES_BAK) ]; then \
+	    mv $(GRASS_TOOLBOXES_BAK) $(GRASS_TOOLBOXES); \
+	    echo "=== Restored $(GRASS_TOOLBOXES) ==="; \
+	fi
+
 # ── all modules via GRASS build system ───────────────────────────────────────
 # libs/ sub-objects are compiled on demand by each module's DEPENDENCIES.
 # Removes stale OBJ.* dirs first to prevent GRASS version hash mismatch.
+# The patch/unpatch wrapper ensures toolboxes.py is always restored even if
+# the build fails.
 modules: clean-obj
-	$(MAKE) -C planetary MODULE_TOPDIR=$(MODULE_TOPDIR)
+	@$(MAKE) patch-grass
+	@_exit=0; \
+	$(MAKE) -C planetary MODULE_TOPDIR=$(MODULE_TOPDIR) || _exit=$$?; \
+	$(MAKE) unpatch-grass; \
+	exit $$_exit
 
 # ── libpsunmask.so (ctypes library used by p.illumination.sunfraction) ────────
 libpsunmask:
@@ -49,11 +79,10 @@ libpsunmask:
 # Modules land in $(INST_DIR)/bin/ and $(INST_DIR)/scripts/.
 # p_lib.py and p_spice.py go to $(INST_DIR)/ so that
 # dirname(dirname(abspath(script))) resolves correctly for scripts/.
-install: all
+# Build first with 'make' or 'make all', then 'sudo make install'.
+install:
 	$(MAKE) -C planetary MODULE_TOPDIR=$(MODULE_TOPDIR) \
 	    INST_DIR=$(INST_DIR) install
-	install -m 0644 planetary/p_lib.py   $(INST_DIR)/p_lib.py
-	install -m 0644 planetary/p_spice.py $(INST_DIR)/p_spice.py
 	mkdir -p $(INST_DIR)/planetary
 	for f in bodies/moon.json bodies/mars.json bodies/venus.json; do \
 	    install -m 0644 $$f $(INST_DIR)/planetary/$$(basename $$f); \

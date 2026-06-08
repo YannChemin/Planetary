@@ -1,0 +1,39 @@
+#!/bin/sh
+set -e
+
+ADDON_DIR=/usr/lib/grass/addons
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        # Restore original GRASS toolboxes.py from backup made by postinst.
+        for gisbase in /usr/local/grass[0-9]* /usr/local/grass[0-9]*.[0-9]*; do
+            _tb="$gisbase/gui/wxpython/core/toolboxes.py"
+            if [ -f "$_tb.planetary.bak" ]; then
+                mv "$_tb.planetary.bak" "$_tb"
+                echo "grass-planetary-addons: restored $_tb"
+            fi
+        done
+
+        # Remove symlinks we created in GISBASE directories.
+        for gisbase in /usr/local/grass[0-9]* /usr/local/grass[0-9]*.[0-9]*; do
+            [ -d "$gisbase/scripts" ] || continue
+            for lib in "$gisbase/p_lib.py" "$gisbase/p_spice.py"; do
+                [ -L "$lib" ] && rm -f "$lib"
+            done
+            for s in "$gisbase"/scripts/p.* "$gisbase/scripts/g.gui.landing"; do
+                [ -L "$s" ] && rm -f "$s"
+            done
+            for b in "$gisbase"/bin/p.* "$gisbase"/bin/g.gui.*; do
+                [ -L "$b" ] && rm -f "$b"
+            done
+            echo "grass-planetary-addons: removed symlinks from $gisbase"
+        done
+
+        # Remove GRASS_ADDON_PATH from /etc/environment.
+        sed -i '/^GRASS_ADDON_PATH=.*\/usr\/lib\/grass\/addons/d' \
+            /etc/environment 2>/dev/null || true
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

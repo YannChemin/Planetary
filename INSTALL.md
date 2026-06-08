@@ -36,6 +36,28 @@ The `planetary/` directory follows the same convention as `grass-addons/src/rast
 
 ## Option A — Debian packages (recommended for testing/deployment)
 
+### Configure paths (first time only)
+
+The build system reads a gitignored `config.mk` for local path overrides.
+Copy the example and edit it to match your setup:
+
+```bash
+cd ~/dev/Planetary
+cp config.mk.example config.mk
+$EDITOR config.mk
+```
+
+`config.mk` variables and their defaults:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MODULE_TOPDIR` | `$(HOME)/dev/grass` | GRASS source tree used to compile modules |
+| `GRASS_ADDONS_TOPDIR` | `$(HOME)/dev/grass-addons` | grass-addons tree (used by `update.sh`) |
+| `GRASS_PREFIX` | auto-detected from `/usr/local/grass*/` | Installed GRASS prefix (`make install` target) |
+
+If your GRASS source tree is at the default location (`~/dev/grass`) you can
+skip this step entirely — the Makefile defaults work out of the box.
+
 ### Build
 
 Always start with a clean slate to prevent GRASS version hash mismatches:
@@ -49,7 +71,7 @@ make clean && make deb
 Python bytecode, and Debian staging trees.
 
 `make deb`:
-1. Stamps a datetime suffix onto the version (`0.8.8` → `0.8.8+YYYYMMDDHHMMSS`)
+1. Stamps a datetime suffix onto the version (`1.0.0` → `1.0.0+YYYYMMDDHHMMSS`)
    so every rebuild produces a strictly higher version — `dpkg -i` always
    overwrites installed files without needing to remove the old package first.
 2. Compiles `libcspice.so` from ~2 266 vendored NAIF C sources (`-std=gnu89`).
@@ -64,8 +86,8 @@ Both `.deb` files land one directory up (`~/dev/`).
 
 ```bash
 cd ~/dev
-sudo dpkg -i planetary-cspice_0.8.8+<timestamp>_amd64.deb
-sudo dpkg -i grass-planetary-addons_0.8.8+<timestamp>_amd64.deb
+sudo dpkg -i planetary-cspice_1.0.0+<timestamp>_amd64.deb
+sudo dpkg -i grass-planetary-addons_1.0.0+<timestamp>_amd64.deb
 ```
 
 ### What gets installed
@@ -95,8 +117,16 @@ to PATH inside every GRASS session, so all modules are accessible by name.
 ## Option B — Direct install alongside GRASS and grass-addons
 
 This follows the same workflow as `$HOME/dev/update.sh`.
+Configure `config.mk` as described in Option A before running these commands.
 
 ### Build
+
+```bash
+make clean
+make -j8
+```
+
+Or override `MODULE_TOPDIR` on the command line if you have not created `config.mk`:
 
 ```bash
 make MODULE_TOPDIR=$HOME/dev/grass clean
@@ -113,11 +143,16 @@ including Planetary's modules), then install the extras:
 
 ```bash
 cd $HOME/dev/grass
-sudo make install                                          # installs to /usr/local/grass86/
+sudo make install            # installs to /usr/local/grass86/ (or GRASS_PREFIX)
 
 cd $HOME/dev/Planetary
-sudo make MODULE_TOPDIR=$HOME/dev/grass \
-          INST_DIR=/usr/local/grass86 install             # installs p_lib.py, bodies/, missions/
+sudo make install            # installs p_lib.py, bodies/, missions/ to INST_DIR
+```
+
+If `config.mk` is not present, pass the paths explicitly:
+
+```bash
+sudo make MODULE_TOPDIR=$HOME/dev/grass INST_DIR=/usr/local/grass86 install
 ```
 
 `make install` in Planetary installs:
@@ -139,17 +174,15 @@ cd $HOME/dev/grass-addons
 make MODULE_TOPDIR=$HOME/dev/grass clean && git pull
 make MODULE_TOPDIR=$HOME/dev/grass -j8
 
-# Planetary
+# Planetary  (uses MODULE_TOPDIR / INST_DIR from config.mk)
 cd $HOME/dev/Planetary
-make MODULE_TOPDIR=$HOME/dev/grass clean
-make MODULE_TOPDIR=$HOME/dev/grass -j8
+make clean && make -j8
 
 # System install (picks up GRASS + addons + Planetary in one shot)
 cd $HOME/dev/grass && sudo make install
 
 # Install Planetary extras (libs, data)
-cd $HOME/dev/Planetary
-sudo make MODULE_TOPDIR=$HOME/dev/grass INST_DIR=/usr/local/grass86 install
+cd $HOME/dev/Planetary && sudo make install
 ```
 
 ---

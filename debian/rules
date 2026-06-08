@@ -34,8 +34,18 @@ override_dh_auto_build:
 	echo "=== libcspice.so built ==="
 	# ── all GRASS modules (C + Python) via standard GRASS build system ────
 	# (libs/ sub-objects are compiled on demand by each module's DEPENDENCIES)
+	# Patch GRASS toolboxes.py write_text→write_bytes bug, restore after build.
 	find planetary -maxdepth 2 -name 'OBJ.*' -type d -exec rm -rf {} + 2>/dev/null || true
-	$(MAKE) -C planetary MODULE_TOPDIR=$(GRASS_PREFIX)
+	@_tb=$(GRASS_PREFIX)/gui/wxpython/core/toolboxes.py; \
+	if grep -q 'write_text(xml)' $$_tb 2>/dev/null; then \
+	    cp $$_tb $$_tb.planetary.bak; \
+	    sed -i 's/Path(menudataFile)\.write_text(xml)/Path(menudataFile).write_bytes(xml)/' $$_tb; \
+	fi
+	$(MAKE) -C planetary MODULE_TOPDIR=$(GRASS_PREFIX); \
+	_exit=$$?; \
+	_tb=$(GRASS_PREFIX)/gui/wxpython/core/toolboxes.py; \
+	[ -f $$_tb.planetary.bak ] && mv $$_tb.planetary.bak $$_tb || true; \
+	exit $$_exit
 	# ── libpsunmask.so (ctypes library, standalone build) ─────────────────
 	$(MAKE) -C planetary/p.sunmask -f Makefile.standalone \
 	    GISBASE=$(GRASS_PREFIX)
@@ -63,6 +73,9 @@ override_dh_auto_install:
 	mkdir -p $(ADDONS)/missions
 	mkdir -p debian/grass-planetary-addons/usr/lib/x86_64-linux-gnu
 	mkdir -p debian/grass-planetary-addons/usr/share/grass-planetary-addons/scripts
+	mkdir -p debian/grass-planetary-addons/etc/profile.d
+	install -m 0644 debian/grass-planetary-addons.sh \
+	    debian/grass-planetary-addons/etc/profile.d/grass-planetary-addons.sh
 	# Install all modules (C binaries + Python scripts + HTML docs) via GRASS install
 	# C modules  → $(ADDONS)/bin/
 	# Python scripts → $(ADDONS)/scripts/   (Script.make convention)
