@@ -1,0 +1,32 @@
+# Local config — never commit
+config.mk
+
+# Generated HTML manual pages (produced from *.md by scripts/md2html_grass.py)
+planetary/*/*.html
+
+# GRASS build artifacts
+planetary/*/OBJ.*/
+planetary/*/*.o
+planetary/*/*.so
+planetary/p.horizon.gpu/p.horizon.gpu
+planetary/p.sunmask/libpsunmask.so
+cspice-pkg/build/
+
+# C library build artifacts
+libs/*/*.o
+libs/*/*.so
+libs/*/OBJ.*/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Debian staging
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/grass-planetary-addons/
+debian/planetary-cspice/
+debian/*.substvars
+debian/*.debhelper.log
+debian/files
