@@ -9,6 +9,7 @@ Build-Depends:
  libxml2-dev,
  libgdal-dev,
  pandoc,
+ python3-mistune,
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Homepage: https://grass.osgeo.org

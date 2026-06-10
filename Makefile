@@ -64,6 +64,7 @@ unpatch-grass:
 # The patch/unpatch wrapper ensures toolboxes.py is always restored even if
 # the build fails.
 modules: clean-obj
+	python3 scripts/md2html_grass.py planetary/
 	@$(MAKE) patch-grass
 	@_exit=0; \
 	$(MAKE) -C planetary MODULE_TOPDIR=$(MODULE_TOPDIR) || _exit=$$?; \
@@ -125,6 +126,7 @@ clean:
 	$(MAKE) -C planetary/p.horizon.gpu -f Makefile.standalone clean 2>/dev/null || true
 	find planetary -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 	find planetary -name '*.pyc' -delete 2>/dev/null || true
+	find planetary -maxdepth 3 -name '*.html' -delete 2>/dev/null || true
 	find planetary -name '.pytest_cache' -exec rm -rf {} + 2>/dev/null || true
 	rm -rf debian/.debhelper debian/debhelper-build-stamp \
 	       debian/grass-planetary-addons debian/planetary-cspice \
