@@ -461,6 +461,29 @@ def _pick_raw_product(file_list, channel="vis"):
     return None, None
 
 
+def _pds3_image_shape(lbl_path):
+    """Parse LINES and LINE_SAMPLES from a PDS3 label file."""
+    lines = samples = None
+    try:
+        with open(lbl_path, "r", errors="ignore") as fh:
+            for line in fh:
+                kv = line.split("=", 1)
+                if len(kv) == 2:
+                    key = kv[0].strip()
+                    val = kv[1].strip().split()[0].rstrip(";")
+                    if key == "LINES" and lines is None:
+                        try: lines = int(val)
+                        except ValueError: pass
+                    elif key == "LINE_SAMPLES" and samples is None:
+                        try: samples = int(val)
+                        except ValueError: pass
+                if lines and samples:
+                    break
+    except OSError:
+        pass
+    return lines, samples
+
+
 def _opus_id_from_row(row, labels):
     """Extract the OPUS ID string from a search result row dict."""
     id_key = next(
@@ -1018,6 +1041,13 @@ def main():
         # For detached-label PDS3 files (.lbl + .img), pass the .lbl so
         # p_pds can resolve the data pointer correctly.
         import_path = lbl_fname if (lbl_fname and os.path.isfile(lbl_fname)) else dest
+        # Set region to the native image dimensions before importing so
+        # p.in.pds3 doesn't clip/pad to a stale ring-plane region.
+        if import_path.lower().endswith(".lbl"):
+            nl, ns = _pds3_image_shape(import_path)
+            if nl and ns:
+                gs.run_command("g.region", n=nl, s=0, e=ns, w=0,
+                               nsres=1, ewres=1, quiet=True)
         gs.message(f"Importing {kind} via p.in.pds3 …")
         gs.run_command("p.in.pds3",
                        flags="o" if flag_override else "",
