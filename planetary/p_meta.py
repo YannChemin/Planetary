@@ -97,6 +97,7 @@ class PlanetaryMetadata:
     pds_product_id: str | None = None
     source_file: str | None = None
     spice_kernels: list[str] | None = None
+    projection: str | None = None     # ring-plane projection mode: radlong|polar
 
     # --- provenance ---
     processing_history: list[dict[str, Any]] = field(default_factory=list)
@@ -148,6 +149,8 @@ class PlanetaryMetadata:
             block["source_file"] = self.source_file
         if self.spice_kernels:
             block["spice_kernels"] = list(self.spice_kernels)
+        if self.projection:
+            block["projection"] = self.projection
         return block
 
     def _build_bands(self) -> dict[str, Any]:
@@ -243,6 +246,7 @@ class PlanetaryMetadata:
         meta.pds_product_id = planetary.get("pds_product_id")
         meta.source_file = planetary.get("source_file")
         meta.spice_kernels = planetary.get("spice_kernels")
+        meta.projection = planetary.get("projection")
         return meta
 
 

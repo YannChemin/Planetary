@@ -88,6 +88,16 @@
 # % required: no
 # %end
 
+# %option
+# % key: projection
+# % type: string
+# % label: Output projection mode
+# % description: radlong: N/S=ring_radius[km], E/W=ring_longitude[deg]; polar: both axes in ring-plane km, viewed from Saturn's north pole (isotropic scale)
+# % options: radlong,polar
+# % answer: radlong
+# % required: no
+# %end
+
 # %flag
 # % key: n
 # % description: Use nearest-neighbour sampling (default: bilinear)
@@ -302,6 +312,7 @@ def main():
     opt_body   = options["body"]
     opt_frame  = options["frame"]
     opt_kerns  = options["kernels"]
+    opt_proj   = options["projection"]
     grid_n     = int(options["grid"])
     flag_nn    = flags["n"]
 
@@ -381,8 +392,20 @@ def main():
                f"lon=[{reg['w']:.4f}, {reg['e']:.4f}] deg")
 
     col_g, row_g = np.meshgrid(np.arange(out_cols), np.arange(out_rows))
-    r_out   = reg["n"] - (row_g + 0.5) * reg["nsres"]
-    lon_out = reg["w"] + (col_g + 0.5) * reg["ewres"]
+
+    if opt_proj == "polar":
+        # Both axes in km in the ring plane (viewed from Saturn's north pole).
+        # x = r·cos(lon),  y = r·sin(lon)  →  E-W and N-S respectively.
+        x_out = reg["w"] + (col_g + 0.5) * reg["ewres"]
+        y_out = reg["n"] - (row_g + 0.5) * reg["nsres"]
+        r_out   = np.sqrt(x_out**2 + y_out**2)
+        lon_out = np.degrees(np.arctan2(y_out, x_out))
+        gs.message(f"  Polar projection: x=[{reg['w']:.0f},{reg['e']:.0f}] km  "
+                   f"y=[{reg['s']:.0f},{reg['n']:.0f}] km")
+    else:
+        # radlong (default): N/S = ring_radius [km], E/W = ring_longitude [deg]
+        r_out   = reg["n"] - (row_g + 0.5) * reg["nsres"]
+        lon_out = reg["w"] + (col_g + 0.5) * reg["ewres"]
 
     # ── Invert geometry ────────────────────────────────────────────────────
     gs.message("Inverting ring geometry …")
@@ -426,6 +449,7 @@ def main():
         radiometric_units="DN",
         acquisition_datetime=opt_time,
         spice_kernels=kernel_list,
+        projection=opt_proj,
     )
 
     gs.message(f"Done: {opt_output}")
