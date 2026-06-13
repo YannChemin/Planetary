@@ -53,6 +53,12 @@ p.in.rings input=raw_image output=rings_image \
     time=<UTC> instrument=<NAIF_id> \
     [spacecraft=CASSINI] [body=SATURN] [frame=IAU_SATURN] \
     [kernels=k1,k2,...] [grid=9] [projection=radlong|polar] [-n]
+
+# radlong mode — region in km × degrees (default, analysis use)
+g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
+
+# polar mode — region in km × km (display use, isotropic)
+g.region n=130000 s=70000 e=-50000 w=-140000 res=50
 ```
 
 | Parameter | Description |

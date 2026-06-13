@@ -1,3 +1,60 @@
+grass-planetary-addons (1.0.0+20260613170000) unstable; urgency=low
+
+  [ Planetary metadata sidecar (planetary.json) ]
+  * New shared library libs/p_meta/p_meta.c + p_meta.h: C implementation
+    of the planetary.json sidecar writer, schema-compatible with i.hyper
+    HyperMetadata JSON (schema_version 1.0). Writes to cell_misc/<name>/
+    (2-D raster) or grid3/<name>/ (3-D raster). First-write-wins semantics.
+  * New planetary/p_meta.py: Python counterpart (PlanetaryMetadata dataclass,
+    write_planetary_metadata() convenience function). Superset of i.hyper
+    JSON schema; planetary-specific fields under extended_metadata.planetary.
+  * p.in.pds, p.in.dem, p.in.ancillary, p.in.lroc.nac, p.in.astropedia,
+    p.in.rings: integrated p_meta.py — each run now writes planetary.json.
+  * p.in.pds3, p.in.pds4, p.in.isis: integrated libs/p_meta C library via
+    updated Makefiles; PVL/XML label fields (instrument, target, start time,
+    mission, LID) extracted and written to planetary.json.
+  * p_meta.py: new projection field under extended_metadata.planetary to
+    record ring-plane projection mode used by p.in.rings.
+
+  [ p.in.rings: polar ring-plane projection ]
+  * New projection= option (radlong|polar, default radlong).
+    - radlong: existing behaviour — N/S=ring_radius[km], E/W=ring_lon[deg].
+    - polar: both axes in ring-plane km, isotropic (x=r·cos(lon),
+      y=r·sin(lon)), viewed from the body north pole (IAU convention).
+      Enables cartographically correct ring maps with 1:1 aspect ratio.
+  * Updated %module description and manual (p.in.rings.md):
+    - Explained radlong vs polar trade-offs and region setup for each mode.
+    - Added second example: Cassini Rev 014 (2005-10-23, +10° ring elevation)
+      using projection=polar, with g.region in km × km.
+  * New example script $HOME/RSDATA/cassini_rev014_polar.sh.
+
+  [ Test suites ]
+  * New libs/p_meta/test_p_meta.c: 13 standalone C unit tests for p_meta
+    (no GRASS session required; compile with -I./test for GRASS stubs).
+  * New libs/p_meta/test/grass/gis.h: minimal GRASS GIS stubs for testing.
+  * New libs/p_meta/testsuite/test_p_meta.py: 26 Python tests (18 pure
+    dataclass unit tests + 8 GRASS integration tests).
+  * p.in.dem/testsuite, p.in.ancillary/testsuite: added planetary.json
+    checks (file exists, schema_version, data_type, radiometric fields,
+    source_file, first-write-wins) to existing import tests.
+  * p.in.pds3/testsuite: replaced placeholder with synthetic PDS3 file
+    generator + 9 JSON verification tests; skipped if module not installed.
+  * p.in.pds4/testsuite: replaced placeholder with synthetic PDS4 XML +
+    binary generator + 11 JSON verification tests.
+  * p.in.isis/testsuite: added GDAL-ISIS3-write-gated synthetic cube +
+    6 JSON tests; skipped when GDAL ISIS3 write support unavailable.
+  * p.in.rings/testsuite: new file with interface tests (always run) +
+    SPICE-gated radlong and polar projection tests + cross-comparison test
+    verifying projection field in planetary.json for each mode.
+
+  [ Documentation ]
+  * p.in.spice.md: added SCOPE section comparing generic vs ring-chain use.
+  * p.in.rings.md: full rewrite documenting radlong vs polar, both example
+    chains, updated USAGE table and REQUIRED KERNELS table.
+  * p.rings.project.md: added Step 0 (location creation) to example.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 13 Jun 2026 17:00:00 +0000
+
 grass-planetary-addons (1.0.0+20260613151435) unstable; urgency=low
 
   * Development rebuild 20260613151435

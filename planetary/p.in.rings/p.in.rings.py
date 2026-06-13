@@ -17,7 +17,7 @@
 ############################################################################
 
 # %module
-# % description: Project a raw camera image to ring-plane (ring_radius/ring_longitude) coordinates using SPICE.
+# % description: Project a raw camera image to ring-plane coordinates using SPICE. Two output modes: radlong (N/S=ring_radius[km], E/W=ring_longitude[deg]) or polar (both axes in ring-plane km, isotropic, viewed from the body north pole).
 # % keyword: Planetary
 # % keyword: Ring Plane Analysis
 # % keyword: ring plane
