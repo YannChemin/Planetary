@@ -396,6 +396,15 @@ def main():
     ar, alon = _build_geometry_model(lib, sc_pos, rot, pscale_s, pscale_l,
                                       ns, nl, grid_n)
 
+    # Print ring geometry at image centre — needed to set the correct g.region.
+    sc, lc = (ns - 1) * 0.5, (nl - 1) * 0.5
+    r_cen   = ar[0]   + ar[1]*sc   + ar[2]*lc   + ar[3]*sc*lc
+    lon_cen = alon[0] + alon[1]*sc + alon[2]*lc + alon[3]*sc*lc
+    x_cen = r_cen * math.cos(math.radians(lon_cen))
+    y_cen = r_cen * math.sin(math.radians(lon_cen))
+    gs.message(f"  Image centre → r={r_cen:.0f} km, lon={lon_cen:.2f}° (IAU_SATURN)")
+    gs.message(f"  Polar centre hint: x≈{x_cen:.0f} km, y≈{y_cen:.0f} km")
+
     # ── Read input image at native resolution ──────────────────────────────
     gs.message("Reading input image …")
     raw = _read_raster_native(opt_input)

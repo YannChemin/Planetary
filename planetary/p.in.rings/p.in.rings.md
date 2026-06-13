@@ -122,46 +122,48 @@ p.rings.stats input=N1467344155_ringcyl \
     output=soi_bring_profile.csv radial=soi_bring_radial
 ```
 
-### Chain B — A ring / F ring, polar (display)
+### Chain B — outer A ring polar (display)
 
-Image `N1498508609_1.IMG`, 2005-06-26T19:55:52, observer ring elevation +38.7°.
-At this elevation the B and A rings appear as visible arcs; the polar
-projection maps them as circles centred on Saturn with a correct 1:1
-aspect ratio.
+Image `N1467346624_2.IMG`, 2004-07-01T03:52:49, observer ring elevation +26.9°.
+Shows the outer A ring (Keeler Gap region, 136 272–136 649 km) as an arc in
+polar ring-plane coordinates. Same SOI SPICE kernels as Chain A.
+
+Run `p.in.rings` once first with any output region to read the `Polar centre
+hint` message, then set the tight region around that point.
 
 ```bash
 # ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
-p.spice.find spacecraft=CASSINI time="2005-06-26T19:55:52" \
+p.spice.find spacecraft=CASSINI time="2004-07-01T03:52:49" \
     dest=$HOME/RSDATA/Saturn/kernels
 
 # ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
-p.in.astropedia opus_id=co-iss-n1498508609 output=N1498508609_raw
+p.in.astropedia opus_id=co-iss-n1467346624 output=N1467346624_polar_raw
 
 # ── Step 3: Set polar output region in km × km ───────────────────────────────
-# Both axes in km; Saturn's centre at (0,0).
-# This box covers the A and B rings in the upper-left quadrant (~x=-140000..
-# -50000, y=+70000..+130000) at the longitude of the observation (~230°).
-g.region n=130000 s=70000 e=-50000 w=-140000 nsres=50 ewres=50
+# Image centre maps to r=136504 km, IAU_SATURN lon=67.17°
+#   → polar coords x≈52970 km, y≈125808 km
+# Tight ±3000 km box at 1 km/pixel captures the arc.
+g.region n=128808 s=122808 e=55970 w=49970 nsres=1 ewres=1
 
 # ── Step 4: Project to polar ring-plane coordinates  ← this module ───────────
 KDIR="$HOME/RSDATA/Saturn/kernels"
 p.in.rings \
-    input=N1498508609_raw output=N1498508609_polar \
-    time="2005-06-26T19:55:52" instrument=-82360 \
+    input=N1467346624_polar_raw output=N1467346624_polar \
+    time="2004-07-01T03:52:49" instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
     projection=polar filter="CL1/CL2" \
     kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
-${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
+${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v43.tf,\
 ${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
-${KDIR}/spk/050824R_SCPSE_05217_05257.bsp,\
-${KDIR}/ck/05289_05294ra.bc"
-r.colors map=N1498508609_polar color=grey
-d.rast N1498508609_polar
+${KDIR}/spk/040629AP_SCPSE_04179_04185.bsp,\
+${KDIR}/ck/04183_04185ra.bc"
+r.colors map=N1467346624_polar color=grey
+d.rast N1467346624_polar
 ```
 
-The resulting raster shows the B-ring (outer edge ≈117 500 km) and A-ring
-(outer edge ≈136 800 km) as arcs of circles with Saturn's centre at
-(0, 0). Both axes label in km; `d.rast` respects the 1:1 aspect ratio.
+The resulting raster shows the outer A ring arc (~136 272–136 649 km) near
+polar coordinates (x≈52970, y≈125808) km. Saturn's centre is at (0, 0).
+Both axes in km; `d.rast` renders with correct 1:1 aspect ratio.
 
 **Optional — widen to the full ring system**
 

@@ -437,13 +437,14 @@ def opus_files(opus_id):
 
 
 def _pick_raw_product(file_list, channel="vis"):
-    """Return (url, filename) for the best raw data file in *file_list*.
+    """Return (url, filename) for the best data file in *file_list*.
 
     Priority:
       1. VIMS channel-specific ``_<channel>.qub`` (e.g. ``_vis.qub``).
       2. Any ``.qub`` file (other VIMS or generic cube).
-      3. Any ``.img`` file from a ``*raw*`` product type (ISS raw image).
-      4. Any ``.img`` file (ISS or other PDS3 image).
+      3. Calibrated ISS ``.img`` (filename contains ``_CALIB``).
+      4. Any ``.img`` file from a ``*raw*`` product type (ISS raw image).
+      5. Any ``.img`` file (ISS or other PDS3 image).
     """
     suffix = f"_{channel.lower()}.qub"
     for url, fname, _ptype in file_list:
@@ -451,6 +452,9 @@ def _pick_raw_product(file_list, channel="vis"):
             return url, fname
     for url, fname, _ptype in file_list:
         if fname.lower().endswith(".qub"):
+            return url, fname
+    for url, fname, _ptype in file_list:
+        if fname.lower().endswith(".img") and "_calib" in fname.lower():
             return url, fname
     for url, fname, ptype in file_list:
         if fname.lower().endswith(".img") and "raw" in ptype.lower():
@@ -1019,12 +1023,21 @@ def main():
         os.makedirs(os.path.dirname(dest), exist_ok=True)
 
         # Also fetch the companion label if present (p.in.pds3 needs it).
+        # Prefer the LBL whose base name matches the selected data file
+        # (e.g. _CALIB.LBL for _CALIB.IMG) over any other .lbl in the list.
+        dl_base_lower = os.path.splitext(dl_fname.lower())[0]
         lbl_url = lbl_fname = None
         for url, fname, _pt in file_list:
-            if fname.lower().endswith((".lbl", ".LBL")):
+            if fname.lower().endswith(".lbl") and os.path.splitext(fname.lower())[0] == dl_base_lower:
                 lbl_url = url
                 lbl_fname = os.path.join(os.path.dirname(dest), fname)
                 break
+        if not lbl_url:
+            for url, fname, _pt in file_list:
+                if fname.lower().endswith(".lbl"):
+                    lbl_url = url
+                    lbl_fname = os.path.join(os.path.dirname(dest), fname)
+                    break
         if lbl_url:
             gs.message(f"Fetching label: {lbl_url}")
             _wget_resumable(lbl_url, lbl_fname)
