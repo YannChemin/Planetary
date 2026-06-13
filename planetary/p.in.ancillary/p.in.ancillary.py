@@ -97,6 +97,7 @@ from grass.exceptions import CalledModuleError
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from p_lib import normalize_raster
+import p_meta
 
 _tmpdir = None
 
@@ -291,6 +292,26 @@ def main():
 
     ext = os.path.splitext(input_path)[1].lower()
 
+    # map opt_type to a tidy data_type + radiometric fields
+    _RTYPE = {
+        "thermal_inertia":   ("thermal",    "thermal_inertia", "TIU"),
+        "temperature":       ("thermal",    "temperature",     "K"),
+        "albedo":            ("ancillary",  "albedo",          "unitless"),
+        "feo":               ("ancillary",  "abundance",       "wt-%"),
+        "tio2":              ("ancillary",  "abundance",       "wt-%"),
+        "omat":              ("ancillary",  "optical_maturity","unitless"),
+        "mineralogy":        ("ancillary",  "mineralogy",      None),
+        "crust_thickness":   ("ancillary",  "crust_thickness", "m"),
+        "gravity_gradient":  ("ancillary",  "gravity_gradient","Eotvos"),
+        "weh":               ("ancillary",  "weh",             "wt-%"),
+        "volatile_proxy":    ("ancillary",  "volatile_proxy",  None),
+        "craters":           ("ancillary",  "crater_database", None),
+        "geology_units":     ("ancillary",  "geology",         None),
+        "custom":            ("ancillary",  None,              None),
+    }
+    rtype_info = _RTYPE.get(opt_type, ("ancillary", None, None))
+    data_type_str, rad_qty, rad_units = rtype_info
+
     if opt_type == "craters":
         if ext not in (".csv", ".txt"):
             gs.fatal("type=craters requires a CSV input file.")
@@ -308,6 +329,15 @@ def main():
                        history=f"Imported from: {opt_input}",
                        source1="p.in.ancillary",
                        quiet=True)
+        p_meta.write_planetary_metadata(
+            opt_output,
+            module="p.in.ancillary",
+            command=" ".join(sys.argv),
+            data_type=data_type_str,
+            radiometric_quantity=rad_qty,
+            radiometric_units=rad_units,
+            source_file=opt_input,
+        )
 
     gs.message(f"Layer '{opt_output}' ready (type={opt_type}).")
 

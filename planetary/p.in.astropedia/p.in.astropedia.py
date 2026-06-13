@@ -122,6 +122,9 @@ import urllib.parse
 
 import grass.script as gs
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import p_meta
+
 # ── API endpoints ──────────────────────────────────────────────────────────
 STAC_BASE    = "https://stac.astrogeology.usgs.gov/api"
 PDS_API_BASE = "https://pds.nasa.gov/api/search/1"
@@ -740,6 +743,14 @@ def main():
                        override_proj=effective_override,
                        body_hint=body_hint,
                        save_default_region=bool(opt_project))
+            p_meta.write_planetary_metadata(
+                opt_output,
+                module="p.in.astropedia",
+                command=" ".join(sys.argv),
+                data_type="image",
+                body=body_hint.upper() if body_hint else None,
+                source_file=local_path,
+            )
             gs.message(f"Imported COG as GRASS raster '{opt_output}' "
                        f"(project: {opt_project or orig_loc or 'current'}).")
         finally:
@@ -836,6 +847,19 @@ def main():
         gs.fatal("Could not determine a download URL from the search results. "
                  "Use -l to inspect available assets.")
 
+    # resolve PDS product ID and body from whichever search path was used
+    _pds_id = None
+    _body   = None
+    if stac_items:
+        item = stac_items[0]
+        _pds_id = item.get("id")
+        _body   = (item.get("properties") or {}).get("ssys:targets", [None])[0]
+    elif pds_products:
+        prod = pds_products[0]
+        props = prod.get("properties", {})
+        _pds_id = (props.get("pds:Logical_Identifier") or [None])[0]
+        _body   = (props.get("ssys:targets") or [None])[0]
+
     local_path = download_file(download_url, dest_dir)
     try:
         import_file(local_path, opt_output, band=opt_band,
@@ -846,6 +870,15 @@ def main():
         # project; the user is importing into an existing one and we
         # shouldn't clobber their stored region.
         _align_region_to_raster(opt_output, save_default=False)
+        p_meta.write_planetary_metadata(
+            opt_output,
+            module="p.in.astropedia",
+            command=" ".join(sys.argv),
+            data_type="image",
+            body=str(_body).upper() if _body else None,
+            pds_product_id=_pds_id,
+            source_file=download_url,
+        )
         gs.message(f"Imported as GRASS raster '{opt_output}'.")
     finally:
         if not flag_keep and not opt_download_dir:

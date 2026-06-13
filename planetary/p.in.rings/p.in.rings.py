@@ -105,6 +105,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import p_spice
+import p_meta
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +412,22 @@ def main():
     gs.message(f"Writing '{opt_output}' …")
     _write_raster(opt_output, out_dn)
     gs.run_command("r.colors", map=opt_output, color="grey", quiet=True)
+
+    kernel_list = [k.strip() for k in opt_kerns.split(",")] if opt_kerns else None
+    p_meta.write_planetary_metadata(
+        opt_output,
+        module="p.in.rings",
+        command=" ".join(sys.argv),
+        data_type="rings",
+        sensor=str(opt_inst),
+        mission=opt_sc,
+        body=opt_body,
+        radiometric_quantity="raw_dn",
+        radiometric_units="DN",
+        acquisition_datetime=opt_time,
+        spice_kernels=kernel_list,
+    )
+
     gs.message(f"Done: {opt_output}")
 
 

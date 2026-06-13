@@ -33,6 +33,9 @@
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 
+/* planetary metadata sidecar */
+#include "../../libs/p_meta/p_meta.h"
+
 /* ------------------------------------------------------------------ */
 /* Byte-swap helper                                                     */
 /* ------------------------------------------------------------------ */
@@ -55,8 +58,8 @@ static void swap_bytes(void *buf, int n, int sz)
 /* ------------------------------------------------------------------ */
 /* XPath text helper                                                    */
 /* ------------------------------------------------------------------ */
-static char *xpath_text(xmlDocPtr doc, xmlXPathContextPtr ctx,
-                         const char *expr)
+static char *xpath_text(xmlDocPtr doc __attribute__((unused)),
+                         xmlXPathContextPtr ctx, const char *expr)
 {
     xmlXPathObjectPtr obj = xmlXPathEvalExpression((xmlChar *)expr, ctx);
     if (!obj) return NULL;
@@ -85,7 +88,6 @@ int main(int argc, char *argv[])
     struct GModule *module;
     struct Option  *opt_input, *opt_output;
     struct Flag    *flag_group;
-    struct History  history;
 
     G_gisinit(argv[0]);
 
@@ -204,6 +206,24 @@ int main(int argc, char *argv[])
                nlines, nsamples, nbands,
                dtype_str ? dtype_str : "unknown", data_offset);
 
+    /* Additional metadata fields for planetary.json */
+    char *pds4_target  = xpath_text(doc, ctx,
+        "//*[local-name()='Target_Identification']/*[local-name()='name']");
+    char *pds4_inst    = xpath_text(doc, ctx,
+        "//*[local-name()='Instrument']/*[local-name()='name']");
+    if (!pds4_inst)
+        pds4_inst = xpath_text(doc, ctx,
+            "//*[local-name()='instrument_name']");
+    char *pds4_start   = xpath_text(doc, ctx,
+        "//*[local-name()='Start_Date_Time']");
+    if (!pds4_start)
+        pds4_start = xpath_text(doc, ctx,
+            "//*[local-name()='start_date_time']");
+    char *pds4_mission = xpath_text(doc, ctx,
+        "//*[local-name()='Mission_Information']/*[local-name()='mission_name']");
+    char *pds4_lid     = xpath_text(doc, ctx,
+        "//*[local-name()='logical_identifier']");
+
     /* Free XPath resources */
     G_free(lines_str); G_free(samples_str); G_free(bands_str);
     G_free(dtype_str); G_free(offset_str);
@@ -303,6 +323,34 @@ int main(int argc, char *argv[])
 
     fclose(fp);
     G_free(raw); G_free(outbuf);
+
+    /* Write planetary.json metadata sidecar for each band map. */
+    {
+        char cmd_buf[4096];
+        cmd_buf[0] = '\0';
+        for (int i = 0; i < argc; i++) {
+            if (i > 0) strncat(cmd_buf, " ", sizeof(cmd_buf) - strlen(cmd_buf) - 1);
+            strncat(cmd_buf, argv[i], sizeof(cmd_buf) - strlen(cmd_buf) - 1);
+        }
+        for (int b = 0; b < nbands; b++) {
+            PMeta *meta = p_meta_new();
+            p_meta_set_data_type(meta, "image");
+            p_meta_set_radiometric_quantity(meta, "raw_dn");
+            p_meta_set_radiometric_units(meta, "DN");
+            p_meta_set_n_bands(meta, 1);
+            p_meta_set_source_file(meta, xml_path);
+            p_meta_set_command(meta, cmd_buf);
+            if (pds4_inst)    p_meta_set_sensor(meta, pds4_inst);
+            if (pds4_mission) p_meta_set_mission(meta, pds4_mission);
+            if (pds4_target)  p_meta_set_body(meta, pds4_target);
+            if (pds4_start)   p_meta_set_acquisition_datetime(meta, pds4_start);
+            if (pds4_lid)     p_meta_set_pds_product_id(meta, pds4_lid);
+            p_meta_write(meta, mapnames[b]);
+            p_meta_free(meta);
+        }
+        G_free(pds4_target); G_free(pds4_inst);
+        G_free(pds4_start);  G_free(pds4_mission); G_free(pds4_lid);
+    }
 
     /* Optional group */
     if (flag_group->answer && nbands > 1) {

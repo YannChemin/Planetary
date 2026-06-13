@@ -27,6 +27,8 @@
 
 /* p_pds library (compiled in) */
 #include "../../libs/p_pds/p_pds.h"
+/* planetary metadata sidecar */
+#include "../../libs/p_meta/p_meta.h"
 
 /* ------------------------------------------------------------------ */
 /* Forward declarations                                                 */
@@ -173,6 +175,48 @@ int main(int argc, char *argv[])
             G_warning(_("i.group call failed — group '%s' not created"), outbase);
         else
             G_message(_("Imagery group '%s' created."), outbase);
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Write planetary.json metadata sidecar                            */
+    /* ---------------------------------------------------------------- */
+    /* Query PVL label for mission metadata (best-effort). */
+    const char *pvl_inst   = p_pvl_value(img->label, "INSTRUMENT_ID");
+    if (!pvl_inst)
+        pvl_inst = p_pvl_value(img->label, "INSTRUMENT_NAME");
+    const char *pvl_target = p_pvl_value(img->label, "TARGET_NAME");
+    const char *pvl_start  = p_pvl_value(img->label, "START_TIME");
+    const char *pvl_sc     = p_pvl_value(img->label, "SPACECRAFT_NAME");
+    if (!pvl_sc)
+        pvl_sc = p_pvl_value(img->label, "MISSION_NAME");
+    const char *pvl_id     = p_pvl_value(img->label, "PRODUCT_ID");
+    if (!pvl_id)
+        pvl_id = p_pvl_value(img->label, "DATA_SET_ID");
+
+    /* Build argv command string for history. */
+    char cmd_buf[4096];
+    cmd_buf[0] = '\0';
+    for (int i = 0; i < argc; i++) {
+        if (i > 0) strncat(cmd_buf, " ", sizeof(cmd_buf) - strlen(cmd_buf) - 1);
+        strncat(cmd_buf, argv[i], sizeof(cmd_buf) - strlen(cmd_buf) - 1);
+    }
+
+    /* Write one planetary.json per output band map. */
+    for (int b = 0; b < nbands; b++) {
+        PMeta *meta = p_meta_new();
+        p_meta_set_data_type(meta, "image");
+        p_meta_set_radiometric_quantity(meta, "raw_dn");
+        p_meta_set_radiometric_units(meta, "DN");
+        p_meta_set_n_bands(meta, 1);   /* each map is a single band */
+        p_meta_set_source_file(meta, input);
+        p_meta_set_command(meta, cmd_buf);
+        if (pvl_inst)   p_meta_set_sensor(meta, pvl_inst);
+        if (pvl_sc)     p_meta_set_mission(meta, pvl_sc);
+        if (pvl_target) p_meta_set_body(meta, pvl_target);
+        if (pvl_start)  p_meta_set_acquisition_datetime(meta, pvl_start);
+        if (pvl_id)     p_meta_set_pds_product_id(meta, pvl_id);
+        p_meta_write(meta, mapnames[b]);
+        p_meta_free(meta);
     }
 
     /* ---------------------------------------------------------------- */

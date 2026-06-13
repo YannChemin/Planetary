@@ -87,6 +87,7 @@ from grass.exceptions import CalledModuleError
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from p_lib import body_params, init_tmp
+import p_meta
 
 _tmpdir = None
 _tiles  = []
@@ -258,6 +259,17 @@ def main():
                            quiet=True)
         except Exception:
             pass
+
+    p_meta.write_planetary_metadata(
+        opt_output,
+        module="p.in.dem",
+        command=" ".join(sys.argv),
+        data_type="dem",
+        radiometric_quantity="elevation",
+        radiometric_units="m",
+        body=opt_body.upper() if opt_body else None,
+        source_file=opt_input,
+    )
 
     # ── region ───────────────────────────────────────────────────────────
     if flag_region:

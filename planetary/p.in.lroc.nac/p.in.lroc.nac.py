@@ -118,6 +118,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import grass.script as gs
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import p_meta
+
 
 # ── Constants ───────────────────────────────────────────────────────────────
 # The pds.lroc.asu.edu host 301-redirects to pds.lroc.im-ldi.com; we hit the
@@ -412,6 +415,19 @@ def main():
     paths = download_product(product, entry, opt_dl_dir)
     import_tif(paths["tif"], opt_output, keep=flag_keep,
                override_crs=flag_override)
+    p_meta.write_planetary_metadata(
+        opt_output,
+        module="p.in.lroc.nac",
+        command=" ".join(sys.argv),
+        data_type="dem",
+        mission="LRO",
+        sensor="LROC_NAC",
+        body="MOON",
+        radiometric_quantity="elevation",
+        radiometric_units="m",
+        pds_product_id=product,
+        source_file=paths["tif"],
+    )
     gs.message(f"Done. Imported {product} → <{opt_output}>.")
 
 

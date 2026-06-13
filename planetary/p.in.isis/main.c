@@ -24,6 +24,9 @@
 #include <grass/raster.h>
 #include <grass/glocale.h>
 
+/* planetary metadata sidecar */
+#include "../../libs/p_meta/p_meta.h"
+
 /* ------------------------------------------------------------------ */
 /* Minimal PVL reader (subset of p_pds) to extract ISIS3 label fields */
 /* ------------------------------------------------------------------ */
@@ -165,6 +168,55 @@ int main(int argc, char *argv[])
         if (target) Rast_set_history(&history, HIST_MAPID,    target);
         Rast_command_history(&history);
         Rast_write_history(mapname, &history);
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Write planetary.json metadata sidecar                            */
+    /* ---------------------------------------------------------------- */
+    {
+        /* Build argv command string */
+        char cmd_buf[4096];
+        cmd_buf[0] = '\0';
+        for (int i = 0; i < argc; i++) {
+            if (i > 0) strncat(cmd_buf, " ", sizeof(cmd_buf) - strlen(cmd_buf) - 1);
+            strncat(cmd_buf, argv[i], sizeof(cmd_buf) - strlen(cmd_buf) - 1);
+        }
+
+        /* Count maps created by r.in.gdal (outbase or outbase.1 …) */
+        int nmaps = 0;
+        {
+            char mn[512];
+            snprintf(mn, sizeof(mn), "%s", outbase);
+            if (G_find_raster((char *)mn, G_mapset())) nmaps = 1;
+            for (int b = 1; b <= 9999; b++) {
+                snprintf(mn, sizeof(mn), "%s.%d", outbase, b);
+                if (!G_find_raster((char *)mn, G_mapset())) break;
+                nmaps++;
+            }
+        }
+
+        for (int b = 0; b < nmaps || (b == 0 && nmaps == 0); b++) {
+            char mn[512];
+            if (b == 0 && nmaps <= 1) snprintf(mn, sizeof(mn), "%s", outbase);
+            else                       snprintf(mn, sizeof(mn), "%s.%d", outbase, b);
+            if (!G_find_raster((char *)mn, G_mapset())) break;
+
+            PMeta *meta = p_meta_new();
+            p_meta_set_data_type(meta, "image");
+            p_meta_set_radiometric_quantity(meta, "raw_dn");
+            p_meta_set_radiometric_units(meta, "DN");
+            p_meta_set_n_bands(meta, 1);
+            p_meta_set_source_file(meta, input);
+            p_meta_set_command(meta, cmd_buf);
+            if (inst)   p_meta_set_sensor(meta, inst);
+            if (sc)     p_meta_set_mission(meta, sc);
+            if (target) p_meta_set_body(meta, target);
+            if (start)  p_meta_set_acquisition_datetime(meta, start);
+            p_meta_write(meta, mn);
+            p_meta_free(meta);
+
+            if (nmaps <= 1) break;
+        }
     }
 
     /* ---------------------------------------------------------------- */

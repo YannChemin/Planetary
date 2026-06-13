@@ -133,6 +133,9 @@ import atexit
 import grass.script as gs
 from grass.exceptions import CalledModuleError
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import p_meta
+
 # ── cleanup registry ────────────────────────────────────────────────────────
 
 _tmpdir = None
@@ -388,6 +391,18 @@ def main():
     # ── 6. Metadata and history ─────────────────────────────────────────
 
     _write_history(opt_output, opt_input)
+
+    pds_id = os.path.splitext(os.path.basename(opt_input))[0]
+    p_meta.write_planetary_metadata(
+        opt_output,
+        module="p.in.pds",
+        command=" ".join(sys.argv),
+        data_type="image",
+        radiometric_quantity="raw_dn",
+        radiometric_units="DN",
+        source_file=opt_input,
+        pds_product_id=pds_id,
+    )
 
     # ── 7. Optionally set region to the imported map ─────────────────────
 
