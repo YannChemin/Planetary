@@ -1065,6 +1065,14 @@ def main():
         gs.run_command("p.in.pds3",
                        flags="o" if flag_override else "",
                        input=import_path, output=opt_output, overwrite=True)
+        # CISSCAL calibrated images use -1.91e+38 as an invalid-pixel sentinel.
+        # p.in.pds3 imports those as real floats; convert to GRASS NULL so
+        # bilinear interpolation in p.in.rings is not contaminated.
+        if dl_fname.lower().endswith(".img") and "_calib" in dl_fname.lower():
+            gs.message("Nulling CISSCAL sentinel values (< -1) …")
+            gs.run_command("r.mapcalc",
+                           expression=f"{opt_output} = if({opt_output} < -1, null(), {opt_output})",
+                           overwrite=True, quiet=True)
         _align_region_to_raster(opt_output, save_default=False)
 
         # Infer sensor from OPUS ID prefix (co-iss-n* / co-iss-w* / co-vims-*).
