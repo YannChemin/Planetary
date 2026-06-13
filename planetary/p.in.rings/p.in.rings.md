@@ -47,28 +47,73 @@ p.in.rings input=raw_image output=rings_image \
 | `grid` | Geometry sampling grid size N×N (default 9) |
 | `-n` | Nearest-neighbour sampling instead of bilinear |
 
-## EXAMPLE
+## Saturn ring chain processing example
 
-See the full example in [p.rings.project](p.rings.project.md).
+The full ring processing pipeline for the Cassini SOI B-ring image
+(`N1467344155_2.IMG`, 2004-07-01T03:11:40, inner B ring, 86283–86516 km)
+runs in five steps. A ready-to-run script is at
+`$HOME/RSDATA/cassini_soi_b_ring.sh`.
 
-Quick-start for the Cassini SOI B-ring image:
+**Step 0 — Download SPICE kernels** (`p.spice.find`)
 
 ```sh
-# Download kernels (stores in active mapset spice/)
-p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" -m
+p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
+    dest=$HOME/RSDATA/Saturn/kernels
+```
 
-# Import raw PDS3 image
-r.in.gdal -o input=N1467344155_2.IMG output=N1467344155_raw
+Downloads LSK, SCLK, IK, FK, PCK, SPK and CK automatically.
 
-# Set region covering the B ring radial range at the SOI longitude
+**Step 1 — Import the raw PDS3 image** (`r.in.gdal`)
+
+```sh
+r.in.gdal -o input=$HOME/RSDATA/Saturn/N1467344155_2.IMG \
+              output=N1467344155_raw
+```
+
+The raster is imported in pixel/sample coordinates (W=0 E=1024 S=0 N=1024).
+
+**Step 2 — Set the ring-plane output region** (`g.region`)
+
+```sh
+# north/south = ring_radius [km],  east/west = ring_longitude [deg]
 g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
+```
 
-# Project to ring coordinates (kernels from mapset spice/)
+**Step 3 — Project to ring_radius / ring_lon space** ← *this module*
+
+```sh
 p.in.rings \
     input=N1467344155_raw \
     output=N1467344155_rings \
     time="2004-07-01T03:11:40.288" \
-    instrument=-82360
+    instrument=-82360 \
+    spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
+    kernels="$HOME/RSDATA/Saturn/kernels/lsk/naif0012.tls,\
+$HOME/RSDATA/Saturn/kernels/sclk/cas00172.tsc,\
+$HOME/RSDATA/Saturn/kernels/ik/cas_iss_v10.ti,\
+$HOME/RSDATA/Saturn/kernels/fk/cas_v40.tf,\
+$HOME/RSDATA/Saturn/kernels/pck/cpck_rock_21Jan2011_merged.tpc,\
+$HOME/RSDATA/Saturn/kernels/pck/pck00010.tpc,\
+$HOME/RSDATA/Saturn/kernels/spk/040701AP_SCPSE_04173_04236.bsp,\
+$HOME/RSDATA/Saturn/kernels/ck/04183_04185ra.bc"
+```
+
+Produces `N1467344155_rings` in ring_radius/ring_lon coordinates.
+
+**Step 4 — Apply RingCylindrical projection** (`p.rings.project`)
+
+```sh
+p.rings.project \
+    input=N1467344155_rings \
+    output=N1467344155_ringcyl \
+    center_radius=86400 center_lon=66.39
+```
+
+**Step 5 — Display**
+
+```sh
+r.colors map=N1467344155_ringcyl color=grey
+d.rast N1467344155_ringcyl
 ```
 
 ## NOTES

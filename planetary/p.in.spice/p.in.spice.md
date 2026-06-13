@@ -34,6 +34,25 @@ Override the root with `dest=` or the `$P_SPICE_CACHE` environment variable.
 The cache is shared across all GRASS Locations/mapsets; the *active* meta-kernel
 for a given mapset is selected with *p.spice.config*.
 
+## SCOPE: GENERIC BODIES VS SPACECRAFT MISSIONS
+
+**p.in.spice** provides kernels for *generic planetary bodies* (Moon, Mars,
+any IAU-orientation body) and sub-solar/sub-Earth geometry.  It uses the
+NAIF generic-kernels server and does not know about specific spacecraft
+missions or time-dependent pointing data.
+
+For **spacecraft-specific missions** — such as Cassini ring images, MRO
+surface swaths, or LRO camera footprints — use **p.spice.find** instead.
+`p.spice.find` parses the NAIF mission-kernel directories, selects the
+correct CK (pointing) and SPK (ephemeris) files for a given UTC time, and
+downloads them automatically.
+
+| Need | Module |
+|---|---|
+| Sub-solar / sub-Earth point (Moon, Mars, generic) | `p.in.spice` |
+| Raw-camera → ring-plane projection (Cassini ISS) | `p.spice.find` + `p.in.rings` |
+| Raw-camera → surface projection (any spacecraft) | `p.spice.find` + `p.cam2map` |
+
 ## BUNDLES
 
 | Bundle | Frame | Notes |
@@ -97,12 +116,59 @@ p.in.spice bundle=moon-me -m
 p.spice.config meta=$HOME/.grass8/p_spice/meta/moon-me.tm -a
 ```
 
+### Saturn ring chain processing example
+
+For spacecraft-camera to ring-plane projection `p.in.spice` is **not** used.
+The chain uses `p.spice.find` (spacecraft-specific kernels), `p.in.rings`
+(ring-plane projection) and `p.rings.project` (RingCylindrical projection).
+A ready-to-run script is at `$HOME/RSDATA/cassini_soi_b_ring.sh`.
+
+```sh
+# 0. Create XY GRASS location (before starting GRASS)
+grass -c XY ~/grassdata/saturn_rings
+
+# 1. Download mission-specific SPICE kernels (use p.spice.find, NOT p.in.spice)
+p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
+    dest=$HOME/RSDATA/Saturn/kernels
+
+# 2. Import raw PDS3 image
+r.in.gdal -o input=$HOME/RSDATA/Saturn/N1467344155_2.IMG \
+              output=N1467344155_raw
+
+# 3. Set ring-plane region (north/south = ring_radius [km], east/west = ring_lon [deg])
+g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
+
+# 4. Project to ring_radius / ring_lon space
+p.in.rings \
+    input=N1467344155_raw output=N1467344155_rings \
+    time="2004-07-01T03:11:40.288" instrument=-82360 \
+    spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
+    kernels="$HOME/RSDATA/Saturn/kernels/lsk/naif0012.tls,\
+$HOME/RSDATA/Saturn/kernels/sclk/cas00172.tsc,\
+$HOME/RSDATA/Saturn/kernels/ik/cas_iss_v10.ti,\
+$HOME/RSDATA/Saturn/kernels/fk/cas_v40.tf,\
+$HOME/RSDATA/Saturn/kernels/pck/cpck_rock_21Jan2011_merged.tpc,\
+$HOME/RSDATA/Saturn/kernels/pck/pck00010.tpc,\
+$HOME/RSDATA/Saturn/kernels/spk/040701AP_SCPSE_04173_04236.bsp,\
+$HOME/RSDATA/Saturn/kernels/ck/04183_04185ra.bc"
+
+# 5. Apply RingCylindrical projection
+p.rings.project input=N1467344155_rings output=N1467344155_ringcyl \
+    center_radius=86400 center_lon=66.39
+r.colors map=N1467344155_ringcyl color=grey
+```
+
+See [p.spice.find](p.spice.find.md) and [p.in.rings](p.in.rings.md) for details.
+
 ## SEE ALSO
 
 *[p.spice.config](p.spice.config.md),
 [p.spice.subpoint](p.spice.subpoint.md),
 [p.illumination.sunfraction](p.illumination.sunfraction.md),
-[p.visibility.earth](p.visibility.earth.md)*
+[p.visibility.earth](p.visibility.earth.md),
+[p.spice.find](p.spice.find.md),
+[p.in.rings](p.in.rings.md),
+[p.rings.project](p.rings.project.md)*
 
 ## REFERENCES
 
