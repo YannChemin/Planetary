@@ -122,20 +122,20 @@ p.rings.stats input=N1467344155_ringcyl \
     output=soi_bring_profile.csv radial=soi_bring_radial
 ```
 
-### Chain B — Rev 014 B/A ring, polar (display)
+### Chain B — A ring / F ring, polar (display)
 
-Image `N1508882636_1.IMG`, 2005-10-24T21:35:08, sub-SC lat ≈+10°.
+Image `N1498508609_1.IMG`, 2005-06-26T19:55:52, observer ring elevation +38.7°.
 At this elevation the B and A rings appear as visible arcs; the polar
 projection maps them as circles centred on Saturn with a correct 1:1
 aspect ratio.
 
 ```bash
 # ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
-p.spice.find spacecraft=CASSINI time="2005-10-24T21:35:08" \
+p.spice.find spacecraft=CASSINI time="2005-06-26T19:55:52" \
     dest=$HOME/RSDATA/Saturn/kernels
 
 # ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
-p.in.astropedia opus_id=co-iss-n1508882636 output=N1508882636_raw
+p.in.astropedia opus_id=co-iss-n1498508609 output=N1498508609_raw
 
 # ── Step 3: Set polar output region in km × km ───────────────────────────────
 # Both axes in km; Saturn's centre at (0,0).
@@ -146,8 +146,8 @@ g.region n=130000 s=70000 e=-50000 w=-140000 nsres=50 ewres=50
 # ── Step 4: Project to polar ring-plane coordinates  ← this module ───────────
 KDIR="$HOME/RSDATA/Saturn/kernels"
 p.in.rings \
-    input=N1508882636_raw output=N1508882636_polar \
-    time="2005-10-24T21:35:08" instrument=-82360 \
+    input=N1498508609_raw output=N1498508609_polar \
+    time="2005-06-26T19:55:52" instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
     projection=polar filter="CL1/CL2" \
     kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
@@ -155,8 +155,8 @@ ${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
 ${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
 ${KDIR}/spk/050824R_SCPSE_05217_05257.bsp,\
 ${KDIR}/ck/05289_05294ra.bc"
-r.colors map=N1508882636_polar color=grey
-d.rast N1508882636_polar
+r.colors map=N1498508609_polar color=grey
+d.rast N1498508609_polar
 ```
 
 The resulting raster shows the B-ring (outer edge ≈117 500 km) and A-ring

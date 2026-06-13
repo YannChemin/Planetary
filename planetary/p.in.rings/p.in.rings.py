@@ -218,8 +218,9 @@ def _build_geometry_model(lib, sc_pos, rot, pscale_s, pscale_l,
     sg = sg.ravel(); lg = lg.ravel()
     n = len(sg)
 
-    rs = np.zeros(n); lons = np.zeros(n)
+    rs = np.full(n, np.nan); lons = np.full(n, np.nan)
     zsc = sc_pos[2]
+    skipped = 0
 
     for k in range(n):
         s, l = sg[k], lg[k]
@@ -231,19 +232,25 @@ def _build_geometry_model(lib, sc_pos, rot, pscale_s, pscale_l,
         xs = rot[0]*xc + rot[1]*yc + rot[2]*zc
         ys = rot[3]*xc + rot[4]*yc + rot[5]*zc
         zs = rot[6]*xc + rot[7]*yc + rot[8]*zc
-        if abs(zs) < 1e-12:
-            gs.fatal(f"Look vector parallel to ring plane at pixel ({s:.0f},{l:.0f}).")
+        if abs(zs) < 1e-12 or (-zsc / zs) < 0:
+            skipped += 1
+            continue
         t = -zsc / zs
-        if t < 0:
-            gs.fatal(f"Ring intercept behind spacecraft at pixel ({s:.0f},{l:.0f}).")
         xi = sc_pos[0] + t * xs
         yi = sc_pos[1] + t * ys
         rs[k]   = math.sqrt(xi*xi + yi*yi)
         lons[k] = math.degrees(math.atan2(yi, xi))
 
+    valid = np.isfinite(rs)
+    if skipped:
+        gs.message(f"  Skipped {skipped}/{n} grid points (look vector misses ring plane).")
+    if valid.sum() < 4:
+        gs.fatal("Too few valid ring-plane intersections to fit geometry model. "
+                 "Check that the image actually covers the ring plane.")
+
     A = np.column_stack([np.ones(n), sg, lg, sg * lg])
-    ar,   _, _, _ = np.linalg.lstsq(A, rs,   rcond=None)
-    alon, _, _, _ = np.linalg.lstsq(A, lons, rcond=None)
+    ar,   _, _, _ = np.linalg.lstsq(A[valid], rs[valid],   rcond=None)
+    alon, _, _, _ = np.linalg.lstsq(A[valid], lons[valid], rcond=None)
 
     res_r   = abs(rs   - A @ ar).max()
     res_lon = abs(lons - A @ alon).max()
