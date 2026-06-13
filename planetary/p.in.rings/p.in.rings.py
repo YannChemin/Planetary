@@ -163,8 +163,11 @@ def _read_raster_native(name):
         reg = gs.region()
         nr = int(reg["rows"]); nc = int(reg["cols"])
         gs.run_command("r.out.bin", input=name, output=tmpf.name,
-                       bytes=4, flags="f", quiet=True)
+                       bytes=4, flags="f", null=str(_DNULL), quiet=True)
         raw = np.fromfile(tmpf.name, dtype=np.float32).reshape(nr, nc)
+        # Replace the null sentinel with NaN so bilinear interpolation
+        # propagates NaN (→ output NULL) instead of treating 0 as valid data.
+        raw[raw == np.float32(_DNULL)] = np.nan
     finally:
         gs.run_command("g.region",
                        n=saved["n"], s=saved["s"],
