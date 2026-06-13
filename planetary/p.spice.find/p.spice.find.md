@@ -106,16 +106,16 @@ p.rings.stats input=N1467344155_ringcyl \
 
 ### Chain B — Rev 014 B/A ring, polar (display)
 
-Image `N1508963064_2.IMG`, 2005-10-23T14:17:00, sub-SC lat ≈+10°.
+Image `N1508882636_1.IMG`, 2005-10-24T21:35:08, sub-SC lat ≈+10°.
 Full ready-to-run script: `$HOME/RSDATA/cassini_rev014_polar.sh`.
 
 ```bash
 # ── Step 1: SPICE kernels  ← this module ─────────────────────────────────────
-p.spice.find spacecraft=CASSINI time="2005-10-23T14:17:00" \
+p.spice.find spacecraft=CASSINI time="2005-10-24T21:35:08" \
     dest=$HOME/RSDATA/Saturn/kernels
 
 # ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
-p.in.astropedia opus_id=co-iss-n1508963064 output=N1508963064_raw
+p.in.astropedia opus_id=co-iss-n1508882636 output=N1508882636_raw
 
 # ── Step 3: Set polar output region in km × km ───────────────────────────────
 g.region n=130000 s=70000 e=-50000 w=-140000 nsres=50 ewres=50
@@ -123,8 +123,8 @@ g.region n=130000 s=70000 e=-50000 w=-140000 nsres=50 ewres=50
 # ── Step 4: Project to polar ring-plane coordinates (p.in.rings) ─────────────
 KDIR="$HOME/RSDATA/Saturn/kernels"
 p.in.rings \
-    input=N1508963064_raw output=N1508963064_polar \
-    time="2005-10-23T14:17:00" instrument=-82360 \
+    input=N1508882636_raw output=N1508882636_polar \
+    time="2005-10-24T21:35:08" instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
     projection=polar filter="CL1/CL2" \
     kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
@@ -132,8 +132,8 @@ ${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
 ${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
 ${KDIR}/spk/050824R_SCPSE_05217_05257.bsp,\
 ${KDIR}/ck/05289_05294ra.bc"
-r.colors map=N1508963064_polar color=grey
-d.rast N1508963064_polar
+r.colors map=N1508882636_polar color=grey
+d.rast N1508882636_polar
 ```
 
 ## SEE ALSO

@@ -160,7 +160,7 @@ import p_meta
 # ── API endpoints ──────────────────────────────────────────────────────────
 STAC_BASE    = "https://stac.astrogeology.usgs.gov/api"
 PDS_API_BASE = "https://pds.nasa.gov/api/search/1"
-OPUS_API_BASE = "https://opus.pds-rings.seti.org/api"
+OPUS_API_BASE = "https://opus.pds-rings.seti.org/opus/api"
 DOI_BASE     = "https://doi.org/"
 
 # Curated catalog of USGS planetary COG/GeoTIFF mosaics on
@@ -419,7 +419,11 @@ def opus_files(opus_id):
         if not isinstance(entries, list):
             continue
         for entry in entries:
-            href = (entry.get("url") or entry.get("href") or "").strip()
+            # API returns either plain URL strings or dicts with a "url" key.
+            if isinstance(entry, str):
+                href = entry.strip()
+            else:
+                href = (entry.get("url") or entry.get("href") or "").strip()
             if not href:
                 continue
             fname = os.path.basename(urllib.parse.urlparse(href).path)
@@ -427,15 +431,19 @@ def opus_files(opus_id):
 
     def _rank(item):
         ext = os.path.splitext(item[1].lower())[1]
-        return {".qub": 0, ".lbl": 1}.get(ext, 2)
+        return {".qub": 0, ".img": 1, ".lbl": 2}.get(ext, 3)
     files.sort(key=_rank)
     return files
 
 
-def _pick_vims_qub(file_list, channel="vis"):
-    """Return (url, filename) for the requested VIMS channel .qub file.
+def _pick_raw_product(file_list, channel="vis"):
+    """Return (url, filename) for the best raw data file in *file_list*.
 
-    Tries ``_<channel>.qub`` suffix first; falls back to any ``.qub``.
+    Priority:
+      1. VIMS channel-specific ``_<channel>.qub`` (e.g. ``_vis.qub``).
+      2. Any ``.qub`` file (other VIMS or generic cube).
+      3. Any ``.img`` file from a ``*raw*`` product type (ISS raw image).
+      4. Any ``.img`` file (ISS or other PDS3 image).
     """
     suffix = f"_{channel.lower()}.qub"
     for url, fname, _ptype in file_list:
@@ -443,6 +451,12 @@ def _pick_vims_qub(file_list, channel="vis"):
             return url, fname
     for url, fname, _ptype in file_list:
         if fname.lower().endswith(".qub"):
+            return url, fname
+    for url, fname, ptype in file_list:
+        if fname.lower().endswith(".img") and "raw" in ptype.lower():
+            return url, fname
+    for url, fname, _ptype in file_list:
+        if fname.lower().endswith(".img"):
             return url, fname
     return None, None
 
@@ -965,13 +979,12 @@ def main():
             if not file_list:
                 gs.fatal(f"No downloadable files for OPUS ID '{opus_id}'.")
 
-        # Determine which file to download (.qub for the chosen channel).
-        dl_url, dl_fname = _pick_vims_qub(file_list, opt_vims_channel)
+        # Determine which file to download (.qub for VIMS, .img for ISS).
+        dl_url, dl_fname = _pick_raw_product(file_list, opt_vims_channel)
         if not dl_url:
             gs.fatal(
-                f"No .qub file found for channel '{opt_vims_channel}' "
-                f"in OPUS observation '{opus_id}'. "
-                "Available files:\n" +
+                f"No raw data file (.qub/.img) found for OPUS observation "
+                f"'{opus_id}'. Available files:\n" +
                 "\n".join(f"  {f} ({pt})" for _, f, pt in file_list[:10])
             )
 
@@ -982,10 +995,10 @@ def main():
         )
         os.makedirs(os.path.dirname(dest), exist_ok=True)
 
-        # Also fetch the companion .lbl if present (p.in.pds3 needs it).
+        # Also fetch the companion label if present (p.in.pds3 needs it).
         lbl_url = lbl_fname = None
         for url, fname, _pt in file_list:
-            if fname.lower().endswith(".lbl"):
+            if fname.lower().endswith((".lbl", ".LBL")):
                 lbl_url = url
                 lbl_fname = os.path.join(os.path.dirname(dest), fname)
                 break
@@ -996,14 +1009,30 @@ def main():
         gs.message(f"Fetching cube ({opt_vims_channel.upper()}): {dl_url}")
         _wget_resumable(dl_url, dest)
 
-        # Import the .qub via p.in.pds3 (handles PDS3 cubes natively).
-        gs.message(f"Importing VIMS {opt_vims_channel.upper()} cube via p.in.pds3 …")
+        # Import via p.in.pds3 (handles both .img PDS3 images and .qub cubes).
+        ext = os.path.splitext(dl_fname.lower())[1]
+        if ext == ".qub":
+            kind = f"VIMS {opt_vims_channel.upper()} cube"
+        else:
+            kind = "PDS3 image"
+        gs.message(f"Importing {kind} via p.in.pds3 …")
         gs.run_command("p.in.pds3",
                        flags="o" if flag_override else "",
                        input=dest, output=opt_output, overwrite=True)
         _align_region_to_raster(opt_output, save_default=False)
 
-        # Infer target from first search result, if available.
+        # Infer sensor from OPUS ID prefix (co-iss-n* / co-iss-w* / co-vims-*).
+        oid_lower = opus_id.lower()
+        if oid_lower.startswith("co-iss-n"):
+            _sensor = "CASSINI_ISS_NAC"
+        elif oid_lower.startswith("co-iss-w"):
+            _sensor = "CASSINI_ISS_WAC"
+        elif oid_lower.startswith("co-vims"):
+            _sensor = "CASSINI_VIMS"
+        else:
+            _sensor = None
+
+        # Infer target body from first search result, if available.
         _body_val = body_slug.upper() if body_slug != "misc" else None
         if rows:
             tgt_key = next((l for l in labels if "target" in l.lower()), None)
@@ -1015,13 +1044,13 @@ def main():
             module="p.in.astropedia",
             command=" ".join(sys.argv),
             data_type="image",
-            sensor="CASSINI_VIMS",
+            sensor=_sensor,
             mission="CASSINI",
             body=_body_val,
             pds_product_id=opus_id,
             source_file=dl_url,
         )
-        gs.message(f"Imported VIMS {opt_vims_channel.upper()} cube as '{opt_output}'.")
+        gs.message(f"Imported {kind} as '{opt_output}'.")
         return
 
     # Validate: exactly one of doi/lid/search

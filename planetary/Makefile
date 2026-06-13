@@ -13,8 +13,10 @@ include $(MODULE_TOPDIR)/include/Make/Dir.make
 default:
 	install -m 0644 p_lib.py   $(RUN_GISBASE)/p_lib.py
 	install -m 0644 p_spice.py $(RUN_GISBASE)/p_spice.py
+	install -m 0644 p_meta.py  $(RUN_GISBASE)/p_meta.py
 	$(MAKE) subdirs
 
 install: installsubdirs
 	install -m 0644 p_lib.py   $(INST_DIR)/p_lib.py
 	install -m 0644 p_spice.py $(INST_DIR)/p_spice.py
+	install -m 0644 p_meta.py  $(INST_DIR)/p_meta.py

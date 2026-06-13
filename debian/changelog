@@ -1,3 +1,9 @@
+grass-planetary-addons (1.0.0+20260613202025) unstable; urgency=low
+
+  * Development rebuild 20260613202025
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 13 Jun 2026 18:20:25 +0000
+
 grass-planetary-addons (1.0.0+20260613200000) unstable; urgency=low
 
   [ Documentation: full Saturn ring imaging pipeline chain ]
