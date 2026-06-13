@@ -27,10 +27,10 @@ CSPICE_BUILD := $(CURDIR)/cspice-pkg/build
 GRASS_TOOLBOXES := $(MODULE_TOPDIR)/gui/wxpython/core/toolboxes.py
 GRASS_TOOLBOXES_BAK := $(GRASS_TOOLBOXES).planetary.bak
 
-.PHONY: all cspice libs modules install clean clean-obj deb patch-grass unpatch-grass
+.PHONY: all cspice utils libs modules install clean clean-obj deb patch-grass unpatch-grass
 
 # ── default ───────────────────────────────────────────────────────────────────
-all: cspice modules
+all: cspice utils modules
 
 # ── libcspice.so ──────────────────────────────────────────────────────────────
 cspice: $(CSPICE_BUILD)/libcspice.so
@@ -42,6 +42,10 @@ $(CSPICE_BUILD)/libcspice.so:
 	    -o $@ \
 	    $(CSPICE_SRC)/src/cspice/*.c -lm
 	@echo "=== libcspice.so built ==="
+
+# ── SPICE utility programs ────────────────────────────────────────────────────
+utils: $(CSPICE_BUILD)/libcspice.so
+	$(MAKE) -C cspice-pkg/utils CSPICE_BUILD=$(CSPICE_BUILD) INST_DIR=$(INST_DIR)
 
 # ── GRASS toolboxes.py patch (apply before build, always restore after) ──────
 patch-grass:
@@ -82,6 +86,7 @@ libpsunmask:
 # dirname(dirname(abspath(script))) resolves correctly for scripts/.
 # Build first with 'make' or 'make all', then 'sudo make install'.
 install:
+	$(MAKE) -C cspice-pkg/utils CSPICE_BUILD=$(CSPICE_BUILD) INST_DIR=$(INST_DIR) install
 	$(MAKE) -C planetary MODULE_TOPDIR=$(MODULE_TOPDIR) \
 	    INST_DIR=$(INST_DIR) install
 	mkdir -p $(INST_DIR)/planetary
@@ -120,6 +125,7 @@ clean-obj:
 # ── full clean ────────────────────────────────────────────────────────────────
 clean:
 	rm -f $(CSPICE_BUILD)/libcspice.so
+	$(MAKE) -C cspice-pkg/utils clean 2>/dev/null || true
 	find planetary -maxdepth 2 -name 'OBJ.*' -type d -exec rm -rf {} + 2>/dev/null || true
 	$(MAKE) -C planetary MODULE_TOPDIR=$(MODULE_TOPDIR) clean 2>/dev/null || true
 	$(MAKE) -C planetary/p.sunmask -f Makefile.standalone clean 2>/dev/null || true

@@ -11,9 +11,23 @@ external source tree.
   - `src/cspice/` — the CSPICE library C sources (2229 `.c`) and their local
     headers, sufficient to build `libcspice.so`.
   - `include/` — the public SPICE headers (`SpiceUsr.h` et al.).
-- **Excluded** (not needed to build the shared library): the command-line
-  utility sources (`brief_c`, `mkdsk_c`, …), prebuilt `lib/*.a`, `exe/`,
-  `data/`, and `doc/`.
+- **Excluded** (not needed to build the shared library): the upstream
+  command-line utility sources (`brief_c`, `mkdsk_c`, …), prebuilt
+  `lib/*.a`, `exe/`, `data/`, and `doc/`.
+
+## Planetary SPICE utilities (`cspice-pkg/utils/`)
+
+Planetary ships four purpose-built replacements for the excluded NAIF
+utilities, written in C against `libcspice.so`:
+
+| Binary | NAIF equivalent | Purpose |
+|---|---|---|
+| `spice-brief` | `brief` | SPK / binary PCK coverage summary |
+| `spice-ckbrief` | `ckbrief` | CK (pointing) coverage summary |
+| `spice-chronos` | `chronos` | Time conversion: UTC ↔ ET ↔ SCLK |
+| `spice-commnt` | `commnt -r` | Print comment area of DAF kernels |
+
+Built by `make utils` (or `make all`); installed to `$(INST_DIR)/bin/`.
 
 ## License
 

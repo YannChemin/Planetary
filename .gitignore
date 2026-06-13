@@ -4,6 +4,12 @@ config.mk
 # Generated HTML manual pages (produced from *.md by scripts/md2html_grass.py)
 planetary/*/*.html
 
+# SPICE utility binaries (built from cspice-pkg/utils/)
+cspice-pkg/utils/spice-brief
+cspice-pkg/utils/spice-ckbrief
+cspice-pkg/utils/spice-chronos
+cspice-pkg/utils/spice-commnt
+
 # GRASS build artifacts
 planetary/*/OBJ.*/
 planetary/*/*.o
