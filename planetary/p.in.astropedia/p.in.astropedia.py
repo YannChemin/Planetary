@@ -2,23 +2,27 @@
 """
 MODULE:    p.in.astropedia
 AUTHOR:    Yann Chemin <dr.yann.chemin@gmail.com>
-PURPOSE:   Fetch and import PDS4 planetary data products from the USGS
-           Astropedia STAC catalog or the NASA PDS Federated Search API,
-           given a DOI, a PDS4 Logical Identifier (LID), or a keyword
-           search string. Downloaded GeoTIFFs are imported via r.in.gdal;
-           PDS4 label+data pairs are imported via p.in.pds4.
+PURPOSE:   Fetch and import planetary data products from the USGS Astropedia
+           STAC catalog, the NASA PDS Federated Search API, or the PDS
+           Ring-Moon Systems Node OPUS search interface. Supports DOI
+           resolution, PDS4 LID lookup, keyword search, curated USGS COG
+           mosaics, and direct OPUS observation queries (including Cassini
+           VIMS hyperspectral cubes). Downloaded files are imported via
+           r.in.gdal, p.in.pds4, or p.in.pds3 depending on file type.
 LICENSE:   The Unlicense (https://unlicense.org)
            This is free and unencumbered software released into the public domain.
 """
 
 # %module
-# % description: Fetch and import PDS4 planetary data from USGS Astropedia or NASA PDS.
+# % description: Fetch and import planetary data from USGS Astropedia, NASA PDS, or OPUS (Ring-Moon Systems Node). Supports VIMS hyperspectral cubes via opus= or opus_id=.
 # % keyword: Planetary
 # % keyword: Import & Export
 # % keyword: import
 # % keyword: raster
 # % keyword: PDS4
 # % keyword: Astropedia
+# % keyword: VIMS
+# % keyword: OPUS
 # % keyword: download
 # %end
 
@@ -52,6 +56,34 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # % required: no
 # % multiple: no
 # % description: USGS planetarymaps.usgs.gov COG/GeoTIFF mosaic: a catalog key (see -l) or a direct https URL. Imported via /vsicurl/, windowed to the active region.
+# %end
+
+# %option
+# % key: opus
+# % type: string
+# % required: no
+# % multiple: no
+# % label: OPUS (Ring-Moon Systems Node) search query
+# % description: Comma-separated key=value OPUS API parameters, e.g. instrument=Cassini VIMS,target=Saturn. Use -l to list matching observations without downloading.
+# %end
+
+# %option
+# % key: opus_id
+# % type: string
+# % required: no
+# % multiple: no
+# % label: OPUS observation ID to download directly
+# % description: Download and import a specific OPUS observation, e.g. co-vims-v1590123456. Skips the search step.
+# %end
+
+# %option
+# % key: vims_channel
+# % type: string
+# % required: no
+# % options: vis,ir
+# % answer: vis
+# % label: VIMS channel to import
+# % description: vis: VIS channel (0.35-1.05 µm, 96 bands); ir: IR channel (0.88-5.1 µm, 256 bands). Applies to VIMS .qub cubes fetched via opus= or opus_id=.
 # %end
 
 # %option G_OPT_R_OUTPUT
@@ -128,6 +160,7 @@ import p_meta
 # ── API endpoints ──────────────────────────────────────────────────────────
 STAC_BASE    = "https://stac.astrogeology.usgs.gov/api"
 PDS_API_BASE = "https://pds.nasa.gov/api/search/1"
+OPUS_API_BASE = "https://opus.pds-rings.seti.org/api"
 DOI_BASE     = "https://doi.org/"
 
 # Curated catalog of USGS planetary COG/GeoTIFF mosaics on
@@ -150,11 +183,12 @@ USGS_COG = {
 
 # Prefer these formats (checked in order against the STAC asset media-types
 # and file extensions).
-PREFERRED_EXT  = (".tif", ".tiff", ".img", ".fits", ".xml")
+PREFERRED_EXT  = (".tif", ".tiff", ".img", ".qub", ".fits", ".xml")
 IMPORT_BY_EXT  = {
     ".tif":  "gdal",
     ".tiff": "gdal",
     ".img":  "pds3",     # PDS3 image; p.in.pds3 handles
+    ".qub":  "pds3",     # PDS3 cube (VIMS, ISS hyperspectral); p.in.pds3 handles
     ".fits": "gdal",
     ".xml":  "pds4",     # PDS4 label; p.in.pds4 handles
 }
@@ -312,6 +346,137 @@ def pds_search_by_keyword(keyword, limit=10, bbox=None):
     return http_get_json(url).get("data", [])
 
 
+# ── OPUS search (PDS Ring-Moon Systems Node) ───────────────────────────────
+
+def _parse_opus_query(query_str):
+    """Parse 'key=value,key=value,...' into a dict of OPUS query params.
+
+    Commas inside values are not supported (use the OPUS API directly in that
+    case). Spaces are preserved so that multi-word instrument names work
+    (e.g. ``instrument=Cassini VIMS``).
+    """
+    params = {}
+    for part in query_str.split(","):
+        part = part.strip()
+        if "=" in part:
+            k, v = part.split("=", 1)
+            params[k.strip()] = v.strip()
+    return params
+
+
+def opus_search(params, limit=10):
+    """Query OPUS /api/data.json.
+
+    *params* is a dict of OPUS API search parameters, e.g.
+    ``{"instrument": "Cassini VIMS", "target": "Saturn"}``.
+
+    Returns (labels, rows) where *labels* is a list of column names and
+    *rows* is a list of dicts keyed by those labels.
+    """
+    p = dict(params)
+    p.setdefault("limit", limit)
+    p.setdefault("page", 1)
+    p.setdefault("order", "time1,opusid")
+    qs  = urllib.parse.urlencode(p)
+    url = f"{OPUS_API_BASE}/data.json?{qs}"
+    resp   = http_get_json(url)
+    labels = resp.get("labels", [])
+    rows   = resp.get("page",   [])
+    dicts  = [
+        dict(zip(labels, row)) if isinstance(row, list) else row
+        for row in rows
+    ]
+    return labels, dicts
+
+
+def opus_files(opus_id):
+    """Return downloadable files for *opus_id* from OPUS /api/files/<id>.json.
+
+    Handles both the nested ``{"data": {id: {...}}}`` form and the flat
+    ``{id: {...}}`` form that different OPUS versions may return.
+
+    Returns a list of ``(url, filename, product_type)`` tuples, sorted so
+    ``.qub`` cubes come first and ``.lbl`` labels come second.
+    """
+    # Strip _vis/_ir suffix: the files API keys on the base observation ID.
+    base = opus_id
+    for suf in ("_vis", "_ir", "_VIS", "_IR"):
+        if base.endswith(suf):
+            base = base[: -len(suf)]
+            break
+    url  = f"{OPUS_API_BASE}/files/{base}.json"
+    resp = http_get_json(url)
+
+    # Normalise: may be wrapped under "data" key or keyed directly by obs ID.
+    data = resp.get("data", resp)
+    obs  = data.get(base, data)
+    if not isinstance(obs, dict):
+        gs.warning(f"OPUS files API returned unexpected format for '{base}'.")
+        return []
+
+    files = []
+    for ptype, entries in obs.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            href = (entry.get("url") or entry.get("href") or "").strip()
+            if not href:
+                continue
+            fname = os.path.basename(urllib.parse.urlparse(href).path)
+            files.append((href, fname, ptype))
+
+    def _rank(item):
+        ext = os.path.splitext(item[1].lower())[1]
+        return {".qub": 0, ".lbl": 1}.get(ext, 2)
+    files.sort(key=_rank)
+    return files
+
+
+def _pick_vims_qub(file_list, channel="vis"):
+    """Return (url, filename) for the requested VIMS channel .qub file.
+
+    Tries ``_<channel>.qub`` suffix first; falls back to any ``.qub``.
+    """
+    suffix = f"_{channel.lower()}.qub"
+    for url, fname, _ptype in file_list:
+        if fname.lower().endswith(suffix):
+            return url, fname
+    for url, fname, _ptype in file_list:
+        if fname.lower().endswith(".qub"):
+            return url, fname
+    return None, None
+
+
+def _opus_id_from_row(row, labels):
+    """Extract the OPUS ID string from a search result row dict."""
+    id_key = next(
+        (l for l in labels if "opus" in l.lower() and "id" in l.lower()),
+        next((l for l in labels if l.lower() == "opusid"), None),
+    )
+    if id_key:
+        return str(row.get(id_key, ""))
+    # fallback: first column
+    return str(next(iter(row.values()), ""))
+
+
+def print_opus_results(labels, rows):
+    if not rows:
+        gs.message("No OPUS observations found.")
+        return
+    id_key  = next((l for l in labels
+                    if "opus" in l.lower() and "id" in l.lower()), labels[0] if labels else "OPUS ID")
+    tgt_key = next((l for l in labels if "target"  in l.lower()), None)
+    t1_key  = next((l for l in labels
+                    if "start" in l.lower() or "time1" in l.lower()), None)
+    gs.message(f"{'OPUS ID':<38} {'Target':<14} Start Time")
+    gs.message("-" * 75)
+    for row in rows:
+        oid = str(row.get(id_key, "?"))[:38]
+        tgt = str(row.get(tgt_key, ""))[:14] if tgt_key else ""
+        t1  = str(row.get(t1_key,  ""))      if t1_key  else ""
+        gs.message(f"{oid:<38} {tgt:<14} {t1}")
+
+
 # ── Asset selection ────────────────────────────────────────────────────────
 
 def best_asset(stac_item):
@@ -422,6 +587,7 @@ def resolve_cog(cog_arg):
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
 _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
+                     "jupiter", "saturn", "uranus", "neptune",
                      "ceres", "vesta", "pluto", "charon",
                      "io", "europa", "ganymede", "callisto",
                      "titan", "enceladus", "mimas", "tethys", "dione",
@@ -678,22 +844,25 @@ def _restore_project(orig_loc, orig_mapset):
 
 
 def main():
-    opt_doi         = options["doi"]
-    opt_lid         = options["lid"]
-    opt_search      = options["search"]
-    opt_cog         = options["cog"]
-    opt_output      = options["output"]
-    opt_band        = int(options["band"])
-    opt_limit       = int(options["limit"])
-    opt_download_dir= options["download_dir"]
-    opt_project     = options["project"]
-    flag_list       = flags["l"]
-    flag_keep       = flags["k"]
-    flag_override   = flags["o"]
-    flag_noregion   = flags["r"]
+    opt_doi          = options["doi"]
+    opt_lid          = options["lid"]
+    opt_search       = options["search"]
+    opt_cog          = options["cog"]
+    opt_opus         = options["opus"]
+    opt_opus_id      = options["opus_id"]
+    opt_vims_channel = options["vims_channel"] or "vis"
+    opt_output       = options["output"]
+    opt_band         = int(options["band"])
+    opt_limit        = int(options["limit"])
+    opt_download_dir = options["download_dir"]
+    opt_project      = options["project"]
+    flag_list        = flags["l"]
+    flag_keep        = flags["k"]
+    flag_override    = flags["o"]
+    flag_noregion    = flags["r"]
 
-    # ── COG catalog listing / import (independent of the STAC/PDS path) ──
-    if flag_list and not any((opt_doi, opt_lid, opt_search)):
+    # ── COG catalog listing / import (independent of the STAC/PDS/OPUS path) ──
+    if flag_list and not any((opt_doi, opt_lid, opt_search, opt_opus, opt_opus_id)):
         print_cog_catalog()
         if not opt_cog:
             return
@@ -758,11 +927,108 @@ def main():
                 _restore_project(orig_loc, orig_mapset)
         return
 
+    # ── OPUS path: opus_id= or opus= ──────────────────────────────────────
+    if opt_opus_id or opt_opus:
+        if any((opt_doi, opt_lid, opt_search, opt_cog)):
+            gs.fatal("opus= / opus_id= cannot be combined with "
+                     "doi=, lid=, search=, or cog=.")
+        if opt_opus_id and opt_opus:
+            gs.fatal("Provide either opus= (search) or opus_id= (direct), not both.")
+        if not flag_list and not opt_output:
+            gs.fatal("output= is required unless -l (list only) is given.")
+
+        dest_dir = (opt_download_dir or
+                    os.path.join(os.path.expanduser("~"), "RSDATA", "Saturn"))
+        os.makedirs(dest_dir, exist_ok=True)
+
+        if opt_opus_id:
+            # Direct download: skip search, go straight to files API.
+            opus_id = opt_opus_id.strip()
+            gs.message(f"Fetching OPUS file list for: {opus_id}")
+            file_list = opus_files(opus_id)
+            if not file_list:
+                gs.fatal(f"No downloadable files found for OPUS ID '{opus_id}'.")
+            labels, rows = [], [{"OPUS ID": opus_id}]
+        else:
+            # Search OPUS with the supplied query params.
+            params = _parse_opus_query(opt_opus)
+            gs.message(f"Searching OPUS: {params}")
+            labels, rows = opus_search(params, limit=opt_limit)
+            if flag_list:
+                print_opus_results(labels, rows)
+                return
+            if not rows:
+                gs.fatal("No OPUS observations matched the search query.")
+            opus_id  = _opus_id_from_row(rows[0], labels)
+            gs.message(f"Selected OPUS observation: {opus_id}")
+            file_list = opus_files(opus_id)
+            if not file_list:
+                gs.fatal(f"No downloadable files for OPUS ID '{opus_id}'.")
+
+        # Determine which file to download (.qub for the chosen channel).
+        dl_url, dl_fname = _pick_vims_qub(file_list, opt_vims_channel)
+        if not dl_url:
+            gs.fatal(
+                f"No .qub file found for channel '{opt_vims_channel}' "
+                f"in OPUS observation '{opus_id}'. "
+                "Available files:\n" +
+                "\n".join(f"  {f} ({pt})" for _, f, pt in file_list[:10])
+            )
+
+        # Infer body from URL (usually /COVIMS_…/saturn/…) — default Saturn.
+        body_slug = _infer_body_from_url(dl_url) or "saturn"
+        dest = os.path.join(
+            os.path.expanduser("~"), "RSDATA", body_slug.capitalize(), dl_fname
+        )
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+
+        # Also fetch the companion .lbl if present (p.in.pds3 needs it).
+        lbl_url = lbl_fname = None
+        for url, fname, _pt in file_list:
+            if fname.lower().endswith(".lbl"):
+                lbl_url = url
+                lbl_fname = os.path.join(os.path.dirname(dest), fname)
+                break
+        if lbl_url:
+            gs.message(f"Fetching label: {lbl_url}")
+            _wget_resumable(lbl_url, lbl_fname)
+
+        gs.message(f"Fetching cube ({opt_vims_channel.upper()}): {dl_url}")
+        _wget_resumable(dl_url, dest)
+
+        # Import the .qub via p.in.pds3 (handles PDS3 cubes natively).
+        gs.message(f"Importing VIMS {opt_vims_channel.upper()} cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="o" if flag_override else "",
+                       input=dest, output=opt_output, overwrite=True)
+        _align_region_to_raster(opt_output, save_default=False)
+
+        # Infer target from first search result, if available.
+        _body_val = body_slug.upper() if body_slug != "misc" else None
+        if rows:
+            tgt_key = next((l for l in labels if "target" in l.lower()), None)
+            if tgt_key:
+                _body_val = str(rows[0].get(tgt_key, _body_val or "")).upper() or _body_val
+
+        p_meta.write_planetary_metadata(
+            opt_output,
+            module="p.in.astropedia",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="CASSINI_VIMS",
+            mission="CASSINI",
+            body=_body_val,
+            pds_product_id=opus_id,
+            source_file=dl_url,
+        )
+        gs.message(f"Imported VIMS {opt_vims_channel.upper()} cube as '{opt_output}'.")
+        return
+
     # Validate: exactly one of doi/lid/search
     n_src = sum(1 for x in (opt_doi, opt_lid, opt_search) if x)
     if n_src == 0:
-        gs.fatal("Provide exactly one of doi=, lid=, search=, or cog= "
-                 "(or -l to list options).")
+        gs.fatal("Provide exactly one of doi=, lid=, search=, cog=, "
+                 "opus=, or opus_id= (or -l to list options).")
     if n_src > 1:
         gs.fatal("Provide exactly one of doi=, lid=, or search= "
                  "(got multiple).")

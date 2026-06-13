@@ -1,3 +1,50 @@
+grass-planetary-addons (1.0.0+20260613190000) unstable; urgency=low
+
+  [ p.in.astropedia: OPUS / VIMS support ]
+  * New opus= option: comma-separated OPUS API query params (e.g.
+    instrument=Cassini VIMS,target=Saturn). Searches the PDS Ring-Moon
+    Systems Node OPUS interface; -l lists matching observations.
+  * New opus_id= option: download and import a specific OPUS observation
+    directly (e.g. co-vims-v1590123456), bypassing the search step.
+  * New vims_channel= option (vis|ir, default vis): selects which VIMS
+    channel .qub cube to download and import. VIMS VIS = 96 bands
+    (0.35–1.05 µm); VIMS IR = 256 bands (0.88–5.1 µm).
+  * New helper functions: _parse_opus_query(), opus_search(), opus_files(),
+    _pick_vims_qub(), _opus_id_from_row(), print_opus_results().
+  * .qub added to IMPORT_BY_EXT (→ p.in.pds3) and PREFERRED_EXT.
+  * _BODY_PATH_TOKENS: added saturn, jupiter, uranus, neptune (gas giants
+    were missing; needed for URL body inference for ring-science products).
+  * Companion .lbl label file is fetched alongside the .qub cube so that
+    p.in.pds3 can locate the PVL header.
+  * Downloads go to ~/RSDATA/<Body>/ (resumable via wget -c), consistent
+    with the project download convention.
+  * planetary.json written with sensor=CASSINI_VIMS, mission=CASSINI,
+    body inferred from OPUS result target field.
+  * Module description and keywords updated to mention OPUS/VIMS.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 13 Jun 2026 19:00:00 +0000
+
+grass-planetary-addons (1.0.0+20260613180000) unstable; urgency=low
+
+  [ p.in.rings: FILTER_NAME support ]
+  * New filter= option in p.in.rings: accepts the PDS3 FILTER_NAME string
+    (e.g. CL1/CL2, RED/GRN, BLU/UV) from the image label; stored verbatim
+    as filter_name under extended_metadata.planetary in planetary.json.
+  * p_meta.py PlanetaryMetadata: new filter_name field; serialised in
+    _build_planetary_block() and deserialised in _from_dict().
+  * Testsuite: new test_filter_option_in_interface (interface test, always
+    runs) and test_radlong_filter_name_recorded (SPICE-gated) in
+    p.in.rings/testsuite/test_p_in_rings.py.
+  * p.in.rings.md: updated USAGE synopsis and parameter table with filter=.
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 13 Jun 2026 18:00:00 +0000
+
+grass-planetary-addons (1.0.0+20260613173829) unstable; urgency=low
+
+  * Development rebuild 20260613173829
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 13 Jun 2026 15:38:29 +0000
+
 grass-planetary-addons (1.0.0+20260613170000) unstable; urgency=low
 
   [ Planetary metadata sidecar (planetary.json) ]

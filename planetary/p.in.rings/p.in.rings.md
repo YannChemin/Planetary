@@ -52,7 +52,8 @@ coordinate.
 p.in.rings input=raw_image output=rings_image \
     time=<UTC> instrument=<NAIF_id> \
     [spacecraft=CASSINI] [body=SATURN] [frame=IAU_SATURN] \
-    [kernels=k1,k2,...] [grid=9] [projection=radlong|polar] [-n]
+    [kernels=k1,k2,...] [grid=9] [projection=radlong|polar] \
+    [filter=<FILTER_NAME>] [-n]
 
 # radlong mode — region in km × degrees (default, analysis use)
 g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
@@ -73,6 +74,7 @@ g.region n=130000 s=70000 e=-50000 w=-140000 res=50
 | `kernels` | Comma-separated kernel paths; if omitted, loads from mapset `spice/` |
 | `grid` | Geometry sampling grid size N×N (default 9) |
 | `projection` | `radlong` (default) or `polar` — see DESCRIPTION |
+| `filter` | Filter name from PDS3 label `FILTER_NAME` keyword (e.g. `CL1/CL2`, `RED/GRN`). Stored verbatim in `planetary.json` under `extended_metadata.planetary.filter_name`. |
 | `-n` | Nearest-neighbour sampling instead of bilinear |
 
 ## Saturn ring chain processing example — SOI B-ring (radlong mode)
@@ -115,6 +117,7 @@ p.in.rings \
     instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
     projection=radlong \
+    filter="CL1/CL2" \
     kernels="$HOME/RSDATA/Saturn/kernels/lsk/naif0012.tls,\
 $HOME/RSDATA/Saturn/kernels/sclk/cas00172.tsc,\
 $HOME/RSDATA/Saturn/kernels/ik/cas_iss_v10.ti,\

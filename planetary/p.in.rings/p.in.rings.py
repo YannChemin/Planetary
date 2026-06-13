@@ -98,6 +98,14 @@
 # % required: no
 # %end
 
+# %option
+# % key: filter
+# % type: string
+# % label: Filter name from PDS3 label (FILTER_NAME keyword)
+# % description: ISS filter combination as recorded in the image label, e.g. CL1/CL2, RED/GRN, BLU. Stored verbatim in planetary.json under extended_metadata.planetary.filter_name.
+# % required: no
+# %end
+
 # %flag
 # % key: n
 # % description: Use nearest-neighbour sampling (default: bilinear)
@@ -313,6 +321,7 @@ def main():
     opt_frame  = options["frame"]
     opt_kerns  = options["kernels"]
     opt_proj   = options["projection"]
+    opt_filter = options["filter"] or None
     grid_n     = int(options["grid"])
     flag_nn    = flags["n"]
 
@@ -450,6 +459,7 @@ def main():
         acquisition_datetime=opt_time,
         spice_kernels=kernel_list,
         projection=opt_proj,
+        filter_name=opt_filter,
     )
 
     gs.message(f"Done: {opt_output}")

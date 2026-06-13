@@ -112,6 +112,15 @@ class TestPInRingsInterface(TestCase):
         )
         self.assertIn("radlong", result.stdout)
 
+    def test_filter_option_in_interface(self):
+        """filter= option must appear in --interface-description output."""
+        result = subprocess.run(
+            ["p.in.rings", "--interface-description"],
+            capture_output=True, text=True,
+        )
+        self.assertIn("filter", result.stdout,
+                      "filter= option missing from interface description")
+
 
 # ---------------------------------------------------------------------------
 # SPICE-gated: radlong projection (default, current behaviour)
@@ -196,8 +205,29 @@ class TestPInRingsRadlong(TestCase):
         self.assertEqual(planetary.get("body"), self._BODY)
         self.assertEqual(planetary.get("mission"), self._SPACECRAFT)
         self.assertIn(self._TIME, data.get("acquisition_datetime", ""))
-        # projection mode must be recorded
         self.assertEqual(planetary.get("projection"), "radlong")
+
+    def test_radlong_filter_name_recorded(self):
+        """filter= value must appear in planetary.json under filter_name."""
+        _skip_if_no_spice(self)
+        out_f = self.out + "_flt"
+        try:
+            self.assertModule(
+                "p.in.rings",
+                input=self.raw_input, output=out_f,
+                time=self._TIME, instrument=self._INSTRUMENT,
+                spacecraft=self._SPACECRAFT, body=self._BODY,
+                frame=self._FRAME, kernels=self._kernel_list(),
+                projection="radlong", filter="CL1/CL2", overwrite=True,
+            )
+            with open(_cell_misc_path(out_f)) as fh:
+                data = json.load(fh)
+            planetary = data.get("extended_metadata", {}).get("planetary", {})
+            self.assertEqual(planetary.get("filter_name"), "CL1/CL2",
+                             "filter_name missing or wrong in planetary.json")
+        finally:
+            gs.run_command("g.remove", type="raster", name=out_f,
+                           flags="f", quiet=True)
 
 
 # ---------------------------------------------------------------------------

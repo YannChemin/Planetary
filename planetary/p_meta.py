@@ -98,6 +98,7 @@ class PlanetaryMetadata:
     source_file: str | None = None
     spice_kernels: list[str] | None = None
     projection: str | None = None     # ring-plane projection mode: radlong|polar
+    filter_name: str | None = None    # ISS filter combination, e.g. "CL1/CL2", "RED/GRN"
 
     # --- provenance ---
     processing_history: list[dict[str, Any]] = field(default_factory=list)
@@ -151,6 +152,8 @@ class PlanetaryMetadata:
             block["spice_kernels"] = list(self.spice_kernels)
         if self.projection:
             block["projection"] = self.projection
+        if self.filter_name:
+            block["filter_name"] = self.filter_name
         return block
 
     def _build_bands(self) -> dict[str, Any]:
@@ -247,6 +250,7 @@ class PlanetaryMetadata:
         meta.source_file = planetary.get("source_file")
         meta.spice_kernels = planetary.get("spice_kernels")
         meta.projection = planetary.get("projection")
+        meta.filter_name = planetary.get("filter_name")
         return meta
 
 
