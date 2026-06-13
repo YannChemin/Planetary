@@ -1,3 +1,33 @@
+grass-planetary-addons (1.0.0+20260613200000) unstable; urgency=low
+
+  [ Documentation: full Saturn ring imaging pipeline chain ]
+  * p.spice.find.md: added "Saturn ring imaging pipelines" section showing
+    both Chain A (SOI radlong) and Chain B (Rev 014 polar) end-to-end with
+    this module's step highlighted; updated SEE ALSO with all chain modules.
+  * p.in.astropedia.md: added "Saturn ring imaging pipelines" section with
+    both chains; added OPUS/VIMS notes (opus=, opus_id=, vims_channel=);
+    updated importer table (.qub), SEE ALSO, and REFERENCES.
+  * p.in.rings.md: rewritten examples to use p.in.astropedia opus_id= for
+    the raw image fetch (replaces r.in.gdal -o); added KDIR variable for
+    readable kernel lists; added p.rings.stats as Step 6 of Chain A; both
+    chains now labelled "← this module" at Step 4.
+  * p.rings.project.md: updated Chain A Step 2 to use p.in.astropedia; added
+    KDIR variable; added note that Chain B (polar) does not need this module;
+    updated SEE ALSO.
+  * p.rings.stats.md: added full Chain A pipeline context with all 6 steps,
+    this module's step labelled; added note on using p.rings.project -i to
+    compute radial profiles from polar (Chain B) output; updated SEE ALSO.
+  * cassini_rev014_polar.sh: updated Step 1 description to reference
+    p.spice.find; Step 2 now uses p.in.astropedia opus_id= (was r.in.gdal).
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 13 Jun 2026 20:00:00 +0000
+
+grass-planetary-addons (1.0.0+20260613183121) unstable; urgency=low
+
+  * Development rebuild 20260613183121
+
+ -- Yann Chemin <dr.yann.chemin@gmail.com>  Sat, 13 Jun 2026 16:31:21 +0000
+
 grass-planetary-addons (1.0.0+20260613190000) unstable; urgency=low
 
   [ p.in.astropedia: OPUS / VIMS support ]

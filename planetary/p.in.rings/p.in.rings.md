@@ -54,12 +54,6 @@ p.in.rings input=raw_image output=rings_image \
     [spacecraft=CASSINI] [body=SATURN] [frame=IAU_SATURN] \
     [kernels=k1,k2,...] [grid=9] [projection=radlong|polar] \
     [filter=<FILTER_NAME>] [-n]
-
-# radlong mode — region in km × degrees (default, analysis use)
-g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
-
-# polar mode — region in km × km (display use, isotropic)
-g.region n=130000 s=70000 e=-50000 w=-140000 res=50
 ```
 
 | Parameter | Description |
@@ -77,138 +71,104 @@ g.region n=130000 s=70000 e=-50000 w=-140000 res=50
 | `filter` | Filter name from PDS3 label `FILTER_NAME` keyword (e.g. `CL1/CL2`, `RED/GRN`). Stored verbatim in `planetary.json` under `extended_metadata.planetary.filter_name`. |
 | `-n` | Nearest-neighbour sampling instead of bilinear |
 
-## Saturn ring chain processing example — SOI B-ring (radlong mode)
+## Saturn ring imaging pipelines
 
-The full ring processing pipeline for the Cassini SOI B-ring image
-(`N1467344155_2.IMG`, 2004-07-01T03:11:40, inner B ring, 86283–86516 km)
-runs in five steps. A ready-to-run script is at
-`$HOME/RSDATA/cassini_soi_b_ring.sh`.
+Both complete chains start from the same location setup and SPICE kernel
+download, then diverge at the region step.  Ready-to-run scripts live at
+`$HOME/RSDATA/cassini_soi_b_ring.sh` (Chain A) and
+`$HOME/RSDATA/cassini_rev014_polar.sh` (Chain B).
 
-**Step 0 — Download SPICE kernels** (`p.spice.find`)
+### Chain A — SOI B-ring, radlong + RingCylindrical (analysis)
 
-```sh
+Image `N1467344155_2.IMG`, 2004-07-01T03:11:40, inner B ring, 86 283–86 516 km.
+
+```bash
+# One-time: create an XY GRASS location for ring-plane coordinates
+grass -c XY ~/grassdata/saturn_rings
+
+# ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
 p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
     dest=$HOME/RSDATA/Saturn/kernels
-```
 
-Downloads LSK, SCLK, IK, FK, PCK, SPK and CK automatically.
+# ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
+p.in.astropedia opus_id=co-iss-n1467344155 output=N1467344155_raw
 
-**Step 1 — Import the raw PDS3 image** (`r.in.gdal`)
-
-```sh
-r.in.gdal -o input=$HOME/RSDATA/Saturn/N1467344155_2.IMG \
-              output=N1467344155_raw
-```
-
-**Step 2 — Set the ring-plane output region** (`g.region`)
-
-```sh
+# ── Step 3: Set radlong output region ────────────────────────────────────────
 # north/south = ring_radius [km],  east/west = ring_longitude [deg]
 g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
-```
 
-**Step 3 — Project to ring_radius / ring_lon space** ← *this module*
-
-```sh
+# ── Step 4: Project raw image to ring-plane space  ← this module ─────────────
+KDIR="$HOME/RSDATA/Saturn/kernels"
 p.in.rings \
-    input=N1467344155_raw \
-    output=N1467344155_rings \
-    time="2004-07-01T03:11:40.288" \
-    instrument=-82360 \
+    input=N1467344155_raw output=N1467344155_rings \
+    time="2004-07-01T03:11:40" instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
-    projection=radlong \
-    filter="CL1/CL2" \
-    kernels="$HOME/RSDATA/Saturn/kernels/lsk/naif0012.tls,\
-$HOME/RSDATA/Saturn/kernels/sclk/cas00172.tsc,\
-$HOME/RSDATA/Saturn/kernels/ik/cas_iss_v10.ti,\
-$HOME/RSDATA/Saturn/kernels/fk/cas_v40.tf,\
-$HOME/RSDATA/Saturn/kernels/pck/cpck_rock_21Jan2011_merged.tpc,\
-$HOME/RSDATA/Saturn/kernels/pck/pck00010.tpc,\
-$HOME/RSDATA/Saturn/kernels/spk/040701AP_SCPSE_04173_04236.bsp,\
-$HOME/RSDATA/Saturn/kernels/ck/04183_04185ra.bc"
-```
+    projection=radlong filter="CL1/CL2" \
+    kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
+${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
+${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
+${KDIR}/spk/040701AP_SCPSE_04173_04236.bsp,\
+${KDIR}/ck/04183_04185ra.bc"
 
-**Step 4 — Apply RingCylindrical projection** (`p.rings.project`)
-
-```sh
+# ── Step 5: RingCylindrical projection (p.rings.project) ─────────────────────
 p.rings.project \
-    input=N1467344155_rings \
-    output=N1467344155_ringcyl \
+    input=N1467344155_rings output=N1467344155_ringcyl \
     center_radius=86400 center_lon=66.39
-```
-
-**Step 5 — Display**
-
-```sh
 r.colors map=N1467344155_ringcyl color=grey
-d.rast N1467344155_ringcyl
+
+# ── Step 6: Radial statistics (p.rings.stats) ─────────────────────────────────
+p.rings.stats input=N1467344155_ringcyl \
+    rmin=86250 rmax=86550 bin_width=5 \
+    output=soi_bring_profile.csv radial=soi_bring_radial
 ```
 
-## Saturn ring chain processing example — Rev 014 B-ring polar view
+### Chain B — Rev 014 B/A ring, polar (display)
 
-This second example uses a Cassini Rev 014 ISS NAC image taken on
-2005-10-23 when Cassini was approximately 10° above Saturn's ring plane.
-At this elevation the B and A rings appear as visible arcs in the image.
-Using `projection=polar`, both axes are in km so the map renders with
-correct aspect ratio (rings as arcs of circles centred on Saturn at the
-origin). A ready-to-run script is at `$HOME/RSDATA/cassini_rev014_polar.sh`.
+Image `N1508963064_2.IMG`, 2005-10-23T14:17:00, sub-SC lat ≈+10°.
+At this elevation the B and A rings appear as visible arcs; the polar
+projection maps them as circles centred on Saturn with a correct 1:1
+aspect ratio.
 
-**Step 0 — Download SPICE kernels** (`p.spice.find`)
-
-```sh
+```bash
+# ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
 p.spice.find spacecraft=CASSINI time="2005-10-23T14:17:00" \
     dest=$HOME/RSDATA/Saturn/kernels
-```
 
-**Step 1 — Import the raw PDS3 image** (`r.in.gdal`)
+# ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
+p.in.astropedia opus_id=co-iss-n1508963064 output=N1508963064_raw
 
-```sh
-r.in.gdal -o \
-    input=$HOME/RSDATA/Saturn/N1508963064_2.IMG \
-    output=N1508963064_raw
-```
-
-**Step 2 — Set the polar ring-plane region** (`g.region`)
-
-```sh
+# ── Step 3: Set polar output region in km × km ───────────────────────────────
 # Both axes in km; Saturn's centre at (0,0).
-# This box covers the A and B rings in the upper-left quadrant
-# of the ring plane at the longitude of the observation (~230°).
+# This box covers the A and B rings in the upper-left quadrant (~x=-140000..
+# -50000, y=+70000..+130000) at the longitude of the observation (~230°).
 g.region n=130000 s=70000 e=-50000 w=-140000 nsres=50 ewres=50
-```
 
-**Step 3 — Project to polar ring-plane coordinates** ← *this module*
-
-```sh
+# ── Step 4: Project to polar ring-plane coordinates  ← this module ───────────
+KDIR="$HOME/RSDATA/Saturn/kernels"
 p.in.rings \
-    input=N1508963064_raw \
-    output=N1508963064_polar \
-    time="2005-10-23T14:17:00" \
-    instrument=-82360 \
+    input=N1508963064_raw output=N1508963064_polar \
+    time="2005-10-23T14:17:00" instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
-    projection=polar \
-    kernels="$HOME/RSDATA/Saturn/kernels/lsk/naif0012.tls,\
-$HOME/RSDATA/Saturn/kernels/sclk/cas00172.tsc,\
-$HOME/RSDATA/Saturn/kernels/ik/cas_iss_v10.ti,\
-$HOME/RSDATA/Saturn/kernels/fk/cas_v40.tf,\
-$HOME/RSDATA/Saturn/kernels/pck/cpck_rock_21Jan2011_merged.tpc,\
-$HOME/RSDATA/Saturn/kernels/pck/pck00010.tpc,\
-$HOME/RSDATA/Saturn/kernels/spk/050824R_SCPSE_05217_05257.bsp,\
-$HOME/RSDATA/Saturn/kernels/ck/05289_05294ra.bc"
+    projection=polar filter="CL1/CL2" \
+    kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
+${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
+${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
+${KDIR}/spk/050824R_SCPSE_05217_05257.bsp,\
+${KDIR}/ck/05289_05294ra.bc"
+r.colors map=N1508963064_polar color=grey
+d.rast N1508963064_polar
 ```
 
-The resulting raster shows the B-ring and A-ring as arcs of circles with
-Saturn's center at (0, 0). Both axes label in km; `d.rast` and GRASS
-display tools respect the 1:1 aspect ratio automatically.
+The resulting raster shows the B-ring (outer edge ≈117 500 km) and A-ring
+(outer edge ≈136 800 km) as arcs of circles with Saturn's centre at
+(0, 0). Both axes label in km; `d.rast` respects the 1:1 aspect ratio.
 
-**Step 4 — Optional: widen to the full ring system**
+**Optional — widen to the full ring system**
 
-To see all rings in a single polar map (D → F ring), use a larger region:
-
-```sh
+```bash
 g.region n=145000 s=-145000 e=145000 w=-145000 res=200
-# then re-run p.in.rings with projection=polar on all available ring images
-# and mosaic with r.patch
+# Re-run p.in.rings with projection=polar on additional images,
+# then mosaic with r.patch.
 ```
 
 ## NOTES
@@ -227,6 +187,9 @@ g.region n=145000 s=-145000 e=145000 w=-145000 res=200
   the ring plane as seen from infinite distance above the north pole.
   A single image covers only the arc of rings that fell inside the camera
   FOV; build a mosaic from multiple orbits to fill a complete annulus.
+- The `filter=` value (e.g. `CL1/CL2`) is read from the PDS3 label keyword
+  `FILTER_NAME` and stored verbatim in `planetary.json` alongside the image
+  metadata for provenance.
 
 ## REQUIRED KERNELS
 
@@ -237,10 +200,10 @@ g.region n=145000 s=-145000 e=145000 w=-145000 res=200
 | IK | `cas_iss_v10.ti` | Instrument FOV definition |
 | FK | `cas_v40.tf` | Spacecraft frame definition |
 | PCK | `cpck_rock_21Jan2011_merged.tpc` | Planetary constants |
-| SPK | `040701AP_SCPSE_04173_04236.bsp` | Ephemeris (SOI) |
-| SPK | `050824R_SCPSE_05217_05257.bsp` | Ephemeris (Rev 014) |
-| CK | `04183_04185ra.bc` | Spacecraft pointing (SOI) |
-| CK | `05289_05294ra.bc` | Spacecraft pointing (Rev 014) |
+| SPK | `040701AP_SCPSE_04173_04236.bsp` | Ephemeris (SOI, Chain A) |
+| SPK | `050824R_SCPSE_05217_05257.bsp` | Ephemeris (Rev 014, Chain B) |
+| CK | `04183_04185ra.bc` | Spacecraft pointing (SOI, Chain A) |
+| CK | `05289_05294ra.bc` | Spacecraft pointing (Rev 014, Chain B) |
 
 Use **p.spice.find** to automatically download the correct kernels for
 a given spacecraft and time.
@@ -248,7 +211,9 @@ a given spacecraft and time.
 ## SEE ALSO
 
 - [p.spice.find](p.spice.find.md) — download NAIF kernels automatically
+- [p.in.astropedia](p.in.astropedia.md) — fetch raw PDS3 images from OPUS
 - [p.rings.project](p.rings.project.md) — RingCylindrical projection
+- [p.rings.stats](p.rings.stats.md) — radial brightness statistics
 - [p.spiceinit](p.spiceinit.md) — attach kernels to a GRASS raster
 - [p.cam2map](p.cam2map.md) — project planetary surface images
 - [p.in.spice](p.in.spice.md) — generic SPICE-based image import

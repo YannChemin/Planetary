@@ -30,86 +30,76 @@ p.rings.project input=<raster> output=<raster> \
 | `-i` | Inverse: (x,y) → (ring_radius, ring_lon) |
 | `-c` | Clockwise ring longitude direction |
 
-## Saturn ring chain processing example
+## Saturn ring imaging pipelines
 
-Full pipeline for Cassini ISS NAC image `N1467344155_2.IMG`
-(SOI approach, 2004-07-01T03:11:40, inner B ring, 86283–86516 km).
+**p.rings.project** is Step 5 in Chain A (SOI B-ring, radlong + RingCylindrical
+analysis pipeline).  Chain B (Rev 014, polar display) does not require this
+module because the `polar` projection from **p.in.rings** already produces a
+Cartesian km×km map with a correct aspect ratio.
 
-A ready-to-run script is available at `$HOME/RSDATA/cassini_soi_b_ring.sh`.
-Run it from inside the GRASS session described below.
+### Chain A — SOI B-ring, radlong + RingCylindrical (analysis)
 
-**Step 0 — Create XY GRASS location** (run once, *before* starting GRASS)
+Image `N1467344155_2.IMG`, 2004-07-01T03:11:40, inner B ring, 86 283–86 516 km.
+Full ready-to-run script: `$HOME/RSDATA/cassini_soi_b_ring.sh`.
 
-```sh
+```bash
+# One-time: create an XY GRASS location for ring-plane coordinates
 grass -c XY ~/grassdata/saturn_rings
-```
 
-Ring-plane coordinates (ring_radius in km, ring_lon in degrees) are
-dimensionless XY values; the XY system avoids any geographic projection.
-
-**Step 1 — Download SPICE kernels** (`p.spice.find`)
-
-```sh
+# ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
 p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
     dest=$HOME/RSDATA/Saturn/kernels
-```
 
-Downloads LSK, SCLK, IK, FK, PCK, SPK, and CK for the requested time.
+# ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
+p.in.astropedia opus_id=co-iss-n1467344155 output=N1467344155_raw
 
-**Step 2 — Import raw PDS3 image** (`r.in.gdal`)
-
-```sh
-r.in.gdal -o \
-    input=$HOME/RSDATA/Saturn/N1467344155_2.IMG \
-    output=N1467344155_raw
-```
-
-**Step 3 — Set ring-plane region** (`g.region`)
-
-```sh
+# ── Step 3: Set radlong output region ────────────────────────────────────────
 # north/south = ring_radius [km],  east/west = ring_longitude [deg]
 g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
-```
 
-**Step 4 — Project raw image to ring-plane coordinates** (`p.in.rings`)
-
-```sh
+# ── Step 4: Project raw image to ring-plane space (p.in.rings) ───────────────
+KDIR="$HOME/RSDATA/Saturn/kernels"
 p.in.rings \
-    input=N1467344155_raw \
-    output=N1467344155_rings \
-    time="2004-07-01T03:11:40.288" \
-    instrument=-82360 \
+    input=N1467344155_raw output=N1467344155_rings \
+    time="2004-07-01T03:11:40" instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
-    kernels="$HOME/RSDATA/Saturn/kernels/lsk/naif0012.tls,\
-$HOME/RSDATA/Saturn/kernels/sclk/cas00172.tsc,\
-$HOME/RSDATA/Saturn/kernels/ik/cas_iss_v10.ti,\
-$HOME/RSDATA/Saturn/kernels/fk/cas_v40.tf,\
-$HOME/RSDATA/Saturn/kernels/pck/cpck_rock_21Jan2011_merged.tpc,\
-$HOME/RSDATA/Saturn/kernels/pck/pck00010.tpc,\
-$HOME/RSDATA/Saturn/kernels/spk/040701AP_SCPSE_04173_04236.bsp,\
-$HOME/RSDATA/Saturn/kernels/ck/04183_04185ra.bc"
-```
+    projection=radlong filter="CL1/CL2" \
+    kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
+${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
+${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
+${KDIR}/spk/040701AP_SCPSE_04173_04236.bsp,\
+${KDIR}/ck/04183_04185ra.bc"
 
-**Step 5 — Apply RingCylindrical projection** ← *this module*
-
-```sh
+# ── Step 5: RingCylindrical projection  ← this module ────────────────────────
 p.rings.project \
-    input=N1467344155_rings \
-    output=N1467344155_ringcyl \
+    input=N1467344155_rings output=N1467344155_ringcyl \
     center_radius=86400 center_lon=66.39
 r.colors map=N1467344155_ringcyl color=grey
-d.rast N1467344155_ringcyl
+
+# ── Step 6: Radial statistics (p.rings.stats) ─────────────────────────────────
+p.rings.stats input=N1467344155_ringcyl \
+    rmin=86250 rmax=86550 bin_width=5 \
+    output=soi_bring_profile.csv radial=soi_bring_radial
 ```
 
 The image covers:
-- Ring radius: 86283–86516 km (inner B ring)
+- Ring radius: 86 283–86 516 km (inner B ring)
 - Ring longitude: 66.27°–66.50°
 - Image scale: ~0.23 km/pixel
 
+### Chain B — Rev 014 B/A ring, polar (display)
+
+Chain B uses `p.in.rings projection=polar` instead of `projection=radlong`,
+producing a Cartesian km×km map directly.  **p.rings.project is not needed**
+in this chain; the display step is simply `d.rast`.  See
+[p.in.rings](p.in.rings.md) or `$HOME/RSDATA/cassini_rev014_polar.sh` for
+the full polar pipeline.
+
 ## SEE ALSO
 
+- [p.spice.find](p.spice.find.md) — download NAIF kernels
+- [p.in.astropedia](p.in.astropedia.md) — fetch raw PDS3 images from OPUS
 - [p.in.rings](p.in.rings.md) — project raw camera image to ring_radius/ring_lon space
-- [p.spice.find](p.spice.find.md) — automatically download NAIF kernels
 - [p.rings.stats](p.rings.stats.md) — statistical analysis of ring data
 - [p.cam2map](p.cam2map.md) — project planetary surface images
 

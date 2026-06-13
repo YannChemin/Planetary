@@ -1,7 +1,9 @@
+# p.in.astropedia - Fetch and import planetary data from USGS Astropedia, NASA PDS, or OPUS
+
 ## DESCRIPTION
 
 *p.in.astropedia* searches for and imports planetary data products from
-two public registries:
+three public registries:
 
 - **USGS Astropedia STAC** — the authoritative catalog of cartographic
   and image products from USGS Astrogeology Science Center, covering
@@ -21,6 +23,13 @@ two public registries:
   active GRASS region** — no full-file download. Pass a catalog key (see the
   `-l` listing) or a direct `https` URL to a `.tif`.
 
+- **OPUS (Ring-Moon Systems Node)** (`opus=` / `opus_id=`) — the PDS
+  Ring-Moon Systems Node observation search and retrieval system, which
+  is the primary archive for Cassini ring-science data including ISS and
+  VIMS. The module queries the OPUS REST API, downloads the `.img` or
+  `.qub` product file (resumable), and imports via `p.in.pds3`.
+  Endpoint: `https://opus.pds-rings.seti.org/api`
+
 On download, the file format is detected by extension and dispatched
 to the appropriate GRASS importer:
 
@@ -29,6 +38,7 @@ to the appropriate GRASS importer:
 | `.tif`/`.tiff` | `r.in.gdal` |
 | `.fits`    | `r.in.gdal`  |
 | `.img`     | `p.in.pds3`  |
+| `.qub`     | `p.in.pds3`  |
 | `.xml`     | `p.in.pds4`  |
 
 ## NOTES
@@ -41,10 +51,6 @@ bounding box [W, S, E, N]. This bbox is forwarded to both the STAC
 `bbox` filter and the PDS API `bbox` parameter so that **only products
 whose footprint intersects the active map window are returned**.
 
-This works transparently for planetary body Locations: GRASS always
-stores region extents in geographic degrees, so the filter is valid even
-for non-Earth datums (Mars, Moon, Mercury …).
-
 Use the **`-r` flag** to disable the spatial pre-filter and search globally.
 
 ```sh
@@ -55,71 +61,44 @@ p.in.astropedia -l search="LOLA DEM"
 p.in.astropedia -lr search="LOLA DEM"
 ```
 
-- An internet connection is required. The module makes HTTPS requests
-  to `stac.astrogeology.usgs.gov` and/or `pds.nasa.gov`.
-- Downloaded files are placed in **`download_dir=`** (default: system
-  temp dir) and deleted after a successful import unless **`-k`** is
-  given or **`download_dir=`** is set explicitly.
-- The `-l` flag lists matching products and exits without downloading,
-  useful for browsing before committing to a large download.
-- When `doi=` is given, the DOI is resolved via `doi.org` and the
-  resulting landing URL is used as a keyword against the Astropedia
-  STAC. If no STAC match is found, the NASA PDS API is tried next.
-- When `lid=` is given, the NASA PDS API is queried first (exact LID
-  match), then Astropedia STAC as fallback.
-- Only the **first** result is downloaded automatically. Use `-l` to
-  inspect all candidates, then re-run with the exact `lid=` or item `id=`
-  of the desired product.
-- Multi-band products: use `band=` to select a specific band (default 1).
-  To import all bands, use *r.in.gdal* directly on the cached file.
-- The `-o` flag is passed to the underlying importer to bypass
-  projection mismatch errors (use with caution).
-
 ### USGS COG mosaics (`cog=`)
 
 - The COG catalog is built in; list it with **`-l`** (no other source needed).
 - `cog=` accepts either a catalog key or a direct HTTPS URL.
-- `cog=` cannot be combined with `doi=`/`lid=`/`search=`.
+- `cog=` cannot be combined with `doi=`/`lid=`/`search=`/`opus=`/`opus_id=`.
 
-#### Local cache and `wget -c` pre-download (since v0.8.5)
+Remote COGs are pre-downloaded with `wget -c` (resumable, 5 retries,
+60-second timeout) into a per-body local cache before `r.import` is
+invoked on the local copy. Cached files are reused whenever the local
+size matches the remote `Content-Length`.
 
-Remote COGs (http/https) are pre-downloaded with `wget -c` (resumable,
-5 retries, 60-second timeout) into a per-body local cache before
-`r.import` is invoked on the local copy. This eliminates the transient
-`/vsicurl/` chunk-read failures that previously bit large HiRISE / PDS
-S3 tiles (`TIFFReadEncodedTile` errors at random row offsets). Cached
-files are reused across runs whenever the local size matches the
-remote `Content-Length`.
+Pass `project=<NAME>` to auto-create a GRASS project at the source's
+native CRS (read via `gdalsrsinfo`) and import into it directly — no
+manual `g.proj` step needed.
 
-Body inference for the cache path (since v0.8.7) checks the URL path
-segments first (`…/mars/…` → `Mars`) and, if no segment matches, falls
-back to scanning the filename basename (`Ceres_Dawn_FC_HAMO_…tif` →
-`Ceres`; `Lunar_LRO_LOLA_…tif` → `Moon`). The cache directory is
-`~/RSDATA/<Body>/`.
+### OPUS and VIMS (`opus=`, `opus_id=`, `vims_channel=`)
 
-#### Auto-project + region alignment (since v0.8.6)
+OPUS is the canonical discovery and download interface for Cassini ring
+science data. Use it to fetch ISS raw images (`.img`) or VIMS
+hyperspectral cubes (`.qub`):
 
-Pass `project=<NAME>` to make the import body-CRS-faithful end to end:
+```sh
+# List recent Cassini VIMS observations of Saturn
+p.in.astropedia -l opus="instrument=Cassini VIMS,target=Saturn" output=x
 
-1. The source's native CRS is read with `gdalsrsinfo` (works for both
-   local files and `/vsicurl/` remote COGs).
-2. A fresh GRASS project of that name is created via `g.proj -c wkt=…`
-   (or an existing project of the same name is reused). The current
-   GRASS session is switched into that project.
-3. `r.import` is invoked with `-o` so cosmetic WKT differences
-   (e.g. "Mars (2015) - Sphere / Ocentric / Equirectangular" versus
-   "Equirectangular Mars") do not trip the strict WKT comparator.
-4. After import, `g.region raster=<output> -s` aligns the active
-   region to the imported raster's extent and resolution, and saves
-   that as the project's `DEFAULT_WIND`. The project is therefore
-   usable out of the box without an additional `g.region` call —
-   subsequent `r.what`, `r.info`, `p.landing`, etc. operate on the
-   full raster by default. The original project is restored at exit.
+# Import VIS channel of the first result
+p.in.astropedia opus="instrument=Cassini VIMS,target=Titan" \
+    vims_channel=vis output=vims_titan_vis
 
-This is the workflow used throughout the multi-body chapter of the
-Planetary Landing Modeling article (Mars Jezero HiRISE, Europa Pwyll
-Galileo SSI, Ceres Occator HAMO, Enceladus SPT Bland 2019 — each one
-ingest plus auto-create-project in a single command).
+# Import a specific VIMS observation by OPUS ID (IR channel)
+p.in.astropedia opus_id=co-vims-v1590123456 vims_channel=ir output=vims_ir
+```
+
+VIMS cubes are PDS3 format; both `.qub` channels (VIS: 96 bands,
+0.35–1.05 µm; IR: 256 bands, 0.88–5.1 µm) are imported via `p.in.pds3`.
+The companion `.lbl` label file is fetched automatically.
+
+Downloads land in `~/RSDATA/<Body>/` and are resumable via `wget -c`.
 
 ## EXAMPLES
 
@@ -135,19 +114,11 @@ p.in.astropedia -l search="MOLA 64ppd" limit=5
 p.in.astropedia -l
 ```
 
-### Window a global LOLA DEM to the active region (no full download)
+### Window a global LOLA DEM to the active region
 
 ```sh
-g.region n=337590 s=130740 e=263040 w=-8850 res=30   # article sector
+g.region n=337590 s=130740 e=263040 w=-8850 res=30
 p.in.astropedia cog=moon_lola_dem_118m output=lola_sector
-```
-
-### Import any USGS COG by direct URL
-
-```sh
-p.in.astropedia \
-    cog=https://planetarymaps.usgs.gov/mosaic/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif \
-    output=mola_sector
 ```
 
 ### Import a Moon LOLA DEM by DOI
@@ -164,41 +135,104 @@ p.in.astropedia \
     output=mola_megt90
 ```
 
-### Browse Astropedia, keep the downloaded file
+## Saturn ring imaging pipelines
 
-```sh
-p.in.astropedia -lk \
-    search="CTX mosaic mars" \
-    download_dir=/data/planetary
+**p.in.astropedia** is Step 2 in both Cassini ring imaging chains — it
+fetches the raw PDS3 image from OPUS so that no manual download is needed.
+The full pipelines are described in [p.in.rings](p.in.rings.md); summaries
+below show where this module fits.
+
+### Chain A — SOI B-ring, radlong + RingCylindrical (analysis)
+
+Image `N1467344155_2.IMG`, 2004-07-01T03:11:40, inner B ring, ≈86 400 km.
+Full ready-to-run script: `$HOME/RSDATA/cassini_soi_b_ring.sh`.
+
+```bash
+# One-time: create an XY GRASS location for ring-plane coordinates
+grass -c XY ~/grassdata/saturn_rings
+
+# ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
+p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
+    dest=$HOME/RSDATA/Saturn/kernels
+
+# ── Step 2: Raw image from OPUS  ← this module ────────────────────────────────
+p.in.astropedia opus_id=co-iss-n1467344155 output=N1467344155_raw
+
+# ── Step 3: Set radlong output region ────────────────────────────────────────
+g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
+
+# ── Step 4: Project raw image to ring-plane space (p.in.rings) ───────────────
+KDIR="$HOME/RSDATA/Saturn/kernels"
+p.in.rings \
+    input=N1467344155_raw output=N1467344155_rings \
+    time="2004-07-01T03:11:40" instrument=-82360 \
+    spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
+    projection=radlong filter="CL1/CL2" \
+    kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
+${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
+${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
+${KDIR}/spk/040701AP_SCPSE_04173_04236.bsp,\
+${KDIR}/ck/04183_04185ra.bc"
+
+# ── Step 5: RingCylindrical projection (p.rings.project) ─────────────────────
+p.rings.project \
+    input=N1467344155_rings output=N1467344155_ringcyl \
+    center_radius=86400 center_lon=66.39
+r.colors map=N1467344155_ringcyl color=grey
+
+# ── Step 6: Radial statistics (p.rings.stats) ─────────────────────────────────
+p.rings.stats input=N1467344155_ringcyl \
+    rmin=86250 rmax=86550 bin_width=5 \
+    output=soi_bring_profile.csv radial=soi_bring_radial
 ```
 
-### ISIS3-equivalent workflow
+### Chain B — Rev 014 B/A ring, polar (display)
 
-ISIS3's `dawnfc2isis` / `mrf2isis` / `kaguyami2isis` each handle one
-sensor format. The Astropedia import approach in GRASS replaces the
-need to know the per-mission converter:
+Image `N1508963064_2.IMG`, 2005-10-23T14:17:00, sub-SC lat ≈+10°.
+Full ready-to-run script: `$HOME/RSDATA/cassini_rev014_polar.sh`.
 
-```sh
-# ISIS3 workflow for a PDS4-distributed CTX product
-pds2isis from=J03_045820_1986.xml to=ctx_scene.cub
+```bash
+# ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
+p.spice.find spacecraft=CASSINI time="2005-10-23T14:17:00" \
+    dest=$HOME/RSDATA/Saturn/kernels
 
-# GRASS equivalent — resolves PDS4 label automatically
-p.in.astropedia lid="urn:nasa:pds:mro_ctx:data:j03_045820_1986" \
-    output=ctx_scene
+# ── Step 2: Raw image from OPUS  ← this module ────────────────────────────────
+p.in.astropedia opus_id=co-iss-n1508963064 output=N1508963064_raw
+
+# ── Step 3: Set polar output region in km × km ───────────────────────────────
+g.region n=130000 s=70000 e=-50000 w=-140000 nsres=50 ewres=50
+
+# ── Step 4: Project to polar ring-plane coordinates (p.in.rings) ─────────────
+KDIR="$HOME/RSDATA/Saturn/kernels"
+p.in.rings \
+    input=N1508963064_raw output=N1508963064_polar \
+    time="2005-10-23T14:17:00" instrument=-82360 \
+    spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
+    projection=polar filter="CL1/CL2" \
+    kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
+${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
+${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
+${KDIR}/spk/050824R_SCPSE_05217_05257.bsp,\
+${KDIR}/ck/05289_05294ra.bc"
+r.colors map=N1508963064_polar color=grey
+d.rast N1508963064_polar
 ```
 
 ## REFERENCES
 
 - USGS Astropedia STAC API: <https://stac.astrogeology.usgs.gov/api/>
 - NASA PDS Federated Search API: <https://pds.nasa.gov/api/search/1/>
+- OPUS Ring-Moon Systems Node API: <https://opus.pds-rings.seti.org/api/>
 - STAC specification: <https://stacspec.org/>
 - PDS4 Information Model: <https://pds.nasa.gov/datastandards/documents/>
 
 ## SEE ALSO
 
-*[p.in.pds4](p.in.pds4.md),
-[p.in.pds3](p.in.pds3.md),
-[p.in.isis](p.in.isis.md)*
+- [p.spice.find](p.spice.find.md) — download NAIF SPICE kernels
+- [p.in.rings](p.in.rings.md) — project raw camera image to ring-plane space
+- [p.rings.project](p.rings.project.md) — RingCylindrical projection
+- [p.rings.stats](p.rings.stats.md) — radial brightness statistics
+- [p.in.pds4](p.in.pds4.md), [p.in.pds3](p.in.pds3.md), [p.in.isis](p.in.isis.md)
 
 ## AUTHOR
 
