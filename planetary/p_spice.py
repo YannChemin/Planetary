@@ -236,6 +236,32 @@ def meta_dir():
     return os.path.join(spice_cache_dir(), "meta")
 
 
+def mapset_spice_dir():
+    """Return the ``spice/`` subdirectory inside the active GRASS mapset.
+
+    Kernel downloads scoped to a mapset live here so each project carries
+    its own kernel set and modules can check a local cache before fetching.
+    Falls back to the user-wide ``spice_cache_dir()`` when no active mapset
+    is reachable (outside a GRASS session or GISRC not set).
+    """
+    gisrc = os.environ.get("GISRC")
+    if not gisrc:
+        return spice_cache_dir()
+    try:
+        env = {}
+        with open(gisrc) as f:
+            for line in f:
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    env[k.strip()] = v.strip()
+        mapset_path = os.path.join(
+            env["GISDBASE"], env["LOCATION_NAME"], env["MAPSET"]
+        )
+        return os.path.join(mapset_path, "spice")
+    except (KeyError, OSError):
+        return spice_cache_dir()
+
+
 # ── mapset configuration bridge (lazy GRASS import) ─────────────────────────
 
 _MAPSET_KEYS = ("P_SPICE_META", "P_SPICE_TARGET",

@@ -64,8 +64,9 @@ case "$1" in
                 ln -sf "$f" "$gisbase/scripts/$(basename "$f")"
             done
 
-            # Link compiled binary modules
-            for f in "$ADDON_DIR"/bin/p.* "$ADDON_DIR"/bin/g.gui.*; do
+            # Link compiled binary modules and SPICE utilities
+            for f in "$ADDON_DIR"/bin/p.* "$ADDON_DIR"/bin/g.gui.* \
+                     "$ADDON_DIR"/bin/spice-*; do
                 [ -f "$f" ] || continue
                 ln -sf "$f" "$gisbase/bin/$(basename "$f")"
             done

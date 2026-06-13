@@ -30,7 +30,7 @@
 
 # %option G_OPT_M_DIR
 # % key: dest
-# % label: Override cache directory (default: <grass-config>/p_spice)
+# % label: Override cache directory (default: spice/ inside the active GRASS mapset)
 # % required: no
 # %end
 
@@ -203,13 +203,14 @@ def main():
 
     bundle = BUNDLES[opt_bundle]
 
-    # Resolve cache layout.
+    # Resolve cache layout.  Default: spice/ inside the active mapset so each
+    # project carries its own kernels and modules can check a local cache first.
     if opt_dest:
-        kdir = os.path.join(opt_dest, "kernels")
-        mdir = os.path.join(opt_dest, "meta")
+        base = opt_dest
     else:
-        kdir = p_spice.kernels_dir()
-        mdir = p_spice.meta_dir()
+        base = p_spice.mapset_spice_dir()
+    kdir = os.path.join(base, "kernels")
+    mdir = os.path.join(base, "meta")
     os.makedirs(kdir, exist_ok=True)
     os.makedirs(mdir, exist_ok=True)
 

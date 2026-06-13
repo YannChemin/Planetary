@@ -23,7 +23,8 @@ case "$1" in
             for s in "$gisbase"/scripts/p.* "$gisbase/scripts/g.gui.landing"; do
                 [ -L "$s" ] && rm -f "$s"
             done
-            for b in "$gisbase"/bin/p.* "$gisbase"/bin/g.gui.*; do
+            for b in "$gisbase"/bin/p.* "$gisbase"/bin/g.gui.* \
+                     "$gisbase"/bin/spice-*; do
                 [ -L "$b" ] && rm -f "$b"
             done
             echo "grass-planetary-addons: removed symlinks from $gisbase"

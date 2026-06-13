@@ -49,6 +49,8 @@ override_dh_auto_build:
 	# ── libpsunmask.so (ctypes library, standalone build) ─────────────────
 	$(MAKE) -C planetary/p.sunmask -f Makefile.standalone \
 	    GISBASE=$(GRASS_PREFIX)
+	# ── SPICE utility programs ────────────────────────────────────────────
+	$(MAKE) -C cspice-pkg/utils CSPICE_BUILD=$(CSPICE_BUILD)
 
 override_dh_auto_install:
 	# ── planetary-cspice ──────────────────────────────────────────────────
@@ -104,6 +106,11 @@ override_dh_auto_install:
 	    [ -f "$$f" ] && install -m 0644 $$f \
 	        $(ADDONS)/missions/$$(basename $$f) || true; \
 	done
+	# SPICE utility programs → $(ADDONS)/bin/
+	install -m 0755 cspice-pkg/utils/spice-brief   $(ADDONS)/bin/
+	install -m 0755 cspice-pkg/utils/spice-ckbrief $(ADDONS)/bin/
+	install -m 0755 cspice-pkg/utils/spice-chronos $(ADDONS)/bin/
+	install -m 0755 cspice-pkg/utils/spice-commnt  $(ADDONS)/bin/
 	# Optional helper scripts
 	if [ -f scripts/train_p3.py ]; then \
 	    install -m 0755 scripts/train_p3.py \
@@ -146,4 +153,5 @@ clean:
 	$(MAKE) -C planetary MODULE_TOPDIR=$(GRASS_PREFIX) clean 2>/dev/null || true
 	$(MAKE) -C planetary/p.sunmask -f Makefile.standalone clean 2>/dev/null || true
 	$(MAKE) -C planetary/p.horizon.gpu -f Makefile.standalone clean 2>/dev/null || true
+	$(MAKE) -C cspice-pkg/utils clean 2>/dev/null || true
 	find planetary -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true

@@ -1,53 +1,90 @@
+# p.rings.project - Project a raster to/from ring-plane cylindrical coordinates
+
 ## DESCRIPTION
 
-*p.rings.project* reprojects a planetary ring-plane image from sensor
-geometry into ring-plane (radius, longitude) coordinates using one of
-three ring-plane map projections from the `p_projection_planet` library:
+**p.rings.project** applies or inverts the RingCylindrical projection for
+planetary ring imaging.  It operates on a raster that is already in
+ring_radius/ring_longitude coordinate space — created by **p.in.rings** —
+and reprojects it to a Cartesian (x, y) ring-plane map, or vice versa.
 
-| Projection | Description |
-|---|---|
-| **RingCylindrical** | Radius vs. longitude (linear both axes) |
-| **LunarAzimuthalEA** | Azimuthal equal-area for ring-plane |
-| **UpturnedTA** | Upturned ellipsoid transverse azimuthal (Newton-Raphson inverse) |
+The current GRASS computational region defines the output grid. In the
+**forward direction** (default), east/west of the region are interpreted as
+ring_longitude [deg] and north/south as ring_radius [km].  In the **inverse
+direction** (`-i` flag), the roles are reversed.
 
-Input: a sensor-geometry ring image with SPICE kernels attached via
-*p.spiceinit*. Output: ring-plane GRASS raster.
+**p.rings.project does not use SPICE** — it is a pure geometric
+coordinate transform.  The raw-camera → ring_radius/ring_lon step is
+handled by **p.in.rings**.
 
-Parameters: **rmin**, **rmax** (ring radius range, km), **lon_min**,
-**lon_max** (longitude range, degrees), **res** (output resolution,
-km/pixel).
+## USAGE
 
-## EXAMPLES
-
-Project a Cassini ISS ring image to ring-cylindrical coordinates:
-
-```sh
-p.spiceinit input=cassini_iss_ring ...
-p.rings.project input=cassini_iss_ring \
-    projection=RingCylindrical \
-    rmin=74500 rmax=140220 res=1 \
-    output=saturn_rings_projected
+```
+p.rings.project input=<raster> output=<raster> \
+    center_radius=<km> [center_lon=<deg>] [-i] [-c]
 ```
 
-## REFERENCES
+| Parameter | Description |
+|---|---|
+| `center_radius` | Ring radius at the projection centre [km] |
+| `center_lon` | Ring longitude at the projection centre [deg], default 0 |
+| `-i` | Inverse: (x,y) → (ring_radius, ring_lon) |
+| `-c` | Clockwise ring longitude direction |
 
-- French, R.G. et al. (1993). Geometry of the Saturn system from the
-  3 July 1989 occultation of 28 Sgr. *Icarus* 103(2):163–214.
-  doi:[10.1006/icar.1993.1066](https://doi.org/10.1006/icar.1993.1066)
+## EXAMPLE
 
-- Porco, C.C. et al. (2005). Cassini Imaging Science: Initial results
-  on Saturn's rings. *Science* 307(5713):1226–1236.
-  doi:[10.1126/science.1108056](https://doi.org/10.1126/science.1108056)
+Full pipeline for Cassini ISS NAC image `N1467344155_2.IMG`
+(SOI approach, 2004-07-01T03:11:40, inner B ring):
 
-## NOTES
+```sh
+# 1. Create XY GRASS location for ring coordinates
+grass -c XY ~/grassdata/saturn_rings
 
-The Newton-Raphson inversion in the UpturnedTA projection may diverge for pixels very close to the ring-plane edge; such pixels are set to NULL. Maximum iteration count and convergence tolerance can be set via `maxiter=` and `eps=`. All three projections assume a flat, infinitely thin ring plane.
+# 2. Import raw PDS3 image (pixel coordinates)
+r.in.gdal -o \
+    input=/path/to/N1467344155_2.IMG \
+    output=N1467344155_raw
+
+# 3. Set output region: ring_radius [km] N/S, ring_lon [deg] E/W
+g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
+
+# 4. Project raw image to ring-plane coordinates using SPICE
+p.in.rings \
+    input=N1467344155_raw \
+    output=N1467344155_rings \
+    time="2004-07-01T03:11:40.288" \
+    instrument=-82360 \
+    spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
+    kernels="naif0012.tls,cas00172.tsc,cas_iss_v10.ti,cas_v40.tf,\
+cpck_rock_21Jan2011_merged.tpc,pck00010.tpc,\
+040701AP_SCPSE_04173_04236.bsp,04183_04185ra.bc"
+
+# 5. Apply RingCylindrical projection centred on inner B ring
+p.rings.project \
+    input=N1467344155_rings \
+    output=N1467344155_ringcyl \
+    center_radius=86400 center_lon=66.39
+
+# 6. Display or export
+r.colors map=N1467344155_ringcyl color=grey
+```
+
+The image covers:
+- Ring radius: 86283–86516 km (inner B ring)
+- Ring longitude: 66.27°–66.50°
+- Image scale: ~0.23 km/pixel
 
 ## SEE ALSO
 
-*[p.rings.stats](p.rings.stats.md),
-[p.spiceinit](p.spiceinit.md),
-[p.cam2map](p.cam2map.md)*
+- [p.in.rings](p.in.rings.md) — project raw camera image to ring_radius/ring_lon space
+- [p.spice.find](p.spice.find.md) — automatically download NAIF kernels
+- [p.rings.stats](p.rings.stats.md) — statistical analysis of ring data
+- [p.cam2map](p.cam2map.md) — project planetary surface images
+
+## REFERENCES
+
+- Porco, C.C. et al. (2005). Cassini Imaging Science: Initial results
+  on Saturn's rings. *Science* 307:1226–1236.
+  doi:[10.1126/science.1108056](https://doi.org/10.1126/science.1108056)
 
 ## AUTHOR
 
