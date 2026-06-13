@@ -1015,10 +1015,13 @@ def main():
             kind = f"VIMS {opt_vims_channel.upper()} cube"
         else:
             kind = "PDS3 image"
+        # For detached-label PDS3 files (.lbl + .img), pass the .lbl so
+        # p_pds can resolve the data pointer correctly.
+        import_path = lbl_fname if (lbl_fname and os.path.isfile(lbl_fname)) else dest
         gs.message(f"Importing {kind} via p.in.pds3 …")
         gs.run_command("p.in.pds3",
                        flags="o" if flag_override else "",
-                       input=dest, output=opt_output, overwrite=True)
+                       input=import_path, output=opt_output, overwrite=True)
         _align_region_to_raster(opt_output, save_default=False)
 
         # Infer sensor from OPUS ID prefix (co-iss-n* / co-iss-w* / co-vims-*).
