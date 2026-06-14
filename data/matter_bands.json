@@ -1896,6 +1896,133 @@
               "doi": "10.1051/0004-6361/201935297"
             }
           ]
+        },
+        {
+          "name": "hdo_atm",
+          "display_name": "HDO (semi-heavy water) \u2014 Venus D/H tracer",
+          "formula": "HDO",
+          "absorption_bands": [
+            {
+              "center": 1.38,
+              "left": 1.32,
+              "right": 1.44,
+              "type": "O-H_combination",
+              "note": "Shifted from H2O 1.37 \u00b5m; D/H ratio diagnostic of Venus water history"
+            },
+            {
+              "center": 2.55,
+              "left": 2.47,
+              "right": 2.63,
+              "type": "O-D_combination"
+            },
+            {
+              "center": 3.67,
+              "left": 3.55,
+              "right": 3.8,
+              "type": "O-D_stretch_fundamental",
+              "note": "EnVision VenSpec-M 2.3 \u00b5m window accessible"
+            }
+          ],
+          "sensors": [
+            "EnVision_VenSpec-M",
+            "DAVINCI_VSTAR",
+            "VIRA"
+          ],
+          "detection_range_um": [
+            1.3,
+            3.9
+          ],
+          "refs": [
+            {
+              "cite": "B\u00e9zard et al. 1990",
+              "doi": "10.1038/345508a0"
+            },
+            {
+              "cite": "Marcq et al. 2021",
+              "doi": "10.1029/2020JE006686"
+            }
+          ]
+        },
+        {
+          "name": "sulfuric_acid_aerosol",
+          "display_name": "H2SO4 aerosol (cloud droplets)",
+          "formula": "H2SO4(aq)",
+          "absorption_bands": [
+            {
+              "center": 2.48,
+              "left": 2.38,
+              "right": 2.58,
+              "type": "S-OH_combination",
+              "note": "Cloud particle size diagnostic; 75\u201385 wt% H2SO4"
+            },
+            {
+              "center": 3.7,
+              "left": 3.55,
+              "right": 3.85,
+              "type": "S-OH_stretch"
+            },
+            {
+              "center": 9.0,
+              "left": 8.3,
+              "right": 9.7,
+              "type": "S-O_stretching_fundamental",
+              "note": "TIR cloud deck opacity"
+            }
+          ],
+          "sensors": [
+            "EnVision_VenSpec-M",
+            "VIRTIS_VenusExpress",
+            "Akatsuki_IR2"
+          ],
+          "detection_range_um": [
+            2.3,
+            10.0
+          ],
+          "refs": [
+            {
+              "cite": "Palmer & Williams 1975",
+              "doi": "10.1364/AO.14.000208"
+            },
+            {
+              "cite": "Pollack et al. 1993",
+              "doi": "10.1016/0019-1035(93)90244-7"
+            }
+          ]
+        },
+        {
+          "name": "co_atm_venus",
+          "display_name": "CO (atmosphere, lower cloud + surface windows)",
+          "formula": "CO",
+          "absorption_bands": [
+            {
+              "center": 2.33,
+              "left": 2.28,
+              "right": 2.38,
+              "type": "vibrational_overtone",
+              "note": "2.3 \u00b5m surface window; thermodynamic proxy for lower atmosphere"
+            },
+            {
+              "center": 4.67,
+              "left": 4.55,
+              "right": 4.8,
+              "type": "vibrational_fundamental"
+            }
+          ],
+          "sensors": [
+            "EnVision_VenSpec-M",
+            "VIRTIS_VenusExpress",
+            "DAVINCI_VSTAR"
+          ],
+          "detection_range_um": [
+            2.2,
+            4.9
+          ],
+          "refs": [
+            {
+              "cite": "Meadows & Crisp 1996",
+              "doi": "10.1029/96JE01589"
+            }
+          ]
         }
       ]
     },
@@ -2021,6 +2148,136 @@
             {
               "cite": "Tobie et al. 2019",
               "doi": "10.1029/2018GL080228"
+            }
+          ]
+        },
+        {
+          "name": "hcn_ice_surface",
+          "display_name": "HCN ice (surface) \u2014 Dragonfly target",
+          "formula": "HCN",
+          "absorption_bands": [
+            {
+              "center": 1.5,
+              "left": 1.45,
+              "right": 1.56,
+              "type": "C-H_combination_overtone"
+            },
+            {
+              "center": 3.02,
+              "left": 2.94,
+              "right": 3.1,
+              "type": "C-H_stretch",
+              "note": "Ice phase; shifted from gas-phase 3.01 \u00b5m"
+            },
+            {
+              "center": 4.76,
+              "left": 4.6,
+              "right": 4.92,
+              "type": "C-N_stretch_fundamental",
+              "note": "Cassini/VIMS window around 4.78 \u00b5m surface channel"
+            }
+          ],
+          "sensors": [
+            "Dragonfly_DraMS",
+            "JWST_NIRSpec",
+            "Cassini_VIMS"
+          ],
+          "detection_range_um": [
+            1.4,
+            5.0
+          ],
+          "refs": [
+            {
+              "cite": "Dello Russo & Khanna 1996",
+              "doi": "10.1006/icar.1996.0028"
+            },
+            {
+              "cite": "Barnes et al. 2021",
+              "doi": "10.1089/ast.2020.2253"
+            }
+          ]
+        },
+        {
+          "name": "hc3n_ice",
+          "display_name": "Cyanoacetylene HC3N ice",
+          "formula": "HC3N",
+          "absorption_bands": [
+            {
+              "center": 3.29,
+              "left": 3.22,
+              "right": 3.36,
+              "type": "C-H_stretch"
+            },
+            {
+              "center": 4.73,
+              "left": 4.6,
+              "right": 4.87,
+              "type": "C-N_stretch"
+            },
+            {
+              "center": 15.08,
+              "left": 14.3,
+              "right": 15.9,
+              "type": "C-C-C_bending",
+              "note": "Cassini/CIRS detection in stratosphere"
+            }
+          ],
+          "sensors": [
+            "Cassini_CIRS",
+            "JWST_MIRI",
+            "Dragonfly_DraMS"
+          ],
+          "detection_range_um": [
+            3.1,
+            16.0
+          ],
+          "refs": [
+            {
+              "cite": "Coustenis et al. 2007",
+              "doi": "10.1016/j.icarus.2006.09.024"
+            },
+            {
+              "cite": "Khanna 2005",
+              "doi": "10.1016/j.saa.2004.08.045"
+            }
+          ]
+        },
+        {
+          "name": "benzene_ice_surface",
+          "display_name": "Benzene ice (polar surface deposits)",
+          "formula": "C6H6",
+          "absorption_bands": [
+            {
+              "center": 1.685,
+              "left": 1.64,
+              "right": 1.73,
+              "type": "C-H_combination"
+            },
+            {
+              "center": 3.22,
+              "left": 3.14,
+              "right": 3.3,
+              "type": "C-H_stretch_aromatic",
+              "note": "Ice phase; detected by Cassini/VIMS near poles"
+            }
+          ],
+          "sensors": [
+            "Cassini_VIMS",
+            "Dragonfly_DraMS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.6,
+            3.4
+          ],
+          "refs": [
+            {
+              "cite": "Clark et al. 2010",
+              "doi": "10.1016/j.icarus.2010.08.008"
+            },
+            {
+              "cite": "Niemann et al. 2005",
+              "doi": "10.1038/nature04122"
             }
           ]
         }
@@ -2431,6 +2688,136 @@
             {
               "cite": "Trumbo & Brown 2023",
               "doi": "10.1126/science.adg4279"
+            }
+          ]
+        }
+      ],
+      "minerals": [
+        {
+          "name": "silica_hydrous",
+          "display_name": "Hydrous silica / opaline SiO2",
+          "formula": "SiO2\u00b7nH2O",
+          "absorption_bands": [
+            {
+              "center": 1.41,
+              "left": 1.35,
+              "right": 1.48,
+              "type": "O-H_combination",
+              "note": "Structurally bound OH in amorphous SiO2"
+            },
+            {
+              "center": 1.91,
+              "left": 1.84,
+              "right": 1.98,
+              "type": "O-H_combination"
+            },
+            {
+              "center": 2.21,
+              "left": 2.15,
+              "right": 2.27,
+              "type": "Si-OH_stretching",
+              "note": "Key Hand & Carlson 2007 band; overlaps with sulfate"
+            }
+          ],
+          "sensors": [
+            "Galileo_NIMS",
+            "Europa_Clipper_MISE",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.3,
+            2.4
+          ],
+          "refs": [
+            {
+              "cite": "Hand & Carlson 2007",
+              "doi": "10.1126/science.1143769"
+            },
+            {
+              "cite": "Dalton et al. 2012",
+              "doi": "10.1016/j.icarus.2012.05.008"
+            }
+          ]
+        },
+        {
+          "name": "sodium_bicarbonate",
+          "display_name": "Sodium bicarbonate NaHCO3",
+          "formula": "NaHCO3",
+          "absorption_bands": [
+            {
+              "center": 2.54,
+              "left": 2.47,
+              "right": 2.61,
+              "type": "CO3_combination",
+              "note": "JWST NIRSpec detection Trumbo et al. 2022; endogenous ocean salt"
+            },
+            {
+              "center": 3.5,
+              "left": 3.35,
+              "right": 3.65,
+              "type": "CO3_asymmetric_stretch"
+            }
+          ],
+          "sensors": [
+            "JWST_NIRSpec",
+            "Europa_Clipper_MISE"
+          ],
+          "detection_range_um": [
+            2.4,
+            3.8
+          ],
+          "refs": [
+            {
+              "cite": "Trumbo & Brown 2022",
+              "doi": "10.1126/science.abg4155"
+            },
+            {
+              "cite": "Trumbo et al. 2023",
+              "doi": "10.1126/science.adg4279"
+            }
+          ]
+        },
+        {
+          "name": "iron_chloride_hydrate",
+          "display_name": "Iron chloride hydrate FeCl2\u00b74H2O",
+          "formula": "FeCl2\u00b74H2O",
+          "absorption_bands": [
+            {
+              "center": 0.98,
+              "left": 0.91,
+              "right": 1.06,
+              "type": "Fe2+_electronic",
+              "note": "Fe2+ crystal-field transition; diagnostic of endogenous iron brine"
+            },
+            {
+              "center": 1.55,
+              "left": 1.48,
+              "right": 1.62,
+              "type": "H2O_combination"
+            },
+            {
+              "center": 2.12,
+              "left": 2.05,
+              "right": 2.2,
+              "type": "H2O+Fe_combination"
+            }
+          ],
+          "sensors": [
+            "Europa_Clipper_MISE",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.85,
+            2.3
+          ],
+          "refs": [
+            {
+              "cite": "McCord et al. 2010",
+              "doi": "10.1016/j.epsl.2010.08.004"
+            },
+            {
+              "cite": "Carlson et al. 2009",
+              "doi": "10.1016/j.icarus.2009.06.029"
             }
           ]
         }
@@ -3544,6 +3931,1110 @@
           ]
         }
       ]
+    },
+    "ganymede": {
+      "minerals": [
+        {
+          "name": "salt_hydrate_mgso4",
+          "display_name": "MgSO4 hydrate (salt deposit)",
+          "formula": "MgSO4\u00b7nH2O",
+          "absorption_bands": [
+            {
+              "center": 1.78,
+              "left": 1.72,
+              "right": 1.84,
+              "type": "H2O+SO4_combination"
+            },
+            {
+              "center": 2.22,
+              "left": 2.15,
+              "right": 2.3,
+              "type": "SO4_H2O_combination",
+              "note": "Bright terrain salt residue from ocean brine migration"
+            }
+          ],
+          "sensors": [
+            "JUICE_MAJIS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.6,
+            2.4
+          ],
+          "refs": [
+            {
+              "cite": "Ligier et al. 2019",
+              "doi": "10.1093/mnras/stz1783"
+            },
+            {
+              "cite": "Trumbo et al. 2019",
+              "doi": "10.1126/sciadv.aaw7123"
+            }
+          ]
+        }
+      ],
+      "ices": [
+        {
+          "name": "water_ice_ganymede",
+          "display_name": "H2O ice (mixed crystalline/amorphous)",
+          "formula": "H2O",
+          "absorption_bands": [
+            {
+              "center": 0.81,
+              "left": 0.76,
+              "right": 0.86,
+              "type": "overtone_combination"
+            },
+            {
+              "center": 1.04,
+              "left": 0.97,
+              "right": 1.11,
+              "type": "overtone_combination"
+            },
+            {
+              "center": 1.25,
+              "left": 1.18,
+              "right": 1.32,
+              "type": "combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.44,
+              "right": 1.6,
+              "type": "combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.93,
+              "right": 2.12,
+              "type": "combination"
+            },
+            {
+              "center": 3.0,
+              "left": 2.8,
+              "right": 3.2,
+              "type": "O-H_stretch_fundamental"
+            }
+          ],
+          "sensors": [
+            "JUICE_MAJIS",
+            "NIMS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.7,
+            3.3
+          ],
+          "refs": [
+            {
+              "cite": "Grundy et al. 1999",
+              "doi": "10.1016/S0019-1035(98)00143-8"
+            },
+            {
+              "cite": "Ligier et al. 2019",
+              "doi": "10.1093/mnras/stz1783"
+            }
+          ]
+        },
+        {
+          "name": "co2_ice_ganymede",
+          "display_name": "CO2 ice (trailing hemisphere)",
+          "formula": "CO2",
+          "absorption_bands": [
+            {
+              "center": 1.966,
+              "left": 1.9,
+              "right": 2.02,
+              "type": "v1+v3_combination"
+            },
+            {
+              "center": 2.01,
+              "left": 1.95,
+              "right": 2.07,
+              "type": "2v3_overtone"
+            },
+            {
+              "center": 2.7,
+              "left": 2.6,
+              "right": 2.8,
+              "type": "v1+v2+v3"
+            },
+            {
+              "center": 4.26,
+              "left": 4.1,
+              "right": 4.42,
+              "type": "v3_fundamental"
+            }
+          ],
+          "sensors": [
+            "JUICE_MAJIS",
+            "NIMS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.8,
+            4.5
+          ],
+          "refs": [
+            {
+              "cite": "Cartwright et al. 2020",
+              "doi": "10.3847/2041-8213/ab7ede"
+            },
+            {
+              "cite": "Hibbitts et al. 2003",
+              "doi": "10.1029/2002JE001956"
+            }
+          ]
+        },
+        {
+          "name": "so2_frost_trace",
+          "display_name": "SO2 frost trace (Io plasma torus fallout)",
+          "formula": "SO2",
+          "absorption_bands": [
+            {
+              "center": 0.28,
+              "left": 0.22,
+              "right": 0.33,
+              "type": "electronic_UV",
+              "note": "Implanted from Io's plasma torus; near-polar concentrations"
+            }
+          ],
+          "sensors": [
+            "HST_ACS",
+            "JUICE_UVS"
+          ],
+          "detection_range_um": [
+            0.22,
+            0.35
+          ],
+          "refs": [
+            {
+              "cite": "Hendrix et al. 2008",
+              "doi": "10.1016/j.icarus.2008.01.015"
+            }
+          ]
+        }
+      ],
+      "gases": [],
+      "organics": [
+        {
+          "name": "dark_material_ganymede",
+          "display_name": "Dark non-ice material (lag deposit)",
+          "formula": "?",
+          "absorption_bands": [
+            {
+              "center": 3.4,
+              "left": 3.3,
+              "right": 3.55,
+              "type": "C-H_aliphatic",
+              "note": "Organic-rich lag; featureless UV-VIS slope + 3.4 \u00b5m C-H"
+            },
+            {
+              "center": 0.7,
+              "left": 0.6,
+              "right": 0.8,
+              "type": "ferric_oxide_electronic",
+              "note": "Broad reddening from irradiation products"
+            }
+          ],
+          "sensors": [
+            "JUICE_MAJIS",
+            "NIMS"
+          ],
+          "detection_range_um": [
+            0.55,
+            3.6
+          ],
+          "refs": [
+            {
+              "cite": "Showman & Malhotra 1999",
+              "doi": "10.1126/science.286.5437.77"
+            },
+            {
+              "cite": "Hibbitts et al. 2003",
+              "doi": "10.1029/2002JE001956"
+            }
+          ]
+        }
+      ],
+      "liquids": []
+    },
+    "callisto": {
+      "minerals": [],
+      "ices": [
+        {
+          "name": "water_ice_callisto",
+          "display_name": "H2O ice (spatially segregated patches)",
+          "formula": "H2O",
+          "absorption_bands": [
+            {
+              "center": 1.04,
+              "left": 0.97,
+              "right": 1.11,
+              "type": "overtone_combination"
+            },
+            {
+              "center": 1.25,
+              "left": 1.18,
+              "right": 1.32,
+              "type": "combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.44,
+              "right": 1.6,
+              "type": "combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.93,
+              "right": 2.12,
+              "type": "combination"
+            },
+            {
+              "center": 3.0,
+              "left": 2.8,
+              "right": 3.2,
+              "type": "O-H_stretch"
+            }
+          ],
+          "sensors": [
+            "JUICE_MAJIS",
+            "NIMS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.9,
+            3.3
+          ],
+          "refs": [
+            {
+              "cite": "Moore et al. 2004",
+              "doi": "10.1016/j.icarus.2004.01.018"
+            }
+          ]
+        },
+        {
+          "name": "co2_ice_callisto",
+          "display_name": "CO2 ice (strongest Galilean signature)",
+          "formula": "CO2",
+          "absorption_bands": [
+            {
+              "center": 1.966,
+              "left": 1.9,
+              "right": 2.02,
+              "type": "v1+v3_combination",
+              "note": "Strongest CO2 band of any Galilean moon; trailing/pole enhanced"
+            },
+            {
+              "center": 2.01,
+              "left": 1.95,
+              "right": 2.07,
+              "type": "2v3_overtone"
+            },
+            {
+              "center": 4.26,
+              "left": 4.1,
+              "right": 4.42,
+              "type": "v3_fundamental"
+            }
+          ],
+          "sensors": [
+            "JUICE_MAJIS",
+            "NIMS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.8,
+            4.5
+          ],
+          "refs": [
+            {
+              "cite": "Hibbitts et al. 2000",
+              "doi": "10.1029/1999JE001101"
+            },
+            {
+              "cite": "Cartwright et al. 2020",
+              "doi": "10.3847/2041-8213/ab7ede"
+            }
+          ]
+        }
+      ],
+      "gases": [],
+      "organics": [
+        {
+          "name": "dark_material_callisto",
+          "display_name": "Dark lag deposit (C-rich + hydrated)",
+          "formula": "C+organics",
+          "absorption_bands": [
+            {
+              "center": 0.67,
+              "left": 0.58,
+              "right": 0.76,
+              "type": "ferric_electronic",
+              "note": "Most surface area; broad low-albedo component"
+            },
+            {
+              "center": 3.4,
+              "left": 3.3,
+              "right": 3.55,
+              "type": "C-H_aliphatic"
+            }
+          ],
+          "sensors": [
+            "JUICE_MAJIS",
+            "NIMS"
+          ],
+          "detection_range_um": [
+            0.5,
+            3.6
+          ],
+          "refs": [
+            {
+              "cite": "Moore et al. 2004",
+              "doi": "10.1016/j.icarus.2004.01.018"
+            },
+            {
+              "cite": "Cartwright et al. 2020",
+              "doi": "10.3847/2041-8213/ab7ede"
+            }
+          ]
+        }
+      ],
+      "liquids": []
+    },
+    "triton": {
+      "minerals": [],
+      "ices": [
+        {
+          "name": "n2_ice",
+          "display_name": "N2 ice (dominant surface ice)",
+          "formula": "N2",
+          "absorption_bands": [
+            {
+              "center": 2.148,
+              "left": 2.138,
+              "right": 2.158,
+              "type": "vibrational_quadrupole",
+              "note": "Very sharp; temperature-sensitive position (\u03b1\u2194\u03b2 phase 35.6 K); best volatile thermometer"
+            },
+            {
+              "center": 4.3,
+              "left": 4.2,
+              "right": 4.4,
+              "type": "vibrational_fundamental_complexed",
+              "note": "Collision-induced absorption; broad, weak"
+            }
+          ],
+          "sensors": [
+            "IRTF",
+            "Keck_NIRC2",
+            "future_Triton_orbiter"
+          ],
+          "detection_range_um": [
+            2.1,
+            4.5
+          ],
+          "refs": [
+            {
+              "cite": "Cruikshank et al. 1993",
+              "doi": "10.1126/science.261.5122.742"
+            },
+            {
+              "cite": "Quirico et al. 1999",
+              "doi": "10.1016/S0019-1035(99)00143-X"
+            }
+          ]
+        },
+        {
+          "name": "ch4_ice_triton",
+          "display_name": "CH4 ice (diluted in N2 matrix)",
+          "formula": "CH4",
+          "absorption_bands": [
+            {
+              "center": 0.73,
+              "left": 0.7,
+              "right": 0.76,
+              "type": "combination_overtone"
+            },
+            {
+              "center": 0.79,
+              "left": 0.76,
+              "right": 0.82,
+              "type": "combination_overtone"
+            },
+            {
+              "center": 0.89,
+              "left": 0.86,
+              "right": 0.92,
+              "type": "combination_overtone"
+            },
+            {
+              "center": 1.667,
+              "left": 1.62,
+              "right": 1.72,
+              "type": "v2+v3_combination"
+            },
+            {
+              "center": 1.798,
+              "left": 1.75,
+              "right": 1.85,
+              "type": "combination"
+            },
+            {
+              "center": 2.32,
+              "left": 2.26,
+              "right": 2.38,
+              "type": "v1+v4_combination"
+            }
+          ],
+          "sensors": [
+            "IRTF",
+            "Keck_NIRC2",
+            "future_Triton_orbiter"
+          ],
+          "detection_range_um": [
+            0.68,
+            2.45
+          ],
+          "refs": [
+            {
+              "cite": "Cruikshank et al. 1993",
+              "doi": "10.1126/science.261.5122.742"
+            },
+            {
+              "cite": "Grundy et al. 2010",
+              "doi": "10.1016/j.icarus.2010.07.007"
+            }
+          ]
+        },
+        {
+          "name": "co_ice_triton",
+          "display_name": "CO ice (minor volatile)",
+          "formula": "CO",
+          "absorption_bands": [
+            {
+              "center": 1.578,
+              "left": 1.56,
+              "right": 1.6,
+              "type": "vibrational_overtone",
+              "note": "Shifted from pure CO by N2 matrix; Triton and Pluto diagnostic"
+            },
+            {
+              "center": 2.352,
+              "left": 2.33,
+              "right": 2.37,
+              "type": "vibrational_fundamental"
+            }
+          ],
+          "sensors": [
+            "IRTF",
+            "future_Triton_orbiter"
+          ],
+          "detection_range_um": [
+            1.55,
+            2.4
+          ],
+          "refs": [
+            {
+              "cite": "Cruikshank et al. 1993",
+              "doi": "10.1126/science.261.5122.742"
+            }
+          ]
+        },
+        {
+          "name": "co2_ice_triton",
+          "display_name": "CO2 ice (south polar cap region)",
+          "formula": "CO2",
+          "absorption_bands": [
+            {
+              "center": 1.43,
+              "left": 1.37,
+              "right": 1.49,
+              "type": "v1+v3"
+            },
+            {
+              "center": 1.966,
+              "left": 1.9,
+              "right": 2.02,
+              "type": "v1+v3_combination"
+            },
+            {
+              "center": 2.01,
+              "left": 1.95,
+              "right": 2.07,
+              "type": "2v3"
+            },
+            {
+              "center": 2.7,
+              "left": 2.6,
+              "right": 2.8,
+              "type": "v1+v2+v3"
+            }
+          ],
+          "sensors": [
+            "IRTF",
+            "future_Triton_orbiter"
+          ],
+          "detection_range_um": [
+            1.3,
+            2.9
+          ],
+          "refs": [
+            {
+              "cite": "Grundy et al. 2010",
+              "doi": "10.1016/j.icarus.2010.07.007"
+            }
+          ]
+        },
+        {
+          "name": "water_ice_triton",
+          "display_name": "H2O ice (underlying bedrock ice)",
+          "formula": "H2O",
+          "absorption_bands": [
+            {
+              "center": 1.52,
+              "left": 1.44,
+              "right": 1.6,
+              "type": "combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.93,
+              "right": 2.12,
+              "type": "combination"
+            }
+          ],
+          "sensors": [
+            "IRTF",
+            "future_Triton_orbiter"
+          ],
+          "detection_range_um": [
+            1.4,
+            2.2
+          ],
+          "refs": [
+            {
+              "cite": "Quirico et al. 1999",
+              "doi": "10.1016/S0019-1035(99)00143-X"
+            }
+          ]
+        }
+      ],
+      "gases": [],
+      "organics": [
+        {
+          "name": "tholins_triton",
+          "display_name": "Tholins / irradiation products (pink cap material)",
+          "formula": "C,H,N polymers",
+          "absorption_bands": [
+            {
+              "center": 0.4,
+              "left": 0.32,
+              "right": 0.5,
+              "type": "electronic_UV-VIS_broad",
+              "note": "Broad absorption causing pink colour of polar cap"
+            },
+            {
+              "center": 3.4,
+              "left": 3.3,
+              "right": 3.55,
+              "type": "C-H_aliphatic"
+            }
+          ],
+          "sensors": [
+            "HST_WFC3",
+            "future_Triton_orbiter"
+          ],
+          "detection_range_um": [
+            0.3,
+            3.6
+          ],
+          "refs": [
+            {
+              "cite": "Cruikshank et al. 1993",
+              "doi": "10.1126/science.261.5122.742"
+            },
+            {
+              "cite": "McDonald et al. 1994",
+              "doi": "10.1016/0019-1035(94)90225-9"
+            }
+          ]
+        }
+      ],
+      "liquids": []
+    },
+    "ariel": {
+      "minerals": [],
+      "ices": [
+        {
+          "name": "co2_ice_ariel",
+          "display_name": "CO2 ice (very strong \u2014 Ariel's defining feature)",
+          "formula": "CO2",
+          "absorption_bands": [
+            {
+              "center": 1.966,
+              "left": 1.9,
+              "right": 2.02,
+              "type": "v1+v3_combination",
+              "note": "Strongest CO2 signature of Uranian moons; trailing hemisphere"
+            },
+            {
+              "center": 2.01,
+              "left": 1.95,
+              "right": 2.07,
+              "type": "2v3_overtone"
+            },
+            {
+              "center": 2.7,
+              "left": 2.6,
+              "right": 2.8,
+              "type": "v1+v2+v3"
+            },
+            {
+              "center": 4.26,
+              "left": 4.1,
+              "right": 4.42,
+              "type": "v3_fundamental",
+              "note": "JWST NIRSpec confirmed; endogenic vs exogenic origin debated"
+            }
+          ],
+          "sensors": [
+            "Keck_NIRC2",
+            "JWST_NIRSpec",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            1.8,
+            4.5
+          ],
+          "refs": [
+            {
+              "cite": "Grundy et al. 2003",
+              "doi": "10.1016/S0019-1035(03)00134-X"
+            },
+            {
+              "cite": "Cartwright et al. 2015",
+              "doi": "10.1016/j.icarus.2015.04.011"
+            }
+          ]
+        },
+        {
+          "name": "water_ice_ariel",
+          "display_name": "H2O ice (dominant surface ice)",
+          "formula": "H2O",
+          "absorption_bands": [
+            {
+              "center": 1.04,
+              "left": 0.97,
+              "right": 1.11,
+              "type": "overtone_combination"
+            },
+            {
+              "center": 1.25,
+              "left": 1.18,
+              "right": 1.32,
+              "type": "combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.44,
+              "right": 1.6,
+              "type": "combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.93,
+              "right": 2.12,
+              "type": "combination"
+            }
+          ],
+          "sensors": [
+            "Keck_NIRC2",
+            "JWST_NIRSpec",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            0.9,
+            2.2
+          ],
+          "refs": [
+            {
+              "cite": "Brown & Cruikshank 1983",
+              "doi": "10.1016/0019-1035(83)90226-1"
+            },
+            {
+              "cite": "Cartwright et al. 2018",
+              "doi": "10.1016/j.icarus.2017.10.014"
+            }
+          ]
+        },
+        {
+          "name": "nh3_hydrate_ariel",
+          "display_name": "NH3 hydrate (cryovolcanic terrains)",
+          "formula": "NH3\u00b7H2O",
+          "absorption_bands": [
+            {
+              "center": 2.21,
+              "left": 2.14,
+              "right": 2.28,
+              "type": "N-H_combination",
+              "note": "Associated with smooth, young cryovolcanic resurfacing"
+            },
+            {
+              "center": 2.96,
+              "left": 2.87,
+              "right": 3.05,
+              "type": "N-H_stretch"
+            }
+          ],
+          "sensors": [
+            "Keck_NIRC2",
+            "JWST_NIRSpec",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            2.1,
+            3.1
+          ],
+          "refs": [
+            {
+              "cite": "Cartwright et al. 2018",
+              "doi": "10.1016/j.icarus.2017.10.014"
+            },
+            {
+              "cite": "Bauer et al. 2002",
+              "doi": "10.1086/344587"
+            }
+          ]
+        }
+      ],
+      "gases": [],
+      "organics": [
+        {
+          "name": "dark_material_ariel",
+          "display_name": "Dark non-ice material",
+          "formula": "?",
+          "absorption_bands": [
+            {
+              "center": 0.65,
+              "left": 0.55,
+              "right": 0.76,
+              "type": "electronic_broad",
+              "note": "Mixed in with ice; likely irradiation products + carbon"
+            }
+          ],
+          "sensors": [
+            "Keck_NIRC2",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            0.5,
+            0.9
+          ],
+          "refs": [
+            {
+              "cite": "Cartwright et al. 2015",
+              "doi": "10.1016/j.icarus.2015.04.011"
+            }
+          ]
+        }
+      ],
+      "liquids": []
+    },
+    "uranus_moon": {
+      "minerals": [],
+      "ices": [
+        {
+          "name": "water_ice_uranus_moon",
+          "display_name": "H2O ice",
+          "formula": "H2O",
+          "absorption_bands": [
+            {
+              "center": 1.04,
+              "left": 0.97,
+              "right": 1.11,
+              "type": "overtone_combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.44,
+              "right": 1.6,
+              "type": "combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.93,
+              "right": 2.12,
+              "type": "combination"
+            }
+          ],
+          "sensors": [
+            "Keck_NIRC2",
+            "JWST_NIRSpec",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            0.9,
+            2.2
+          ],
+          "refs": [
+            {
+              "cite": "Brown & Cruikshank 1983",
+              "doi": "10.1016/0019-1035(83)90226-1"
+            }
+          ]
+        },
+        {
+          "name": "co2_ice_uranus_moon",
+          "display_name": "CO2 ice (trailing hemisphere enhancement)",
+          "formula": "CO2",
+          "absorption_bands": [
+            {
+              "center": 1.966,
+              "left": 1.9,
+              "right": 2.02,
+              "type": "v1+v3_combination"
+            },
+            {
+              "center": 2.01,
+              "left": 1.95,
+              "right": 2.07,
+              "type": "2v3"
+            },
+            {
+              "center": 4.26,
+              "left": 4.1,
+              "right": 4.42,
+              "type": "v3_fundamental"
+            }
+          ],
+          "sensors": [
+            "Keck_NIRC2",
+            "JWST_NIRSpec",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            1.8,
+            4.5
+          ],
+          "refs": [
+            {
+              "cite": "Cartwright et al. 2015",
+              "doi": "10.1016/j.icarus.2015.04.011"
+            },
+            {
+              "cite": "Cartwright et al. 2018",
+              "doi": "10.1016/j.icarus.2017.10.014"
+            }
+          ]
+        },
+        {
+          "name": "nh3_hydrate_uranus_moon",
+          "display_name": "NH3 hydrate (possible cryovolcanic tracer)",
+          "formula": "NH3\u00b7H2O",
+          "absorption_bands": [
+            {
+              "center": 2.21,
+              "left": 2.14,
+              "right": 2.28,
+              "type": "N-H_combination"
+            },
+            {
+              "center": 2.96,
+              "left": 2.87,
+              "right": 3.05,
+              "type": "N-H_stretch"
+            }
+          ],
+          "sensors": [
+            "JWST_NIRSpec",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            2.1,
+            3.1
+          ],
+          "refs": [
+            {
+              "cite": "Cartwright et al. 2018",
+              "doi": "10.1016/j.icarus.2017.10.014"
+            }
+          ]
+        }
+      ],
+      "gases": [],
+      "organics": [
+        {
+          "name": "dark_material_uranus_moon",
+          "display_name": "Dark non-ice material (carbon-rich lag)",
+          "formula": "C-complex",
+          "absorption_bands": [
+            {
+              "center": 0.65,
+              "left": 0.55,
+              "right": 0.76,
+              "type": "electronic_broad"
+            },
+            {
+              "center": 3.4,
+              "left": 3.3,
+              "right": 3.55,
+              "type": "C-H_aliphatic"
+            }
+          ],
+          "sensors": [
+            "JWST_NIRSpec",
+            "future_Uranus_orbiter"
+          ],
+          "detection_range_um": [
+            0.5,
+            3.6
+          ],
+          "refs": [
+            {
+              "cite": "Cartwright et al. 2018",
+              "doi": "10.1016/j.icarus.2017.10.014"
+            }
+          ]
+        }
+      ],
+      "liquids": []
+    },
+    "asteroid_d_type": {
+      "minerals": [
+        {
+          "name": "anhydrous_silicate_trojan",
+          "display_name": "Anhydrous silicate (olivine/pyroxene \u2014 unheated)",
+          "formula": "Mg2SiO4/MgSiO3",
+          "absorption_bands": [
+            {
+              "center": 1.05,
+              "left": 0.88,
+              "right": 1.25,
+              "type": "Fe2+_electronic_olivine",
+              "note": "Very weak or absent in D-types; olivine Band I"
+            },
+            {
+              "center": 1.85,
+              "left": 1.6,
+              "right": 2.1,
+              "type": "Fe2+_electronic_pyroxene",
+              "note": "Pyroxene Band II \u2014 diagnostic if present"
+            }
+          ],
+          "sensors": [
+            "Lucy_Ralph_MVIC",
+            "Lucy_Ralph_LEISA",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.8,
+            2.2
+          ],
+          "refs": [
+            {
+              "cite": "Emery et al. 2006",
+              "doi": "10.1051/0004-6361:20054550"
+            },
+            {
+              "cite": "Wong et al. 2014",
+              "doi": "10.1016/j.icarus.2014.01.011"
+            }
+          ]
+        }
+      ],
+      "ices": [],
+      "gases": [],
+      "organics": [
+        {
+          "name": "organic_reddening_d_type",
+          "display_name": "Organic reddening slope (D-type diagnostic)",
+          "formula": "C,H,N,O polymers",
+          "absorption_bands": [
+            {
+              "center": 0.55,
+              "left": 0.43,
+              "right": 0.7,
+              "type": "electronic_broad_UV-VIS",
+              "note": "Featureless red slope from 0.4\u20132.5 \u00b5m; steeper than C-types"
+            },
+            {
+              "center": 3.4,
+              "left": 3.28,
+              "right": 3.55,
+              "type": "C-H_aliphatic",
+              "note": "Lucy/LEISA target: aliphatic organics on Leucus/Polymele"
+            },
+            {
+              "center": 3.28,
+              "left": 3.2,
+              "right": 3.36,
+              "type": "C-H_aromatic",
+              "note": "Aromatic organics; Emery et al. 2011 Trojan detection"
+            }
+          ],
+          "sensors": [
+            "Lucy_Ralph_LEISA",
+            "JWST_NIRSpec",
+            "IRTF_SpeX"
+          ],
+          "detection_range_um": [
+            0.4,
+            3.6
+          ],
+          "refs": [
+            {
+              "cite": "Emery et al. 2011",
+              "doi": "10.1016/j.icarus.2010.09.002"
+            },
+            {
+              "cite": "Fornasier et al. 2007",
+              "doi": "10.1016/j.icarus.2007.02.019"
+            }
+          ]
+        },
+        {
+          "name": "oh_phyllosilicate_trojan",
+          "display_name": "OH phyllosilicate 3 \u00b5m (some P-type Trojans)",
+          "formula": "Mg/Fe-smectite",
+          "absorption_bands": [
+            {
+              "center": 2.7,
+              "left": 2.55,
+              "right": 2.85,
+              "type": "O-H_stretch",
+              "note": "Detected in ~20 % of outer-belt D/P-types; aqueous alteration"
+            },
+            {
+              "center": 3.1,
+              "left": 2.95,
+              "right": 3.25,
+              "type": "O-H_stretch_NH4_combination"
+            }
+          ],
+          "sensors": [
+            "IRTF_SpeX",
+            "Lucy_Ralph_LEISA",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            2.5,
+            3.4
+          ],
+          "refs": [
+            {
+              "cite": "Rivkin et al. 2002",
+              "doi": "10.1016/S0019-1035(02)00068-8"
+            },
+            {
+              "cite": "Emery et al. 2006",
+              "doi": "10.1051/0004-6361:20054550"
+            }
+          ]
+        }
+      ],
+      "liquids": []
     }
   },
   "missions": {

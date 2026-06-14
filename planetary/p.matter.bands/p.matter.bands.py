@@ -32,8 +32,8 @@ LICENSE:   GNU GPL >=2
 # % required: yes
 # % label: Target planetary body
 # % description: Controls which matter types and absorption features are loaded from the database.
-# % options: mars,moon,mercury,venus,titan,europa,io,enceladus,ceres,asteroid_c_type,asteroid_s_type,comet,pluto,generic
-# % descriptions: mars;Mars surface and atmosphere;moon;Earth's Moon;mercury;Mercury (MESSENGER/BepiColombo);venus;Venus (surface NIR windows + atmosphere);titan;Saturn's Titan (VIMS atmospheric windows);europa;Jupiter's Europa (irradiated icy surface);io;Jupiter's Io (SO2 frost and sulfur);enceladus;Saturn's Enceladus (clean H2O ice + plume);ceres;Dwarf planet Ceres (ammoniated clays);asteroid_c_type;Carbonaceous (C-type) asteroid;asteroid_s_type;Stony (S-type) asteroid;comet;Cometary nucleus and coma;pluto;Pluto / KBO (volatile ices);generic;Generic body — load all database entries
+# % options: mars,moon,mercury,venus,titan,europa,io,enceladus,ceres,asteroid_c_type,asteroid_s_type,asteroid_d_type,comet,pluto,ganymede,callisto,triton,ariel,uranus_moon,generic
+# % descriptions: mars;Mars surface and atmosphere;moon;Earth's Moon;mercury;Mercury (MESSENGER/BepiColombo);venus;Venus (surface NIR windows + atmosphere);titan;Saturn's Titan (VIMS atmospheric windows);europa;Jupiter's Europa (irradiated icy surface);io;Jupiter's Io (SO2 frost and sulfur);enceladus;Saturn's Enceladus (clean H2O ice + plume);ceres;Dwarf planet Ceres (ammoniated clays);asteroid_c_type;Carbonaceous (C-type) asteroid (Ryugu/Bennu);asteroid_s_type;Stony (S-type) asteroid;asteroid_d_type;Dark D-type asteroid / Jupiter Trojan (Lucy targets);comet;Cometary nucleus and coma;pluto;Pluto / KBO (volatile ices);ganymede;Jupiter's Ganymede (JUICE/MAJIS 2031);callisto;Jupiter's Callisto (JUICE/MAJIS 2031);triton;Neptune's Triton (future orbiter);ariel;Uranus moon Ariel — strong CO2 ice;uranus_moon;Generic Uranus icy moon (Titania/Oberon/Umbriel);generic;Generic body — load all database entries
 # %end
 
 # %option G_OPT_R_OUTPUT

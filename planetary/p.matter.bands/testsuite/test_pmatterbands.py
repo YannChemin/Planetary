@@ -945,6 +945,256 @@ class TestPmatterbandsPhase2(TestCase):
                          "\n".join(invalid))
 
 
+class TestPmatterbandsPhase3(TestCase):
+    """Phase 3 tests: new bodies (Ganymede/Callisto/Triton/Ariel/Uranus/D-asteroid)
+    and expansion of Europa/Titan/Venus entries."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        # SWIR group: 30 bands 1.0–2.5 µm — covers most icy-moon species
+        cls.wl_swir = [1.0 + i * (1.5 / 29) for i in range(30)]
+        cls.wl_swir_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_swir_csv, cls.wl_swir)
+
+        # NIR-SWIR group for N2 ice at 2.148 µm (Triton) and CO ice at 1.578 µm
+        cls.wl_nirice = [2.05 + i * (0.15 / 9) for i in range(10)]  # 2.05–2.20 µm
+        cls.wl_nirice_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_nirice_csv, cls.wl_nirice)
+
+        import numpy as np
+
+        # SWIR synthetic bands — flat reflectance (no feature needed; just list-mode tests)
+        cls.swir_bands = []
+        for i in range(30):
+            name = f"pmb_p3_swir_band_{i:03d}"
+            _create_synthetic_band(name, 0.25, cls.region)
+            cls.swir_bands.append(name)
+        gs.run_command("i.group", group="pmb_p3_swir_group",
+                       input=",".join(cls.swir_bands),
+                       overwrite=True, quiet=True)
+
+        # N2-ice bands (2.05–2.20 µm) with Gaussian dip at 2.148 µm
+        cls.nirice_bands = []
+        wl_arr = np.array(cls.wl_nirice)
+        refl = _gaussian_absorption(wl_arr, center_um=2.148, depth=0.5, fwhm_um=0.006)
+        for i, wl in enumerate(wl_arr):
+            name = f"pmb_p3_nirice_band_{i:03d}"
+            _create_synthetic_band(name, float(refl[i]), cls.region)
+            cls.nirice_bands.append(name)
+        gs.run_command("i.group", group="pmb_p3_nirice_group",
+                       input=",".join(cls.nirice_bands),
+                       overwrite=True, quiet=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        for bands in [cls.swir_bands, cls.nirice_bands]:
+            for name in bands:
+                gs.run_command("g.remove", flags="f", type="raster",
+                               name=name, quiet=True)
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p3_*_out_*", quiet=True)
+        for tmp in [cls.wl_swir_csv, cls.wl_nirice_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    # ── Helper ────────────────────────────────────────────────────────────────
+
+    def _list_mode(self, body, group, wl_csv, **kw):
+        """Run p.matter.bands -l, return stdout."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group=group,
+            body=body,
+            output_prefix=f"pmb_p3_{body}_out",
+            wavelengths=wl_csv,
+            **kw,
+        )
+        self.assertModule(module)
+        return module.outputs.stdout
+
+    def _find_db(self):
+        """Return path to the installed or dev-tree matter_bands.json, skip if absent."""
+        import os as _os
+        gisbase = _os.getenv("GISBASE", "")
+        sys_db = _os.path.join(gisbase, "etc", "planetary", "matter_bands.json")
+        dev_db = _os.path.normpath(
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                          "..", "..", "..", "data", "matter_bands.json"))
+        if _os.path.isfile(sys_db):
+            return sys_db
+        if _os.path.isfile(dev_db):
+            return dev_db
+        self.skipTest("matter_bands.json not found")
+
+    # ── New body acceptance tests ─────────────────────────────────────────────
+
+    def test_ganymede_accepted_as_body(self):
+        """body=ganymede is accepted by the module."""
+        db = self._find_db()
+        out = self._list_mode("ganymede", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("GANYMEDE", out.upper())
+
+    def test_callisto_accepted_as_body(self):
+        """body=callisto is accepted by the module."""
+        db = self._find_db()
+        out = self._list_mode("callisto", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("CALLISTO", out.upper())
+
+    def test_triton_accepted_as_body(self):
+        """body=triton is accepted by the module."""
+        db = self._find_db()
+        out = self._list_mode("triton", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("TRITON", out.upper())
+
+    def test_ariel_accepted_as_body(self):
+        """body=ariel is accepted by the module."""
+        db = self._find_db()
+        out = self._list_mode("ariel", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("ARIEL", out.upper())
+
+    def test_uranus_moon_accepted_as_body(self):
+        """body=uranus_moon is accepted by the module."""
+        db = self._find_db()
+        out = self._list_mode("uranus_moon", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("URANUS_MOON", out.upper())
+
+    def test_asteroid_d_type_accepted_as_body(self):
+        """body=asteroid_d_type is accepted by the module."""
+        db = self._find_db()
+        out = self._list_mode("asteroid_d_type", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("ASTEROID_D_TYPE", out.upper())
+
+    # ── New body species presence ─────────────────────────────────────────────
+
+    def test_ganymede_has_water_ice_and_co2(self):
+        """Ganymede lists water_ice and CO2 ice in 1.0–2.5 µm range."""
+        db = self._find_db()
+        out = self._list_mode("ganymede", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("water_ice_ganymede", out)
+        self.assertIn("co2_ice_ganymede", out)
+
+    def test_callisto_co2_strongest_signature(self):
+        """Callisto lists co2_ice_callisto as detectable in 1.0–2.5 µm."""
+        db = self._find_db()
+        out = self._list_mode("callisto", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("co2_ice_callisto", out)
+
+    def test_triton_n2_ice_in_narrow_range(self):
+        """Triton N2 ice at 2.148 µm is detectable with a 2.05–2.20 µm sensor."""
+        db = self._find_db()
+        out = self._list_mode("triton", "pmb_p3_nirice_group", self.wl_nirice_csv, db=db)
+        detectable = out.split("Out of sensor range")[0]
+        self.assertIn("n2_ice", detectable)
+
+    def test_triton_ch4_and_co_ice_in_swir(self):
+        """Triton CH4 and CO ice bands are detectable in SWIR (1.0–2.5 µm)."""
+        db = self._find_db()
+        out = self._list_mode("triton", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        detectable = out.split("Out of sensor range")[0]
+        self.assertIn("ch4_ice_triton", detectable)
+        self.assertIn("co_ice_triton", detectable)
+
+    def test_ariel_co2_strong_in_swir(self):
+        """Ariel CO2 ice is detectable in SWIR."""
+        db = self._find_db()
+        out = self._list_mode("ariel", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        detectable = out.split("Out of sensor range")[0]
+        self.assertIn("co2_ice_ariel", detectable)
+
+    def test_ariel_nh3_hydrate_in_swir(self):
+        """Ariel NH3 hydrate at 2.21 µm is detectable in SWIR."""
+        db = self._find_db()
+        out = self._list_mode("ariel", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        detectable = out.split("Out of sensor range")[0]
+        self.assertIn("nh3_hydrate_ariel", detectable)
+
+    def test_uranus_moon_three_ices(self):
+        """Uranus_moon lists all three ices (H2O, CO2, NH3 hydrate) in SWIR."""
+        db = self._find_db()
+        out = self._list_mode("uranus_moon", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        for sp in ["water_ice_uranus_moon", "co2_ice_uranus_moon", "nh3_hydrate_uranus_moon"]:
+            self.assertIn(sp, out, msg=f"Expected {sp} in Uranus moon SWIR list")
+
+    def test_asteroid_d_type_organics_in_swir(self):
+        """D-type Trojan lists organic reddening in SWIR."""
+        db = self._find_db()
+        out = self._list_mode("asteroid_d_type", "pmb_p3_swir_group",
+                               self.wl_swir_csv, db=db)
+        self.assertIn("organic_reddening_d_type", out)
+
+    # ── Expanded body entries ─────────────────────────────────────────────────
+
+    def test_europa_phase3_minerals(self):
+        """Europa lists Phase 3 additions: silica, NaHCO3, FeCl2."""
+        db = self._find_db()
+        out = self._list_mode("europa", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        # silica and FeCl2 are detectable in SWIR; NaHCO3 at 2.54 µm is marginal
+        self.assertIn("silica_hydrous", out)
+        self.assertIn("iron_chloride_hydrate", out)
+
+    def test_titan_phase3_surface_ices(self):
+        """Titan lists Phase 3 surface ices: HCN ice, HC3N ice, benzene ice."""
+        db = self._find_db()
+        out = self._list_mode("titan", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("hcn_ice_surface", out)
+        self.assertIn("benzene_ice_surface", out)
+
+    def test_venus_phase3_hdo_and_h2so4(self):
+        """Venus lists Phase 3 atmospheric species: HDO and H2SO4 aerosol."""
+        db = self._find_db()
+        out = self._list_mode("venus", "pmb_p3_swir_group", self.wl_swir_csv, db=db)
+        self.assertIn("hdo_atm", out)
+        self.assertIn("sulfuric_acid_aerosol", out)
+
+    # ── Database integrity ────────────────────────────────────────────────────
+
+    def test_phase3_db_has_19_bodies(self):
+        """matter_bands.json contains all 19 Phase 3 bodies."""
+        import json as _json
+        with open(self._find_db()) as f:
+            db = _json.load(f)
+        self.assertGreaterEqual(len(db["bodies"]), 19,
+                                f"Expected ≥19 bodies, got {len(db['bodies'])}")
+
+    def test_phase3_db_species_count(self):
+        """matter_bands.json contains ≥120 species total."""
+        import json as _json
+        with open(self._find_db()) as f:
+            db = _json.load(f)
+        total = sum(
+            sum(len(bdata.get(k, [])) for k in
+                ["minerals", "ices", "gases", "organics", "liquids"])
+            for bdata in db["bodies"].values()
+        )
+        self.assertGreaterEqual(total, 120,
+                                f"Expected ≥120 species, got {total}")
+
+    def test_phase3_new_bodies_have_detection_ranges(self):
+        """All species in Phase 3 new bodies have detection_range_um."""
+        import json as _json
+        with open(self._find_db()) as f:
+            db = _json.load(f)
+        p3_bodies = ["ganymede", "callisto", "triton", "ariel",
+                     "uranus_moon", "asteroid_d_type"]
+        missing = []
+        for body in p3_bodies:
+            bdata = db["bodies"].get(body, {})
+            for mtype in ["minerals", "ices", "gases", "organics", "liquids"]:
+                for sp in bdata.get(mtype, []):
+                    if "detection_range_um" not in sp:
+                        missing.append(f"{body}/{sp.get('name','?')}")
+        self.assertEqual(missing, [],
+                         "Missing detection_range_um:\n" + "\n".join(missing))
+
+
 if __name__ == "__main__":
     from grass.gunittest.main import test
     test()
