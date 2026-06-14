@@ -286,26 +286,38 @@ with lower confidence.
 - Reads image group → builds per-pixel spectra → calls p_spectra band depth
 - OpenMP-parallelized row processing (inherit from existing p_spectra pattern)
 
-### Phase 2 — Wavelength range extension
+### Phase 2 — Wavelength range extension ✓ COMPLETE
 
-**2.1 UV support (0.1–0.4 µm)**
-- Required for: SO2/ozone (Venus, Io), graphite (Mercury), tholin slope (Titan, Pluto),
-  charge-transfer in Fe-oxides (Mars), hydrogen fluorescence (comets)
-- Sensors: MAVEN/IUVS, EnVision/VenSpec-U, Comet Interceptor
-- p_spectra already handles arbitrary wavelength; database entries already coded
+**2.1 UV support (0.1–0.4 µm)** ✓
+- 15 UV absorption entries across 8 bodies
+- Mars: Fe-oxide O→Fe(III) charge-transfer at 0.22 µm (hematite, goethite)
+- Mercury: graphite broad UV at 0.20 µm (MERTIS)
+- Venus: SO2 at 0.28 µm + unknown UV absorber at 0.36 µm (EnVision/VenSpec-U)
+- Titan: tholins 0.28 µm + benzene 0.21 µm (Cassini/UVIS, JWST)
+- Io: SO2 frost 0.28 µm + S2 disulfur 0.38 µm + polysulfur 0.50 µm
+- Comets: OH 0.308 µm, CN 0.388 µm, CS 0.258 µm
+- Pluto: tholins 0.35 µm + CH4 UV 0.30 µm
+- C-asteroids: magnetite UV slope 0.35 µm (Ryugu/Bennu)
+- Sensors: MAVEN/IUVS, HST/STIS, EnVision/VenSpec-U, Cassini/UVIS, Comet Interceptor
 
-**2.2 MIR support (5–30 µm)**
-- Required for: silicate reststrahlen bands (all rocky bodies), SO2/CO2/NH3
-  atmospheres (Venus, Io, gas giants), carbonate/sulfate emission features
-- Sensors: TES, THEMIS, JWST/MIRI, OTES (OSIRIS-REx)
-- Data note: MIR data is emission (thermal), not reflectance.
-  Module must switch processing mode: `BD_thermal = 1 - ε(λ)/ε_continuum`
-  where ε is emissivity (derived from thermal radiance via Planck inversion)
+**2.2 MIR support (5–30 µm)** ✓
+- 38 MIR band features across all rocky bodies and icy moons
+- `mode=emissivity` parameter added to module; BD formula is structurally identical
+  (`BD = 1 − ε(λ)/ε_continuum`) — tagged per-species via `"mode": "emissivity"` in JSON
+- Mars: olivine/pyroxene/plagioclase/carbonate/volcanic glass reststrahlen (TES/THEMIS);
+  silicate dust opacity at 9.3 + 18 µm; CO2 9.4 µm combination band
+- Moon: anorthosite 9.7 µm, mare pyroxene 9.3 µm, Mg-spinel 13.5 µm (Diviner)
+- Mercury: enstatite pyroxene 9.1 µm + sulfide/oldhamite 10.5 µm (MERTIS)
+- Io: SO2 frost TIR at 7.3/8.7/19.4 µm (JIRAM, JWST/MIRI)
+- Venus: anhydrite (CaSO4) 8.7/14.2 µm (EnVision/MERTIS-V)
+- Europa: H2O ice libration 6.1 µm + lattice phonon 12 µm (JWST/MIRI, Europa Clipper)
+- Titan: benzene C6H6 14.85 µm + HCN 14.05 µm bending (Cassini/CIRS, JWST)
+- Enceladus: NH3 umbrella 9.0 µm (JWST/MIRI)
 
-**2.3 LWIR/FIR (30–100 µm)**
-- Required for: H2O rotation bands (cometary coma), CO2 15 µm bending (Mars)
-- Sensors: TES, Herschel (historical), future FIR instrument
-- Database stubs already in CO2/H2O gas entries
+**2.3 LWIR/FIR (30–100 µm)** ✓
+- Comet H2O coma FIR rotational lines: 56.9 µm and 179.5 µm (Herschel/PACS, HIFI)
+- Mars CO2 15 µm, water_vapor 25 µm stubs extended (existing entries)
+- Sensors: Herschel/PACS, Herschel/HIFI, ALMA
 
 ### Phase 3 — Body database expansion
 
@@ -1018,8 +1030,17 @@ Yann Chemin
 
 ## STATUS
 
-Phase 1 complete: band database (`data/matter_bands.json`), C library extension
+Phase 1 and Phase 2 complete.
+
+Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
 (`p.matter.bands.py`), and auto-install via `p_meta_install_matter_bands()`.
-Phases 2–4 (UV/MIR/FIR extension, body expansion, advanced detection) are
-planned — see the Implementation Plan section above.
+
+Phase 2: wavelength range extended to 0.18–200 µm.  UV coverage (15 band
+entries across 8 bodies); MIR emissivity mode (`mode=emissivity`) with 38 band
+features for TES/THEMIS/MERTIS/JWST-MIRI sensors; LWIR/FIR cometary H2O
+rotational lines (Herschel/PACS, HIFI, ALMA).  Database now holds 89 species
+total across 13 bodies.
+
+Phases 3–4 (body expansion, advanced detection) are planned — see the
+Implementation Plan section above.
