@@ -118,8 +118,9 @@ typedef struct PPdsImage {
     double dn_his;        /*!< CORE_HIGH_INSTR_SATURATION                 */
 
     /* --- layout ----------------------------------------------------- */
-    PPdsOrganization organization; /*!< BSQ / BIL / BIP                   */
-    long             data_offset;  /*!< byte offset from start of data file to first pixel */
+    PPdsOrganization organization;   /*!< BSQ / BIL / BIP                   */
+    long             data_offset;    /*!< byte offset from start of data file to first pixel */
+    int              line_prefix_bytes; /*!< LINE_PREFIX_BYTES per row (e.g. ISS dark pixels) */
 
     /* --- file handle ------------------------------------------------ */
     char *data_path;    /*!< heap-owned path to binary data file           */

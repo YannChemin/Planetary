@@ -812,6 +812,10 @@ PPdsImage *p_pds_open_image(const char *path)
     else
         img->organization = P_PDS_ORG_BSQ; /* default */
 
+    /* --- Line prefix (e.g. Cassini ISS dark/overclocked pixels). */
+    img->line_prefix_bytes = p_pvl_value_int(img_obj, "LINE_PREFIX_BYTES", &ok);
+    if (!ok) img->line_prefix_bytes = 0;
+
     /* --- Data file pointer. */
     char *data_path = NULL;
     long  data_off  = 0;
@@ -928,21 +932,28 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
     int   bpp = img->bytes_per_pixel;
     int   ns  = img->samples;
 
-    /* Compute file offset of the first byte of this row. */
-    long row_bytes = (long)ns * bpp;
-    long band_size = row_bytes * (long)img->lines;
+    /* Compute file offset of the first byte of this row.
+     * record_stride accounts for LINE_PREFIX_BYTES prepended to each row on
+     * disk (e.g. Cassini ISS stores 24 bytes of dark/OC pixels before each
+     * line of image data).  seek_pos lands on the first *image* byte. */
+    long row_bytes    = (long)ns * bpp;
+    long pfx          = (long)img->line_prefix_bytes;
+    long record_stride = row_bytes + pfx;
+    long band_size    = record_stride * (long)img->lines;
     long seek_pos;
 
     switch (img->organization) {
     case P_PDS_ORG_BSQ:
         seek_pos = img->data_offset
                    + (long)band * band_size
-                   + (long)row  * row_bytes;
+                   + (long)row  * record_stride
+                   + pfx;
         break;
     case P_PDS_ORG_BIL:
         seek_pos = img->data_offset
-                   + (long)row  * (row_bytes * (long)img->bands)
-                   + (long)band * row_bytes;
+                   + (long)row  * (record_stride * (long)img->bands)
+                   + (long)band * record_stride
+                   + pfx;
         break;
     case P_PDS_ORG_BIP:
         seek_pos = img->data_offset
