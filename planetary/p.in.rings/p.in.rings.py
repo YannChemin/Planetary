@@ -299,7 +299,12 @@ def _invert_model(r_out, lon_out, ar, alon, ns, nl, n_iter=4):
 # ---------------------------------------------------------------------------
 
 def _sample_bilinear(image, s, l):
-    """Sample float64 image[row,col] at float (s,l); NaN where invalid."""
+    """Sample float64 image[row,col] at float (s,l); NaN where invalid.
+
+    NaN cells in `image` (GRASS NULLs) are excluded: their weight is zeroed
+    and the remaining weights are renormalised.  Output is NaN only when all
+    four neighbours are NaN.
+    """
     nl_i, ns_i = image.shape
     out = np.full(s.shape, np.nan, dtype=np.float64)
     valid = ~(np.isnan(s) | np.isnan(l))
@@ -312,8 +317,22 @@ def _sample_bilinear(image, s, l):
     l0c = np.clip(l0,     0, nl_i - 1); l1c = np.clip(l0 + 1, 0, nl_i - 1)
     v00 = image[l0c, s0c]; v10 = image[l0c, s1c]
     v01 = image[l1c, s0c]; v11 = image[l1c, s1c]
-    out[valid] = (v00*(1-fs)*(1-fl) + v10*fs*(1-fl) +
-                  v01*(1-fs)*fl     + v11*fs*fl)
+    w00 = (1-fs)*(1-fl); w10 = fs*(1-fl)
+    w01 = (1-fs)*fl;     w11 = fs*fl
+    # Zero the weight of any NaN neighbour, then renormalise.
+    w00 = np.where(np.isnan(v00), 0.0, w00)
+    w10 = np.where(np.isnan(v10), 0.0, w10)
+    w01 = np.where(np.isnan(v01), 0.0, w01)
+    w11 = np.where(np.isnan(v11), 0.0, w11)
+    wsum = w00 + w10 + w01 + w11
+    v00 = np.where(np.isnan(v00), 0.0, v00)
+    v10 = np.where(np.isnan(v10), 0.0, v10)
+    v01 = np.where(np.isnan(v01), 0.0, v01)
+    v11 = np.where(np.isnan(v11), 0.0, v11)
+    result = np.where(wsum > 0,
+                      (v00*w00 + v10*w10 + v01*w01 + v11*w11) / wsum,
+                      np.nan)
+    out[valid] = result
     return out
 
 
