@@ -319,20 +319,25 @@ with lower confidence.
 - Mars CO2 15 µm, water_vapor 25 µm stubs extended (existing entries)
 - Sensors: Herschel/PACS, Herschel/HIFI, ALMA
 
-### Phase 3 — Body database expansion
+### Phase 3 — Body database expansion ✓ COMPLETE
 
-Priority order based on active/upcoming missions:
+**New bodies added (6):**
 
-| Priority | Body | Key missing species | Driver mission |
-|---|---|---|---|
-| 1 | Europa | Add silica, NaHCO3, FeCl2 | Europa Clipper 2030 |
-| 2 | Ganymede/Callisto | H2O ice, CO2, dark material | JUICE/MAJIS 2031 |
-| 3 | Titan (surface) | Nitrile ices HCN/HC3N | Dragonfly 2034 |
-| 4 | Venus atmosphere | HDO, H2SO4 droplet size | EnVision 2038 |
-| 5 | Trojans | Low-albedo organics, silicates | Lucy ongoing |
-| 6 | Triton/Ariel | N2, CH4, CO2, NH3 hydrate | Uranus Orbiter (Decadal) |
-| 7 | Uranus moons | CO2 ice, amorphous H2O, organics | Uranus Orbiter (Decadal) |
-| 8 | Ryugu/Bennu | Complex organic mixtures | Sample analysis cross-ref |
+| Body | Key species | Driver mission |
+|---|---|---|
+| `ganymede` | H2O ice, CO2 ice, MgSO4 hydrate salt, SO2 trace (UV), dark organics | JUICE/MAJIS 2031 |
+| `callisto` | H2O ice, CO2 ice (dominant), dark C-rich lag | JUICE/MAJIS 2031 |
+| `triton` | N2 ice (2.148 µm), CH4 ice (6 bands), CO ice, CO2 ice, H2O ice, tholins | future orbiter (Decadal) |
+| `ariel` | CO2 ice (very strong, trailing), H2O ice, NH3 hydrate, dark material | Uranus Orbiter (Decadal) |
+| `uranus_moon` | H2O ice, CO2 ice, NH3 hydrate, dark organics (Titania/Oberon/Umbriel) | Uranus Orbiter (Decadal) |
+| `asteroid_d_type` | Organic reddening slope, aliphatic + aromatic C-H, OH phyllosilicates | Lucy ongoing |
+
+**Expanded existing bodies:**
+- **Europa** (+3 minerals): hydrous silica SiO2·nH2O (Hand & Carlson 2007), NaHCO3 (Trumbo et al. 2022 JWST), FeCl2·4H2O iron chloride brine (McCord et al. 2010)
+- **Titan** (+3 ices): HCN ice (Dragonfly target, 1.50/3.02/4.76 µm), HC3N cyanoacetylene (3.29/15.08 µm), benzene ice polar deposits (1.685/3.22 µm)
+- **Venus** (+3 gases): HDO semi-heavy water D/H tracer (1.38/2.55/3.67 µm), H2SO4 aerosol cloud droplets (2.48/3.70/9.0 µm), CO lower atmosphere (2.33/4.67 µm)
+
+**Database totals after Phase 3:** 19 bodies, 123 species, wavelength range 0.18–200 µm
 
 ### Phase 4 — Advanced detection modes
 
@@ -1030,7 +1035,7 @@ Yann Chemin
 
 ## STATUS
 
-Phase 1 and Phase 2 complete.
+Phases 1, 2, and 3 complete.
 
 Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
@@ -1039,8 +1044,12 @@ Phase 1: band database (`data/matter_bands.json`), C library extension
 Phase 2: wavelength range extended to 0.18–200 µm.  UV coverage (15 band
 entries across 8 bodies); MIR emissivity mode (`mode=emissivity`) with 38 band
 features for TES/THEMIS/MERTIS/JWST-MIRI sensors; LWIR/FIR cometary H2O
-rotational lines (Herschel/PACS, HIFI, ALMA).  Database now holds 89 species
-total across 13 bodies.
+rotational lines (Herschel/PACS, HIFI, ALMA).
 
-Phases 3–4 (body expansion, advanced detection) are planned — see the
-Implementation Plan section above.
+Phase 3: 6 new bodies (ganymede, callisto, triton, ariel, uranus_moon,
+asteroid_d_type) + expansion of Europa, Titan, Venus.  Database now holds
+123 species across 19 bodies, wavelength range 0.18–200 µm.  Testsuite
+has 46 tests across three test classes (Phase 1: 11, Phase 2: 15, Phase 3: 20).
+
+Phase 4 (advanced detection modes) is planned — see the Implementation Plan
+section above.
