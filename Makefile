@@ -89,6 +89,8 @@ install:
 	$(MAKE) -C cspice-pkg/utils CSPICE_BUILD=$(CSPICE_BUILD) INST_DIR=$(INST_DIR) install
 	$(MAKE) -C planetary MODULE_TOPDIR=$(MODULE_TOPDIR) \
 	    INST_DIR=$(INST_DIR) install
+	mkdir -p $(INST_DIR)/etc/planetary
+	install -m 0644 data/matter_bands.json $(INST_DIR)/etc/planetary/matter_bands.json
 	mkdir -p $(INST_DIR)/planetary
 	for f in bodies/moon.json bodies/mars.json bodies/venus.json; do \
 	    install -m 0644 $$f $(INST_DIR)/planetary/$$(basename $$f); \

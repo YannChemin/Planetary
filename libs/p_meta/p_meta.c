@@ -379,6 +379,92 @@ void p_meta_set_fwhm(PMeta *m, const double *fwhm, int n)
 }
 
 /* ------------------------------------------------------------------ */
+/* p_meta_install_matter_bands                                          */
+/* ------------------------------------------------------------------ */
+
+#define _P_META_MATTER_BANDS "matter_bands.json"
+
+int p_meta_install_matter_bands(void)
+{
+    /* Source: $GISBASE/etc/planetary/matter_bands.json */
+    const char *gisbase = G_getenv_nofatal("GISBASE");
+    if (!gisbase) return -1;
+
+    const char *rel = "/etc/planetary/" _P_META_MATTER_BANDS;
+    size_t src_len = strlen(gisbase) + strlen(rel) + 1;
+    char *src = (char *)G_malloc(src_len);
+    snprintf(src, src_len, "%s%s", gisbase, rel);
+
+    struct stat st;
+    if (stat(src, &st) != 0) {
+        /* Source absent — development build not installed yet; not an error. */
+        G_verbose_message(
+            "p_meta: matter_bands.json not found at '%s'; skipping Misc install.",
+            src);
+        G_free(src);
+        return 0;
+    }
+
+    /* Destination: $MAPSET/Misc/matter_bands.json */
+    char *ms = _mapset_path();
+    if (!ms) { G_free(src); return -1; }
+
+    size_t misc_len = strlen(ms) + sizeof("/Misc");
+    char *misc_dir = (char *)G_malloc(misc_len);
+    snprintf(misc_dir, misc_len, "%s/Misc", ms);
+    G_free(ms);
+
+    /* Create Misc/ if absent. */
+    if (stat(misc_dir, &st) != 0) {
+        if (mkdir(misc_dir, 0755) != 0 && errno != EEXIST) {
+            G_warning("p_meta: cannot create '%s': %s",
+                      misc_dir, strerror(errno));
+            G_free(misc_dir);
+            G_free(src);
+            return -1;
+        }
+    }
+
+    size_t dst_len = strlen(misc_dir) + 1 + strlen(_P_META_MATTER_BANDS) + 1;
+    char *dst = (char *)G_malloc(dst_len);
+    snprintf(dst, dst_len, "%s/%s", misc_dir, _P_META_MATTER_BANDS);
+    G_free(misc_dir);
+
+    /* First-write wins — idempotent across every band import. */
+    if (stat(dst, &st) == 0) {
+        G_verbose_message("p_meta: %s already present, skipping.", dst);
+        G_free(dst);
+        G_free(src);
+        return 0;
+    }
+
+    /* Copy src → dst with a local buffer; no external deps needed. */
+    FILE *fin  = fopen(src, "rb");
+    FILE *fout = fopen(dst, "wb");
+    if (!fin || !fout) {
+        G_warning("p_meta: cannot copy matter_bands.json to '%s': %s",
+                  dst, strerror(errno));
+        if (fin)  fclose(fin);
+        if (fout) fclose(fout);
+        G_free(dst);
+        G_free(src);
+        return -1;
+    }
+
+    char buf[8192];
+    size_t nr;
+    while ((nr = fread(buf, 1, sizeof(buf), fin)) > 0)
+        fwrite(buf, 1, nr, fout);
+
+    fclose(fin);
+    fclose(fout);
+    G_verbose_message("p_meta: installed %s → %s", src, dst);
+    G_free(src);
+    G_free(dst);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* p_meta_write — 2-D raster (cell_misc)                               */
 /* ------------------------------------------------------------------ */
 int p_meta_write(PMeta *m, const char *mapname)
@@ -396,6 +482,8 @@ int p_meta_write(PMeta *m, const char *mapname)
 
     int rc = _write_json(m, dir, mapname);
     G_free(dir);
+
+    p_meta_install_matter_bands();
     return rc;
 }
 
@@ -417,5 +505,7 @@ int p_meta_write_3d(PMeta *m, const char *mapname)
 
     int rc = _write_json(m, dir, mapname);
     G_free(dir);
+
+    p_meta_install_matter_bands();
     return rc;
 }

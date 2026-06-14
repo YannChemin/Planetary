@@ -580,3 +580,61 @@ void p_spectra_apply_row_divfilter(int nsamples, int nbands,
                              out + (size_t)s * nbands);
     }
 }
+
+/* ================================================================== */
+/* Multi-feature weighted band depth                                    */
+/* ================================================================== */
+
+double p_spectra_bd_multi(const PSpectraDef *sd,
+                           const double *spectrum,
+                           int n_feat,
+                           const double *wl_centers,
+                           const double *wl_lefts,
+                           const double *wl_rights,
+                           const double *weights,
+                           int section)
+{
+    if (!sd || !spectrum || n_feat <= 0) return NAN;
+
+    double bd_sum = 0.0, w_sum = 0.0;
+
+    for (int i = 0; i < n_feat; i++) {
+        double w  = weights ? weights[i] : 1.0;
+        if (w <= 0.0) continue;
+
+        double bd = p_spectra_band_depth(sd, spectrum,
+                                          wl_centers[i],
+                                          wl_lefts[i],
+                                          wl_rights[i],
+                                          section);
+        if (bd != bd) continue;  /* NaN — band not covered by sensor */
+
+        bd_sum += bd * w;
+        w_sum  += w;
+    }
+
+    return (w_sum > 0.0) ? bd_sum / w_sum : NAN;
+}
+
+void p_spectra_apply_row_bd_multi(const PSpectraDef *sd,
+                                   int nsamples, int nbands,
+                                   const double *spectra,
+                                   int n_feat,
+                                   const double *wl_centers,
+                                   const double *wl_lefts,
+                                   const double *wl_rights,
+                                   const double *weights,
+                                   int section,
+                                   double *out)
+{
+    int s;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) private(s)
+#endif
+    for (s = 0; s < nsamples; s++) {
+        out[s] = p_spectra_bd_multi(sd, spectra + (size_t)s * nbands,
+                                     n_feat,
+                                     wl_centers, wl_lefts, wl_rights,
+                                     weights, section);
+    }
+}

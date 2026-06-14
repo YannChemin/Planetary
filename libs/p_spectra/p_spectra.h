@@ -298,6 +298,63 @@ void p_spectra_apply_row_divfilter(int nsamples, int nbands,
                                     int window,
                                     double *out);
 
+/* ================================================================== */
+/* Multi-feature weighted band depth                                    */
+/*                                                                      */
+/* Computes a weighted mean of N independent absorption features:       */
+/*   BD_multi = Σ(BD_i × w_i) / Σ(w_i)                                */
+/* Features for which no matching band exists (BD = NaN) are skipped.  */
+/* If no features are covered at all, NaN is returned.                  */
+/* ================================================================== */
+
+/*!
+ * \brief Weighted multi-feature band depth for one pixel spectrum.
+ *
+ * \param sd         spectral definition
+ * \param spectrum   reflectance array [nbands]
+ * \param n_feat     number of absorption features
+ * \param wl_centers feature centre wavelengths [n_feat]
+ * \param wl_lefts   left continuum anchors [n_feat]
+ * \param wl_rights  right continuum anchors [n_feat]
+ * \param weights    per-feature weights [n_feat] (NULL → all 1.0)
+ * \param section    wavelength section index
+ * \return weighted mean BD, or NaN if no features are covered
+ */
+double p_spectra_bd_multi(const PSpectraDef *sd,
+                           const double *spectrum,
+                           int n_feat,
+                           const double *wl_centers,
+                           const double *wl_lefts,
+                           const double *wl_rights,
+                           const double *weights,
+                           int section);
+
+/*!
+ * \brief Weighted multi-feature band depth for every sample in a row (OpenMP).
+ *
+ * \param sd         spectral definition
+ * \param nsamples   number of samples (pixels)
+ * \param nbands     number of spectral bands
+ * \param spectra    input spectra [nsamples × nbands], row-major
+ * \param n_feat     number of absorption features
+ * \param wl_centers feature centre wavelengths [n_feat]
+ * \param wl_lefts   left continuum anchors [n_feat]
+ * \param wl_rights  right continuum anchors [n_feat]
+ * \param weights    per-feature weights [n_feat] (NULL → all 1.0)
+ * \param section    section index
+ * \param out        output [nsamples] (caller-allocated)
+ */
+void p_spectra_apply_row_bd_multi(const PSpectraDef *sd,
+                                   int nsamples, int nbands,
+                                   const double *spectra,
+                                   int n_feat,
+                                   const double *wl_centers,
+                                   const double *wl_lefts,
+                                   const double *wl_rights,
+                                   const double *weights,
+                                   int section,
+                                   double *out);
+
 #ifdef __cplusplus
 }
 #endif

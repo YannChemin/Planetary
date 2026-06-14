@@ -119,6 +119,28 @@ int p_meta_write(PMeta *m, const char *mapname);
  */
 int p_meta_write_3d(PMeta *m, const char *mapname);
 
+/*!
+ * \brief Install \c matter_bands.json into the current mapset's \c Misc/ directory.
+ *
+ * Copies \c $GISBASE/etc/planetary/matter_bands.json to
+ * \c $GISDBASE/$LOCATION/$MAPSET/Misc/matter_bands.json so that
+ * \c p.matter.bands can resolve the band database without needing a
+ * system-wide installation path.
+ *
+ * - Creates \c Misc/ if it does not already exist.
+ * - First-write wins: an existing file is never overwritten, making the
+ *   call idempotent and safe to repeat for every imported band.
+ * - If the source file is absent (e.g. development build not yet installed),
+ *   the function returns 0 silently rather than raising an error.
+ *
+ * Called automatically by \c p_meta_write() and \c p_meta_write_3d(), so
+ * any \c p.in.* module that uses \c p_meta already installs the database
+ * on first import without any extra code.
+ *
+ * \return 0 on success or if the source is not available, -1 on I/O error
+ */
+int p_meta_install_matter_bands(void);
+
 #ifdef __cplusplus
 }
 #endif
