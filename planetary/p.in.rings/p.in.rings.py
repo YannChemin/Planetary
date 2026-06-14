@@ -329,9 +329,10 @@ def _sample_bilinear(image, s, l):
     v10 = np.where(np.isnan(v10), 0.0, v10)
     v01 = np.where(np.isnan(v01), 0.0, v01)
     v11 = np.where(np.isnan(v11), 0.0, v11)
-    result = np.where(wsum > 0,
-                      (v00*w00 + v10*w10 + v01*w01 + v11*w11) / wsum,
-                      np.nan)
+    with np.errstate(invalid="ignore"):
+        result = np.where(wsum > 0,
+                          (v00*w00 + v10*w10 + v01*w01 + v11*w11) / wsum,
+                          np.nan)
     out[valid] = result
     return out
 

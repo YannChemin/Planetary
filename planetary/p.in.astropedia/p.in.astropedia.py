@@ -86,6 +86,16 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # % description: vis: VIS channel (0.35-1.05 µm, 96 bands); ir: IR channel (0.88-5.1 µm, 256 bands). Applies to VIMS .qub cubes fetched via opus= or opus_id=.
 # %end
 
+# %option
+# % key: product
+# % type: string
+# % required: no
+# % options: auto,raw,calib
+# % answer: auto
+# % label: Product calibration level to prefer
+# % description: auto: prefer calibrated (CALIB) for ISS, raw otherwise; raw: always import raw PDS3 image (.img without _CALIB); calib: always prefer calibrated product (_CALIB.img).
+# %end
+
 # %option G_OPT_R_OUTPUT
 # % required: no
 # % description: GRASS raster name for the imported product. Required unless -l is given.
@@ -436,15 +446,20 @@ def opus_files(opus_id):
     return files
 
 
-def _pick_raw_product(file_list, channel="vis"):
+def _pick_raw_product(file_list, channel="vis", product="auto"):
     """Return (url, filename) for the best data file in *file_list*.
 
-    Priority:
+    ``product`` controls calibration preference for ISS .img files:
+      - ``auto``  (default): prefer _CALIB.img, fall back to raw .img.
+      - ``calib``: require _CALIB.img; fall back to raw .img only if absent.
+      - ``raw``:   skip all _CALIB files; take the raw .img directly.
+
+    Full priority order (VIMS takes precedence regardless of ``product``):
       1. VIMS channel-specific ``_<channel>.qub`` (e.g. ``_vis.qub``).
-      2. Any ``.qub`` file (other VIMS or generic cube).
-      3. Calibrated ISS ``.img`` (filename contains ``_CALIB``).
-      4. Any ``.img`` file from a ``*raw*`` product type (ISS raw image).
-      5. Any ``.img`` file (ISS or other PDS3 image).
+      2. Any ``.qub`` file.
+      3. Calibrated ISS ``_CALIB.img``  (skipped when product=raw).
+      4. Any ``.img`` from a ``*raw*`` product type.
+      5. Any ``.img``.
     """
     suffix = f"_{channel.lower()}.qub"
     for url, fname, _ptype in file_list:
@@ -453,9 +468,10 @@ def _pick_raw_product(file_list, channel="vis"):
     for url, fname, _ptype in file_list:
         if fname.lower().endswith(".qub"):
             return url, fname
-    for url, fname, _ptype in file_list:
-        if fname.lower().endswith(".img") and "_calib" in fname.lower():
-            return url, fname
+    if product in ("auto", "calib"):
+        for url, fname, _ptype in file_list:
+            if fname.lower().endswith(".img") and "_calib" in fname.lower():
+                return url, fname
     for url, fname, ptype in file_list:
         if fname.lower().endswith(".img") and "raw" in ptype.lower():
             return url, fname
@@ -892,6 +908,7 @@ def main():
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
+    opt_product      = options["product"] or "auto"
     opt_output       = options["output"]
     opt_band         = int(options["band"])
     opt_limit        = int(options["limit"])
@@ -1007,7 +1024,7 @@ def main():
                 gs.fatal(f"No downloadable files for OPUS ID '{opus_id}'.")
 
         # Determine which file to download (.qub for VIMS, .img for ISS).
-        dl_url, dl_fname = _pick_raw_product(file_list, opt_vims_channel)
+        dl_url, dl_fname = _pick_raw_product(file_list, opt_vims_channel, opt_product)
         if not dl_url:
             gs.fatal(
                 f"No raw data file (.qub/.img) found for OPUS observation "
