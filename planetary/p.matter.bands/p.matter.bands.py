@@ -99,7 +99,6 @@ import json
 import tempfile
 
 import grass.script as gs
-from grass.script import array as garray
 
 
 _NULL = -9999.0
@@ -216,10 +215,14 @@ def _find_nearest_band(wl_dict, target_um, tolerance_um=0.030):
 def _read_band(band_name):
     """Read a GRASS raster into a float64 numpy array; NULL → NaN."""
     import numpy as np
-    r = garray.array()
-    r.read(band_name, null=_NULL)
-    arr = r.astype("float64")
+    reg = gs.region()
+    nr, nc = int(reg["rows"]), int(reg["cols"])
+    tmp = tempfile.mktemp(suffix=".bin")
+    gs.run_command("r.out.bin", input=band_name, output=tmp,
+                   bytes=4, flags="f", null=str(_NULL), quiet=True)
+    arr = np.fromfile(tmp, dtype=np.float32).reshape(nr, nc).astype(np.float64)
     arr[arr == _NULL] = float("nan")
+    os.unlink(tmp)
     return arr
 
 

@@ -9,6 +9,7 @@ Purpose: Detect planetary matter (minerals, ices, gases, organics, liquids)
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -23,7 +24,7 @@ def _gaussian_absorption(wavelengths_um, center_um, depth=0.4, fwhm_um=0.05):
     """Return reflectance array (numpy) with one Gaussian absorption feature."""
     import numpy as np
     sigma = fwhm_um / (2.0 * (2.0 * np.log(2.0)) ** 0.5)
-    continuum = 0.30  # flat reflectance baseline
+    continuum = 0.30
     absorb = depth * np.exp(-0.5 * ((wavelengths_um - center_um) / sigma) ** 2)
     return continuum * (1.0 - absorb)
 
@@ -63,15 +64,18 @@ def _create_synthetic_band(mapname, value_or_array, region, overwrite=True):
 
 
 # ── Minimal test database ─────────────────────────────────────────────────────
+# Uses body="mars" so the module's enum validation passes.
+# Species names are prefixed "pmb_test_" to avoid clashing with the real
+# matter_bands.json entries when db= is not supplied.
 
 _TEST_DB = {
     "_schema": "matter_bands_v1",
     "bodies": {
-        "testbody": {
+        "mars": {
             "minerals": [
                 {
-                    "name": "test_mineral_a",
-                    "display_name": "Test Mineral A",
+                    "name": "pmb_test_mineral_a",
+                    "display_name": "PMB Test Mineral A",
                     "formula": "TA",
                     "detection_range_um": [1.0, 2.0],
                     "absorption_bands": [
@@ -85,37 +89,43 @@ _TEST_DB = {
                     "refs": [],
                 },
                 {
-                    "name": "test_mineral_b",
-                    "display_name": "Test Mineral B (two bands)",
+                    "name": "pmb_test_mineral_b",
+                    "display_name": "PMB Test Mineral B (two bands)",
                     "formula": "TB",
-                    "detection_range_um": [1.0, 2.5],
+                    # detection_range_um starts at 1.70 µm so that the narrow
+                    # test group (which covers only ~1.52–1.62 µm) falls
+                    # outside: sensor_max (1.621) < dr[0] (1.70) → out of range.
+                    "detection_range_um": [1.70, 2.50],
                     "absorption_bands": [
-                        {
-                            "center": 1.30,
-                            "left":   1.10,
-                            "right":  1.50,
-                            "type":   "primary feature",
-                        },
                         {
                             "center": 1.90,
                             "left":   1.75,
                             "right":  2.05,
+                            "type":   "primary feature",
+                        },
+                        {
+                            "center": 2.21,
+                            "left":   2.10,
+                            "right":  2.35,
                             "type":   "confirming feature",
                         },
                     ],
                     "refs": [],
                 },
             ],
-            "ices": [],
-            "gases": [],
+            "ices":     [],
+            "gases":    [],
             "organics": [],
-            "liquids": [],
+            "liquids":  [],
         }
     },
 }
 
-# Wavelengths covering the test features (1.0 – 2.5 µm, 30 bands)
+# 30 bands covering 1.0–2.5 µm (full group, step ~0.052 µm)
 _WL_UM = [1.0 + i * (1.5 / 29) for i in range(30)]
+
+# Narrow group: bands 10–12 → ~1.517–1.621 µm (does NOT reach 1.70 µm)
+_WL_NARROW = _WL_UM[10:13]
 
 
 class TestPmatterbands(TestCase):
@@ -134,14 +144,15 @@ class TestPmatterbands(TestCase):
             json.dump(_TEST_DB, f)
         _write_wavelength_csv(cls.wl_csv, _WL_UM)
 
-        # Build GRASS image group with one synthetic band per wavelength
+        # 30 synthetic bands: each pixel carries the Gaussian reflectance value
+        # for that band's wavelength (absorption centred at 1.30 µm).
         import numpy as np
         cls.band_names = []
         wl_arr = np.array(_WL_UM)
+        refl   = _gaussian_absorption(wl_arr, center_um=1.30)
         for i, wl in enumerate(wl_arr):
             name = f"pmb_test_band_{i:03d}"
-            reflectance = _gaussian_absorption(wl_arr, center_um=1.30)[i]
-            _create_synthetic_band(name, float(reflectance), cls.region)
+            _create_synthetic_band(name, float(refl[i]), cls.region)
             cls.band_names.append(name)
 
         gs.run_command(
@@ -151,7 +162,7 @@ class TestPmatterbands(TestCase):
             overwrite=True, quiet=True,
         )
 
-        # Separate group with only 3 bands — exercises single-band path
+        # Narrow group: only 3 bands (~1.517–1.621 µm)
         cls.narrow_bands = cls.band_names[10:13]
         gs.run_command(
             "i.group",
@@ -160,12 +171,11 @@ class TestPmatterbands(TestCase):
             overwrite=True, quiet=True,
         )
         cls.narrow_csv = tempfile.mktemp(suffix=".csv")
-        _write_wavelength_csv(cls.narrow_csv, _WL_UM[10:13])
+        _write_wavelength_csv(cls.narrow_csv, _WL_NARROW)
 
     @classmethod
     def tearDownClass(cls):
         cls.del_temp_region()
-        # Remove synthetic rasters
         for name in cls.band_names:
             gs.run_command("g.remove", flags="f", type="raster",
                            name=name, quiet=True)
@@ -182,9 +192,17 @@ class TestPmatterbands(TestCase):
     # ── Infrastructure ────────────────────────────────────────────────────────
 
     def test_help(self):
-        """Module exits successfully with --help."""
-        module = SimpleModule("p.matter.bands", flags="h")
-        self.assertModule(module)
+        """Module exits 0 with --help."""
+        # Use subprocess: pygrass rejects unknown flags (h is not declared
+        # in the module interface) and blocks before the module even runs.
+        result = subprocess.run(
+            ["p.matter.bands", "--help"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0,
+                         msg=f"--help exited {result.returncode}:\n"
+                             f"{result.stderr}")
+        self.assertIn("p.matter.bands", result.stdout + result.stderr)
 
     def test_module_in_path(self):
         """Module binary is found in PATH."""
@@ -200,7 +218,10 @@ class TestPmatterbands(TestCase):
         with open(self.db_path) as f:
             db = json.load(f)
         self.assertIn("bodies", db)
-        self.assertIn("testbody", db["bodies"])
+        self.assertIn("mars", db["bodies"])
+        names = [sp["name"] for sp in db["bodies"]["mars"]["minerals"]]
+        self.assertIn("pmb_test_mineral_a", names)
+        self.assertIn("pmb_test_mineral_b", names)
 
     def test_custom_db_list_mode(self):
         """List mode (-l) with a custom db= shows the test species."""
@@ -208,27 +229,27 @@ class TestPmatterbands(TestCase):
             "p.matter.bands",
             flags="l",
             group="pmb_test_group",
-            body="testbody",
+            body="mars",
             output_prefix="pmb_out",
             wavelengths=self.wl_csv,
             db=self.db_path,
         )
         self.assertModule(module)
         stdout = module.outputs.stdout
-        self.assertIn("test_mineral_a", stdout)
-        self.assertIn("test_mineral_b", stdout)
+        self.assertIn("pmb_test_mineral_a", stdout)
+        self.assertIn("pmb_test_mineral_b", stdout)
 
     # ── Wavelength CSV ────────────────────────────────────────────────────────
 
     def test_wavelength_csv_band_count_mismatch_fails(self):
-        """Module must exit non-zero when CSV row count != group band count."""
+        """Module exits non-zero when CSV row count != group band count."""
         bad_csv = tempfile.mktemp(suffix=".csv")
-        _write_wavelength_csv(bad_csv, _WL_UM[:5])  # only 5 rows for 30 bands
+        _write_wavelength_csv(bad_csv, _WL_UM[:5])  # 5 rows for a 30-band group
         module = SimpleModule(
             "p.matter.bands",
             flags="l",
             group="pmb_test_group",
-            body="testbody",
+            body="mars",
             output_prefix="pmb_out",
             wavelengths=bad_csv,
             db=self.db_path,
@@ -237,20 +258,24 @@ class TestPmatterbands(TestCase):
         os.unlink(bad_csv)
 
     def test_narrow_group_skips_out_of_range_species(self):
-        """A group covering only 3 bands should skip species needing wider range."""
+        """Species requiring wavelengths beyond sensor max appear as out-of-range.
+
+        The narrow group covers ~1.517–1.621 µm.  pmb_test_mineral_b has
+        detection_range_um=[1.70, 2.50], so sensor_max (1.621) < 1.70 and
+        the species must appear under 'Out of sensor range'.
+        """
         module = SimpleModule(
             "p.matter.bands",
             flags="l",
             group="pmb_narrow_group",
-            body="testbody",
+            body="mars",
             output_prefix="pmb_narrow_out",
             wavelengths=self.narrow_csv,
             db=self.db_path,
         )
         self.assertModule(module)
-        stdout = module.outputs.stdout
-        # test_mineral_b requires 1.0–2.5 µm; narrow group is ~1.5–1.6 µm
-        self.assertIn("Out of sensor range", stdout)
+        self.assertIn("Out of sensor range", module.outputs.stdout)
+        self.assertIn("pmb_test_mineral_b", module.outputs.stdout)
 
     # ── Raster output ─────────────────────────────────────────────────────────
 
@@ -261,7 +286,7 @@ class TestPmatterbands(TestCase):
         module = SimpleModule(
             "p.matter.bands",
             group="pmb_test_group",
-            body="testbody",
+            body="mars",
             output_prefix="pmb_out",
             wavelengths=self.wl_csv,
             db=self.db_path,
@@ -269,8 +294,7 @@ class TestPmatterbands(TestCase):
             overwrite=True,
         )
         self.assertModule(module)
-        # At least test_mineral_a should be written
-        self.assertRasterExists("pmb_out_test_mineral_a")
+        self.assertRasterExists("pmb_out_pmb_test_mineral_a")
 
     @unittest.skipUnless(shutil.which("p.matter.bands"),
                          "p.matter.bands not installed — skipping output tests")
@@ -279,7 +303,7 @@ class TestPmatterbands(TestCase):
         module = SimpleModule(
             "p.matter.bands",
             group="pmb_test_group",
-            body="testbody",
+            body="mars",
             output_prefix="pmb_out",
             wavelengths=self.wl_csv,
             db=self.db_path,
@@ -287,22 +311,19 @@ class TestPmatterbands(TestCase):
             overwrite=True,
         )
         self.assertModule(module)
-        stats = gs.parse_command(
-            "r.univar",
-            flags="g",
-            map="pmb_out_test_mineral_a",
-        )
+        stats = gs.parse_command("r.univar", flags="g",
+                                 map="pmb_out_pmb_test_mineral_a")
         self.assertGreaterEqual(float(stats["min"]), 0.0)
         self.assertLessEqual(float(stats["max"]), 1.0)
 
     @unittest.skipUnless(shutil.which("p.matter.bands"),
                          "p.matter.bands not installed — skipping output tests")
     def test_min_bd_threshold(self):
-        """Raising min_bd to 1.0 should produce no valid (non-NULL) pixels."""
+        """Raising min_bd to 1.0 produces no valid pixels (BD never reaches 1)."""
         module = SimpleModule(
             "p.matter.bands",
             group="pmb_test_group",
-            body="testbody",
+            body="mars",
             output_prefix="pmb_out",
             wavelengths=self.wl_csv,
             db=self.db_path,
@@ -310,12 +331,11 @@ class TestPmatterbands(TestCase):
             overwrite=True,
         )
         self.assertModule(module)
-        # Map may not exist at all (no pixels exceed BD=1.0), which is correct
-        if gs.find_file("pmb_out_test_mineral_a", element="cell")["name"]:
-            stats = gs.parse_command(
-                "r.univar", flags="g", map="pmb_out_test_mineral_a"
-            )
-            self.assertEqual(int(stats.get("n", 0)), 0)
+        # Module should report 0 valid pixels and not write the map at all
+        self.assertFalse(
+            gs.find_file("pmb_out_pmb_test_mineral_a", element="cell")["name"],
+            "Map should not exist when no pixels exceed min_bd=1.0",
+        )
 
     # ── Custom species insertion (round-trip) ─────────────────────────────────
 
@@ -323,10 +343,10 @@ class TestPmatterbands(TestCase):
         """A new species added to a local db= copy is detected in -l output."""
         import copy
         custom_db = copy.deepcopy(_TEST_DB)
-        custom_db["bodies"]["testbody"]["minerals"].append(
+        custom_db["bodies"]["mars"]["minerals"].append(
             {
-                "name": "roundtrip_species",
-                "display_name": "Round-trip test species",
+                "name": "pmb_roundtrip_species",
+                "display_name": "PMB Round-trip test species",
                 "formula": "RT",
                 "detection_range_um": [1.2, 1.5],
                 "absorption_bands": [
@@ -337,45 +357,41 @@ class TestPmatterbands(TestCase):
                         "type":   "synthetic test feature",
                     }
                 ],
-                "refs": [
-                    {
-                        "cite": "Chemin (2026) Test J.",
-                        "doi":  "10.0000/test",
-                    }
-                ],
+                "refs": [{"cite": "Chemin (2026) Test J.", "doi": "10.0000/test"}],
             }
         )
         custom_path = tempfile.mktemp(suffix=".json")
         with open(custom_path, "w") as f:
             json.dump(custom_db, f)
 
-        # Validate JSON is still well-formed after insertion
+        # Sanity-check: JSON is still valid and species is present
         with open(custom_path) as f:
             loaded = json.load(f)
-        names = [sp["name"] for sp in loaded["bodies"]["testbody"]["minerals"]]
-        self.assertIn("roundtrip_species", names)
+        names = [sp["name"] for sp in loaded["bodies"]["mars"]["minerals"]]
+        self.assertIn("pmb_roundtrip_species", names)
 
         module = SimpleModule(
             "p.matter.bands",
             flags="l",
             group="pmb_test_group",
-            body="testbody",
+            body="mars",
             output_prefix="pmb_out",
             wavelengths=self.wl_csv,
             db=custom_path,
         )
         self.assertModule(module)
-        self.assertIn("roundtrip_species", module.outputs.stdout)
+        self.assertIn("pmb_roundtrip_species", module.outputs.stdout)
 
         os.unlink(custom_path)
 
     # ── Misc/ database path ───────────────────────────────────────────────────
 
     def test_misc_db_found_before_system(self):
-        """
-        A matter_bands.json placed in $MAPSET/Misc/ takes priority over db=.
-        Verify the search-path ordering by placing a modified db there and
-        checking that the unique species in it appears in -l output.
+        """A matter_bands.json in $MAPSET/Misc/ takes priority over system db.
+
+        Places a modified database (with a unique species 'pmb_misc_only') in
+        the mapset Misc/ directory, then runs without db= and verifies the
+        unique species appears in -l output — proving the Misc/ path was used.
         """
         import copy
 
@@ -386,16 +402,16 @@ class TestPmatterbands(TestCase):
         os.makedirs(misc_dir, exist_ok=True)
         misc_db_path = os.path.join(misc_dir, "matter_bands.json")
 
-        # Write a db with an extra species that the system db does not have
         misc_db = copy.deepcopy(_TEST_DB)
-        misc_db["bodies"]["testbody"]["minerals"].append(
+        misc_db["bodies"]["mars"]["minerals"].append(
             {
-                "name": "misc_only_species",
-                "display_name": "Misc-only species",
+                "name": "pmb_misc_only",
+                "display_name": "PMB Misc-only species",
                 "formula": "MO",
                 "detection_range_um": [1.0, 2.0],
                 "absorption_bands": [
-                    {"center": 1.30, "left": 1.10, "right": 1.50, "type": "test"}
+                    {"center": 1.30, "left": 1.10, "right": 1.50,
+                     "type": "test"}
                 ],
                 "refs": [],
             }
@@ -408,13 +424,13 @@ class TestPmatterbands(TestCase):
                 "p.matter.bands",
                 flags="l",
                 group="pmb_test_group",
-                body="testbody",
+                body="mars",
                 output_prefix="pmb_out",
                 wavelengths=self.wl_csv,
-                # No db= — must pick up from Misc/ automatically
+                # No db= — module must pick up Misc/ automatically
             )
             self.assertModule(module)
-            self.assertIn("misc_only_species", module.outputs.stdout)
+            self.assertIn("pmb_misc_only", module.outputs.stdout)
         finally:
             os.unlink(misc_db_path)
 
