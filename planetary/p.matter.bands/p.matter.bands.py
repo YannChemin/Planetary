@@ -140,7 +140,7 @@ def _load_database(db_path=None):
             with open(p) as f:
                 return json.load(f)
     gs.fatal(
-        _("Band database not found. Searched:\n  {}").format("\n  ".join(paths))
+        "Band database not found. Searched:\n  {}".format("\n  ".join(paths))
     )
 
 
@@ -379,7 +379,7 @@ def main():
     body_data = db.get("bodies", {}).get(body)
     if body_data is None and body != "generic":
         gs.fatal(
-            _("Body '{}' not in database. Available: {}").format(
+            "Body '{}' not in database. Available: {}".format(
                 body, ", ".join(db.get("bodies", {}).keys()))
         )
 
@@ -397,20 +397,20 @@ def main():
                 all_species.append(sp)
 
     if not all_species:
-        gs.warning(_("No species found for body='{}', matter={}.").format(
+        gs.warning("No species found for body='{}', matter={}.".format(
             body, matter_types))
         return
 
     # ── Resolve wavelengths ───────────────────────────────────────────────────
     band_names = _get_group_bands(group)
     if not band_names:
-        gs.fatal(_("No bands found in group '{}'.").format(group))
+        gs.fatal("No bands found in group '{}'.".format(group))
 
     if wcsv:
         wls, _ = _read_wavelengths_csv(wcsv)
         if len(wls) != len(band_names):
             gs.fatal(
-                _("wavelengths= CSV has {} entries but group '{}' has {} bands.").format(
+                "wavelengths= CSV has {} entries but group '{}' has {} bands.".format(
                     len(wls), group, len(band_names))
             )
         wl_dict = _build_wl_dict(band_names, wls)
@@ -419,11 +419,11 @@ def main():
         if sidecar is not None:
             wl_dict = _build_wl_dict(band_names, sidecar)
         else:
-            gs.fatal(_(
+            gs.fatal(
                 "No wavelength data found. Provide wavelengths= (two-column CSV: "
                 "wavelength_um,fwhm_um per band line, one line per band in the group)."
                 "\nAlternatively, import with p.in.isis to preserve per-band "
-                "wavelength metadata automatically."))
+                "wavelength metadata automatically.")
 
     sensor_min = min(wl_dict.values())
     sensor_max = max(wl_dict.values())
