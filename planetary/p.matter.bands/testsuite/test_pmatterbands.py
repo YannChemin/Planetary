@@ -127,6 +127,105 @@ _WL_UM = [1.0 + i * (1.5 / 29) for i in range(30)]
 # Narrow group: bands 10–12 → ~1.517–1.621 µm (does NOT reach 1.70 µm)
 _WL_NARROW = _WL_UM[10:13]
 
+# ── Phase 2 test database ─────────────────────────────────────────────────────
+# Contains one UV reflectance species and one MIR emissivity species.
+# The mode= field on the MIR species is the key field under test.
+
+_TEST_DB_P2 = {
+    "_schema": "matter_bands_v1",
+    "bodies": {
+        "mars": {
+            "minerals": [
+                {
+                    "name": "pmb_p2_uv_mineral",
+                    "display_name": "PMB Phase-2 UV mineral",
+                    "formula": "UV",
+                    # mode defaults to "reflectance" when absent
+                    "detection_range_um": [0.18, 0.40],
+                    "absorption_bands": [
+                        {
+                            "center": 0.22,
+                            "left":   0.18,
+                            "right":  0.28,
+                            "type":   "electronic_charge_transfer",
+                        }
+                    ],
+                    "refs": [],
+                },
+                {
+                    "name": "pmb_p2_mir_mineral",
+                    "display_name": "PMB Phase-2 MIR emissivity mineral",
+                    "formula": "MIR",
+                    "mode": "emissivity",
+                    "detection_range_um": [8.5, 12.0],
+                    "absorption_bands": [
+                        {
+                            "center": 9.3,
+                            "left":   8.6,
+                            "right":  10.0,
+                            "type":   "Si-O_stretching",
+                        }
+                    ],
+                    "refs": [],
+                },
+            ],
+            "ices":     [],
+            "gases":    [],
+            "organics": [],
+            "liquids":  [],
+        }
+    },
+}
+
+# UV sensor: 20 bands 0.18–0.45 µm (step ~0.014 µm)
+_WL_UV = [0.18 + i * (0.27 / 19) for i in range(20)]
+
+# MIR sensor: 20 bands 8.0–12.0 µm (step ~0.21 µm)
+_WL_MIR = [8.0 + i * (4.0 / 19) for i in range(20)]
+
+# FIR sensor: wavelengths around the cometary H2O rotational lines
+_WL_FIR = [50.0 + i * (160.0 / 19) for i in range(20)]  # 50–210 µm
+
+# Phase-2 comet database: reflectance UV gas species + FIR ice species
+_TEST_DB_COMET = {
+    "_schema": "matter_bands_v1",
+    "bodies": {
+        "comet": {
+            "minerals": [],
+            "ices": [
+                {
+                    "name": "pmb_p2_h2o_fir",
+                    "display_name": "PMB H2O FIR rotational",
+                    "formula": "H2O",
+                    "detection_range_um": [50.0, 200.0],
+                    "absorption_bands": [
+                        {"center": 56.9,  "left": 55.0,  "right": 59.0,
+                         "type": "rotational"},
+                        {"center": 179.5, "left": 176.0, "right": 183.0,
+                         "type": "rotational"},
+                    ],
+                    "refs": [],
+                },
+            ],
+            "gases": [
+                {
+                    "name": "pmb_p2_oh_coma",
+                    "display_name": "PMB OH UV",
+                    "formula": "OH",
+                    "detection_range_um": [0.28, 0.33],
+                    "absorption_bands": [
+                        {"center": 0.308, "left": 0.290, "right": 0.320,
+                         "type": "electronic"},
+                    ],
+                    "refs": [],
+                },
+            ],
+            "organics": [],
+            "liquids":  [],
+        }
+    },
+}
+
 
 class TestPmatterbands(TestCase):
     """Test suite for p.matter.bands."""
@@ -433,6 +532,417 @@ class TestPmatterbands(TestCase):
             self.assertIn("pmb_misc_only", module.outputs.stdout)
         finally:
             os.unlink(misc_db_path)
+
+
+class TestPmatterbandsPhase2(TestCase):
+    """Phase 2 tests: UV/MIR emissivity/FIR wavelength range extension."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        # Write Phase 2 test databases
+        cls.db_p2   = tempfile.mktemp(suffix=".json")
+        cls.db_comet = tempfile.mktemp(suffix=".json")
+        with open(cls.db_p2, "w") as f:
+            json.dump(_TEST_DB_P2, f)
+        with open(cls.db_comet, "w") as f:
+            json.dump(_TEST_DB_COMET, f)
+
+        # CSV files for each sensor range
+        cls.wl_uv_csv  = tempfile.mktemp(suffix=".csv")
+        cls.wl_mir_csv = tempfile.mktemp(suffix=".csv")
+        cls.wl_fir_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_uv_csv,  _WL_UV)
+        _write_wavelength_csv(cls.wl_mir_csv, _WL_MIR)
+        _write_wavelength_csv(cls.wl_fir_csv, _WL_FIR)
+
+        import numpy as np
+
+        # UV group: Gaussian absorption at 0.22 µm (UV mineral feature)
+        cls.uv_bands = []
+        wl_arr_uv = np.array(_WL_UV)
+        refl_uv = _gaussian_absorption(wl_arr_uv, center_um=0.22,
+                                        depth=0.5, fwhm_um=0.02)
+        for i, wl in enumerate(wl_arr_uv):
+            name = f"pmb_p2_uv_band_{i:03d}"
+            _create_synthetic_band(name, float(refl_uv[i]), cls.region)
+            cls.uv_bands.append(name)
+        gs.run_command("i.group", group="pmb_p2_uv_group",
+                       input=",".join(cls.uv_bands),
+                       overwrite=True, quiet=True)
+
+        # MIR group: Gaussian absorption at 9.3 µm (emissivity dip in TIR)
+        # Emissivity data: high values (~0.97) with a reststrahlen dip
+        cls.mir_bands = []
+        wl_arr_mir = np.array(_WL_MIR)
+        emiss_mir = _gaussian_absorption(wl_arr_mir, center_um=9.3,
+                                          depth=0.35, fwhm_um=0.4)
+        for i, wl in enumerate(wl_arr_mir):
+            name = f"pmb_p2_mir_band_{i:03d}"
+            _create_synthetic_band(name, float(emiss_mir[i]), cls.region)
+            cls.mir_bands.append(name)
+        gs.run_command("i.group", group="pmb_p2_mir_group",
+                       input=",".join(cls.mir_bands),
+                       overwrite=True, quiet=True)
+
+        # FIR group: Gaussian absorption at 57 µm (H2O rotational line)
+        cls.fir_bands = []
+        wl_arr_fir = np.array(_WL_FIR)
+        refl_fir = _gaussian_absorption(wl_arr_fir, center_um=56.9,
+                                         depth=0.45, fwhm_um=1.5)
+        for i, wl in enumerate(wl_arr_fir):
+            name = f"pmb_p2_fir_band_{i:03d}"
+            _create_synthetic_band(name, float(refl_fir[i]), cls.region)
+            cls.fir_bands.append(name)
+        gs.run_command("i.group", group="pmb_p2_fir_group",
+                       input=",".join(cls.fir_bands),
+                       overwrite=True, quiet=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        for bands in [cls.uv_bands, cls.mir_bands, cls.fir_bands]:
+            for name in bands:
+                gs.run_command("g.remove", flags="f", type="raster",
+                               name=name, quiet=True)
+        for pat in ["pmb_p2_uv_out_*", "pmb_p2_mir_out_*", "pmb_p2_fir_out_*"]:
+            gs.run_command("g.remove", flags="f", type="raster",
+                           pattern=pat, quiet=True)
+        for tmp in [cls.db_p2, cls.db_comet,
+                    cls.wl_uv_csv, cls.wl_mir_csv, cls.wl_fir_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    # ── mode= parameter ───────────────────────────────────────────────────────
+
+    def test_default_mode_is_reflectance(self):
+        """Without mode=, the module defaults to reflectance and mode label appears."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_uv_group",
+            body="mars",
+            output_prefix="pmb_p2_uv_out",
+            wavelengths=self.wl_uv_csv,
+            db=self.db_p2,
+        )
+        self.assertModule(module)
+        out = module.outputs.stdout + module.outputs.stderr
+        self.assertIn("Mode: reflectance", out)
+
+    def test_emissivity_mode_label_in_output(self):
+        """`mode=emissivity` is reported in the processing summary."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_mir_group",
+            body="mars",
+            output_prefix="pmb_p2_mir_out",
+            wavelengths=self.wl_mir_csv,
+            mode="emissivity",
+            db=self.db_p2,
+        )
+        self.assertModule(module)
+        out = module.outputs.stdout + module.outputs.stderr
+        self.assertIn("Mode: emissivity", out)
+
+    def test_reflectance_mode_skips_emissivity_species(self):
+        """In reflectance mode, species tagged mode=emissivity are excluded from in-range list.
+
+        The MIR sensor (8–12 µm) covers pmb_p2_mir_mineral's wavelengths, but
+        since its mode=emissivity it must be skipped when running in default
+        reflectance mode — it should not appear in the detectable list.
+        """
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_mir_group",
+            body="mars",
+            output_prefix="pmb_p2_mir_out",
+            wavelengths=self.wl_mir_csv,
+            # mode defaults to reflectance
+            db=self.db_p2,
+        )
+        self.assertModule(module)
+        # pmb_p2_mir_mineral must NOT appear as detectable
+        self.assertNotIn("pmb_p2_mir_mineral",
+                         module.outputs.stdout.split("Out of sensor range")[0])
+
+    def test_emissivity_mode_skips_reflectance_species(self):
+        """In emissivity mode, species without mode=emissivity tag are excluded.
+
+        The UV sensor (0.18–0.45 µm) covers pmb_p2_uv_mineral, but since it
+        has no mode tag (= reflectance), it must be skipped in emissivity mode.
+        """
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_uv_group",
+            body="mars",
+            output_prefix="pmb_p2_uv_out",
+            wavelengths=self.wl_uv_csv,
+            mode="emissivity",
+            db=self.db_p2,
+        )
+        self.assertModule(module)
+        self.assertNotIn("pmb_p2_uv_mineral",
+                         module.outputs.stdout.split("Out of sensor range")[0])
+
+    # ── UV range ──────────────────────────────────────────────────────────────
+
+    def test_uv_species_detectable_with_uv_sensor(self):
+        """UV species (0.22 µm) appears as detectable with a UV-range sensor."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_uv_group",
+            body="mars",
+            output_prefix="pmb_p2_uv_out",
+            wavelengths=self.wl_uv_csv,
+            db=self.db_p2,
+        )
+        self.assertModule(module)
+        # Should be in the detectable section (before "Out of sensor range")
+        stdout = module.outputs.stdout
+        detectable_section = stdout.split("Out of sensor range")[0]
+        self.assertIn("pmb_p2_uv_mineral", detectable_section)
+
+    def test_uv_species_out_of_range_with_swir_sensor(self):
+        """UV species is listed as out-of-range when sensor starts at 1.0 µm."""
+        # Reuse the Phase 1 SWIR group (1.0–2.5 µm) from TestPmatterbands,
+        # but we need a group here — create a minimal 3-band SWIR group.
+        import numpy as np
+        wl_swir = [1.0, 1.5, 2.0]
+        swir_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(swir_csv, wl_swir)
+        swir_bands = []
+        for i, wl in enumerate(wl_swir):
+            name = f"pmb_p2_swir_tmp_{i}"
+            _create_synthetic_band(name, 0.25, self.region)
+            swir_bands.append(name)
+        gs.run_command("i.group", group="pmb_p2_swir_group",
+                       input=",".join(swir_bands),
+                       overwrite=True, quiet=True)
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="l",
+                group="pmb_p2_swir_group",
+                body="mars",
+                output_prefix="pmb_p2_uv_out",
+                wavelengths=swir_csv,
+                db=self.db_p2,
+            )
+            self.assertModule(module)
+            self.assertIn("Out of sensor range", module.outputs.stdout)
+            self.assertIn("pmb_p2_uv_mineral", module.outputs.stdout)
+        finally:
+            os.unlink(swir_csv)
+            for name in swir_bands:
+                gs.run_command("g.remove", flags="f", type="raster",
+                               name=name, quiet=True)
+            gs.run_command("g.remove", flags="f", type="group",
+                           name="pmb_p2_swir_group", quiet=True)
+
+    # ── MIR emissivity range ──────────────────────────────────────────────────
+
+    def test_mir_species_detectable_in_emissivity_mode(self):
+        """MIR species at 9.3 µm appears as detectable with MIR sensor + mode=emissivity."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_mir_group",
+            body="mars",
+            output_prefix="pmb_p2_mir_out",
+            wavelengths=self.wl_mir_csv,
+            mode="emissivity",
+            db=self.db_p2,
+        )
+        self.assertModule(module)
+        detectable_section = module.outputs.stdout.split("Out of sensor range")[0]
+        self.assertIn("pmb_p2_mir_mineral", detectable_section)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed — skipping output tests")
+    def test_emissivity_output_map_created(self):
+        """Running in emissivity mode produces a valid band-depth output raster."""
+        module = SimpleModule(
+            "p.matter.bands",
+            group="pmb_p2_mir_group",
+            body="mars",
+            output_prefix="pmb_p2_mir_out",
+            wavelengths=self.wl_mir_csv,
+            mode="emissivity",
+            db=self.db_p2,
+            min_bd=0.001,
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p2_mir_out_pmb_p2_mir_mineral")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed — skipping output tests")
+    def test_emissivity_output_map_range(self):
+        """Emissivity band-depth map values are in [0, 1]."""
+        module = SimpleModule(
+            "p.matter.bands",
+            group="pmb_p2_mir_group",
+            body="mars",
+            output_prefix="pmb_p2_mir_out",
+            wavelengths=self.wl_mir_csv,
+            mode="emissivity",
+            db=self.db_p2,
+            min_bd=0.001,
+            overwrite=True,
+        )
+        self.assertModule(module)
+        stats = gs.parse_command("r.univar", flags="g",
+                                 map="pmb_p2_mir_out_pmb_p2_mir_mineral")
+        self.assertGreaterEqual(float(stats["min"]), 0.0)
+        self.assertLessEqual(float(stats["max"]), 1.0)
+
+    # ── FIR range ─────────────────────────────────────────────────────────────
+
+    def test_fir_species_detectable_with_fir_sensor(self):
+        """FIR H2O rotational species (56.9 µm) appears as detectable with FIR sensor."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_fir_group",
+            body="comet",
+            output_prefix="pmb_p2_fir_out",
+            wavelengths=self.wl_fir_csv,
+            db=self.db_comet,
+        )
+        self.assertModule(module)
+        detectable_section = module.outputs.stdout.split("Out of sensor range")[0]
+        self.assertIn("pmb_p2_h2o_fir", detectable_section)
+
+    def test_fir_uv_species_out_of_range_with_fir_sensor(self):
+        """UV OH coma species is out-of-range when sensor covers only FIR (50–210 µm)."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="l",
+            group="pmb_p2_fir_group",
+            body="comet",
+            output_prefix="pmb_p2_fir_out",
+            wavelengths=self.wl_fir_csv,
+            db=self.db_comet,
+        )
+        self.assertModule(module)
+        self.assertIn("Out of sensor range", module.outputs.stdout)
+        self.assertIn("pmb_p2_oh_coma", module.outputs.stdout)
+
+    # ── Phase 2 database content ──────────────────────────────────────────────
+
+    def test_phase2_db_has_uv_entries(self):
+        """Real matter_bands.json contains UV entries (< 0.4 µm) for expected bodies."""
+        import json as _json
+        import os as _os
+        gisbase = _os.getenv("GISBASE", "")
+        sys_db = _os.path.join(gisbase, "etc", "planetary", "matter_bands.json")
+        dev_db = _os.path.normpath(
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                          "..", "..", "..", "data", "matter_bands.json"))
+        db_path = sys_db if _os.path.isfile(sys_db) else dev_db
+        if not _os.path.isfile(db_path):
+            self.skipTest("matter_bands.json not found (not installed and no dev tree)")
+        with open(db_path) as f:
+            db = _json.load(f)
+        uv_centers = []
+        for bdata in db["bodies"].values():
+            for mtype in ["minerals", "ices", "gases", "organics", "liquids"]:
+                for sp in bdata.get(mtype, []):
+                    for b in sp.get("absorption_bands", []):
+                        if b["center"] < 0.4:
+                            uv_centers.append(b["center"])
+        self.assertGreater(len(uv_centers), 0,
+                           "No UV (<0.4 µm) band entries found in matter_bands.json")
+        self.assertGreaterEqual(len(uv_centers), 10,
+                                f"Expected ≥10 UV entries, got {len(uv_centers)}")
+
+    def test_phase2_db_has_mir_emissivity_entries(self):
+        """Real matter_bands.json contains emissivity-mode MIR entries (5–30 µm)."""
+        import json as _json
+        import os as _os
+        gisbase = _os.getenv("GISBASE", "")
+        sys_db = _os.path.join(gisbase, "etc", "planetary", "matter_bands.json")
+        dev_db = _os.path.normpath(
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                          "..", "..", "..", "data", "matter_bands.json"))
+        db_path = sys_db if _os.path.isfile(sys_db) else dev_db
+        if not _os.path.isfile(db_path):
+            self.skipTest("matter_bands.json not found")
+        with open(db_path) as f:
+            db = _json.load(f)
+        mir_emiss = []
+        for bdata in db["bodies"].values():
+            for mtype in ["minerals", "ices", "gases", "organics", "liquids"]:
+                for sp in bdata.get(mtype, []):
+                    if sp.get("mode") != "emissivity":
+                        continue
+                    for b in sp.get("absorption_bands", []):
+                        if 5.0 <= b["center"] <= 30.0:
+                            mir_emiss.append(b["center"])
+        self.assertGreater(len(mir_emiss), 0,
+                           "No emissivity-mode MIR entries in matter_bands.json")
+        self.assertGreaterEqual(len(mir_emiss), 10,
+                                f"Expected ≥10 MIR emissivity entries, got {len(mir_emiss)}")
+
+    def test_phase2_db_has_fir_entries(self):
+        """Real matter_bands.json contains FIR entries (> 30 µm)."""
+        import json as _json
+        import os as _os
+        gisbase = _os.getenv("GISBASE", "")
+        sys_db = _os.path.join(gisbase, "etc", "planetary", "matter_bands.json")
+        dev_db = _os.path.normpath(
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                          "..", "..", "..", "data", "matter_bands.json"))
+        db_path = sys_db if _os.path.isfile(sys_db) else dev_db
+        if not _os.path.isfile(db_path):
+            self.skipTest("matter_bands.json not found")
+        with open(db_path) as f:
+            db = _json.load(f)
+        fir_centers = []
+        for bdata in db["bodies"].values():
+            for mtype in ["minerals", "ices", "gases", "organics", "liquids"]:
+                for sp in bdata.get(mtype, []):
+                    for b in sp.get("absorption_bands", []):
+                        if b["center"] > 30.0:
+                            fir_centers.append(b["center"])
+        self.assertGreater(len(fir_centers), 0,
+                           "No FIR (>30 µm) entries found in matter_bands.json")
+
+    def test_phase2_db_mode_field_valid(self):
+        """Every species with an explicit mode= field has a valid value."""
+        import json as _json
+        import os as _os
+        gisbase = _os.getenv("GISBASE", "")
+        sys_db = _os.path.join(gisbase, "etc", "planetary", "matter_bands.json")
+        dev_db = _os.path.normpath(
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                          "..", "..", "..", "data", "matter_bands.json"))
+        db_path = sys_db if _os.path.isfile(sys_db) else dev_db
+        if not _os.path.isfile(db_path):
+            self.skipTest("matter_bands.json not found")
+        with open(db_path) as f:
+            db = _json.load(f)
+        valid_modes = {"reflectance", "emissivity"}
+        invalid = []
+        for body, bdata in db["bodies"].items():
+            for mtype in ["minerals", "ices", "gases", "organics", "liquids"]:
+                for sp in bdata.get(mtype, []):
+                    m = sp.get("mode")
+                    if m is not None and m not in valid_modes:
+                        invalid.append(f"{body}/{sp['name']}: mode={m!r}")
+        self.assertEqual(invalid, [],
+                         "Invalid mode values in matter_bands.json:\n" +
+                         "\n".join(invalid))
 
 
 if __name__ == "__main__":
