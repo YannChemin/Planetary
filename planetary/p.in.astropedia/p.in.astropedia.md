@@ -189,33 +189,100 @@ p.rings.stats input=N1467344155_ringcyl \
 ### Chain B — outer A ring polar (display)
 
 Image `N1467346624_2.IMG`, 2004-07-01T03:52:49, observer ring elevation +26.9°.
-Full ready-to-run script: `$HOME/RSDATA/cassini_rev014_polar.sh`.
+Shows the outer A ring (Keeler Gap region, 136 272–136 649 km) as an arc in
+polar ring-plane coordinates.  Full ready-to-run script:
+`$HOME/RSDATA/cassini_rev014_polar.sh`.
+
+**Why `product=raw` is required here**: the CISSCAL 4.0beta calibrated product
+(`_CALIB.IMG`) for this image uses -1.91×10³⁸ as a sentinel for invalid pixels
+and flags nearly all ring pixels as invalid, leaving fewer than 20 valid output
+pixels after projection.  The raw PDS3 image combined with the per-column
+destripe in Step 3 is the correct path for this observation.
 
 ```bash
-# ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
-p.spice.find spacecraft=CASSINI time="2004-07-01T03:52:49" \
-    dest=$HOME/RSDATA/Saturn/kernels
+# One-time: create an XY GRASS location for ring-plane coordinates
+grass -c XY ~/grassdata/saturn_rings
 
-# ── Step 2: Raw image from OPUS  ← this module ────────────────────────────────
-p.in.astropedia opus_id=co-iss-n1467346624 output=N1467346624_raw
-
-# ── Step 3: Set polar output region in km × km ───────────────────────────────
-g.region n=130000 s=70000 e=-50000 w=-140000 nsres=50 ewres=50
-
-# ── Step 4: Project to polar ring-plane coordinates (p.in.rings) ─────────────
 KDIR="$HOME/RSDATA/Saturn/kernels"
+IMAGE_MID_TIME="2004-07-01T03:52:49"
+OPUS_ID="co-iss-n1467346624"
+RAWMAP="N1467346624_polar_raw"
+POLMAP="N1467346624_polar"
+
+# ── Step 1: SPICE kernels (p.spice.find) ──────────────────────────────────────
+SPICE_OUT=$(p.spice.find spacecraft=CASSINI time="${IMAGE_MID_TIME}" \
+    dest="${KDIR}" 2>&1)
+SPK_BASE=$(echo "${SPICE_OUT}" | grep -oP '(?<=selected: )\S+\.bsp' | tail -1)
+CK_BASE=$( echo "${SPICE_OUT}" | grep -oP '(?<=selected: )\S+\.bc'  | tail -1)
+LSK=$(find  "${KDIR}/lsk"  -name "*.tls"          | sort | tail -1)
+SCLK=$(find "${KDIR}/sclk" -name "cas*.tsc"       | sort | tail -1)
+IK=$(find   "${KDIR}/ik"   -name "cas_iss*.ti"    | sort | tail -1)
+FK=$(find   "${KDIR}/fk"   -name "cas_v*.tf"      | sort | tail -1)
+PCK1=$(find "${KDIR}/pck"  -name "cpck_rock*.tpc" | sort | tail -1)
+PCK2=$(find "${KDIR}/pck"  -name "pck[0-9]*.tpc"  | sort | tail -1)
+KERNELS="${LSK},${SCLK},${IK},${FK},${PCK1},${PCK2},\
+${KDIR}/spk/${SPK_BASE},${KDIR}/ck/${CK_BASE}"
+
+# ── Step 2: Fetch raw image from OPUS  ← this module ─────────────────────────
+# product=raw bypasses the auto preference for the calibrated (_CALIB.IMG)
+# product.  The companion .LBL label is matched by base name automatically.
+# The file is downloaded to ~/RSDATA/Misc/ and imported via p.in.pds3, which
+# reads LINE_PREFIX_BYTES=24 (ISS dark/overclocked pixel prefix) correctly.
+p.in.astropedia opus_id="${OPUS_ID}" output="${RAWMAP}" \
+    product=raw --overwrite
+g.region raster="${RAWMAP}"
+
+# ── Step 3: Per-column destripe ────────────────────────────────────────────────
+# ISS NAC CCD column-to-column bias (~10–50 DN/column) projects as diagonal
+# stripes at 26.9° ring elevation.  Column baseline is estimated from
+# background pixels only (below global 70th percentile) to exclude ring signal.
+python3 - "${RAWMAP}" << 'PYEOF'
+import sys, tempfile, os
+import numpy as np
+import grass.script as gs
+
+name = sys.argv[1]
+reg  = gs.region()
+nr, nc = int(reg["rows"]), int(reg["cols"])
+tmp = tempfile.mktemp(suffix=".bin")
+gs.run_command("r.out.bin", input=name, output=tmp,
+               bytes=4, flags="f", null="-9999", quiet=True)
+raw = np.fromfile(tmp, dtype=np.float32).reshape(nr, nc).astype(np.float64)
+null_mask = (raw == -9999.0)
+raw[null_mask] = np.nan
+global_thresh = np.nanpercentile(raw, 70)
+background    = np.where(raw < global_thresh, raw, np.nan)
+col_bias      = np.nanmedian(background, axis=0)
+all_bright    = np.isnan(col_bias)
+if np.any(all_bright):
+    col_bias[all_bright] = np.nanmedian(raw[:, all_bright], axis=0)
+raw -= col_bias[np.newaxis, :]
+raw[null_mask] = -9999.0
+raw.astype(np.float32).tofile(tmp)
+gs.run_command("r.in.bin", input=tmp, output=name, bytes=4, flags="f",
+               north=reg["n"], south=reg["s"], east=reg["e"], west=reg["w"],
+               rows=nr, cols=nc, anull="-9999", overwrite=True, quiet=True)
+os.unlink(tmp)
+PYEOF
+
+# ── Step 4: Set polar ring-plane output region (km × km) ─────────────────────
+# Image centre → r=136 504 km, lon=67.17° → x≈52 970 km, y≈125 808 km.
+# 455 × 435 km box at 1 km/pixel captures the outer A ring arc.
+g.region n=126024 s=125589 e=53198 w=52743 nsres=1 ewres=1
+
+# ── Step 5: Project to polar ring-plane coordinates (p.in.rings) ─────────────
 p.in.rings \
-    input=N1467346624_raw output=N1467346624_polar \
-    time="2004-07-01T03:52:49" instrument=-82360 \
+    input="${RAWMAP}" output="${POLMAP}" \
+    time="${IMAGE_MID_TIME}" instrument=-82360 \
     spacecraft=CASSINI body=SATURN frame=IAU_SATURN \
     projection=polar filter="CL1/CL2" \
-    kernels="${KDIR}/lsk/naif0012.tls,${KDIR}/sclk/cas00172.tsc,\
-${KDIR}/ik/cas_iss_v10.ti,${KDIR}/fk/cas_v40.tf,\
-${KDIR}/pck/cpck_rock_21Jan2011_merged.tpc,${KDIR}/pck/pck00010.tpc,\
-${KDIR}/spk/050824R_SCPSE_05217_05257.bsp,\
-${KDIR}/ck/05289_05294ra.bc"
-r.colors map=N1467346624_polar color=grey
-d.rast N1467346624_polar
+    kernels="${KERNELS}" grid=9 --overwrite
+
+# ── Step 6: Display ────────────────────────────────────────────────────────────
+# Histogram-equalized grey: ring arc (~950 DN) vs background (~0 DN) requires
+# non-linear mapping; -e ensures the arc is visually clear.
+r.colors -e map="${POLMAP}" color=grey
+d.mon start=wx0 && d.rast "${POLMAP}"
 ```
 
 ## REFERENCES
