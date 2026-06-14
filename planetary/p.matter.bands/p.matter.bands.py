@@ -70,6 +70,16 @@ LICENSE:   GNU GPL >=2
 # %end
 
 # %option
+# % key: mode
+# % type: string
+# % required: no
+# % options: reflectance,emissivity
+# % answer: reflectance
+# % label: Input data type
+# % description: reflectance — standard I/F or reflectance factor (UV–SWIR sensors); emissivity — thermal emissivity derived from calibrated MIR/TIR radiance via Planck inversion (TES, THEMIS, MERTIS, MIRI). The band-depth formula BD = 1 − signal(λ)/continuum(λ) is identical in both modes; this flag tags output maps and skips non-applicable database species.
+# %end
+
+# %option
 # % key: min_bd
 # % type: double
 # % required: no
@@ -367,6 +377,7 @@ def main():
     matter_types = [m.strip() for m in options["matter"].split(",")]
     db_path      = options["db"] or None
     min_bd       = float(options["min_bd"])
+    mode         = options["mode"]  # "reflectance" or "emissivity"
     flag_list    = flags["l"]
     flag_comp    = flags["c"]
     flag_verbose = flags["v"]
@@ -428,10 +439,14 @@ def main():
     sensor_min = min(wl_dict.values())
     sensor_max = max(wl_dict.values())
 
-    # ── Filter species by sensor coverage ────────────────────────────────────
+    # ── Filter species by sensor coverage and mode ───────────────────────────
     in_range, out_range = [], []
     for sp in all_species:
         dr = sp.get("detection_range_um", [0.0, 1000.0])
+        sp_mode = sp.get("mode", "reflectance")  # "reflectance" or "emissivity"
+        if sp_mode != mode:
+            out_range.append(sp)
+            continue
         if float(dr[0]) <= sensor_max and float(dr[1]) >= sensor_min:
             in_range.append(sp)
         else:
@@ -439,9 +454,9 @@ def main():
 
     gs.message(
         "Body: {} | Bands: {} | Sensor: {:.4f}–{:.4f} µm | "
-        "In range: {} | Out of range: {}".format(
+        "In range: {} | Out of range: {} | Mode: {}".format(
             body, len(band_names), sensor_min, sensor_max,
-            len(in_range), len(out_range))
+            len(in_range), len(out_range), mode)
     )
 
     if flag_list:
@@ -477,8 +492,8 @@ def main():
         gs.run_command(
             "r.support", map=out_name,
             title="{} band depth [{}]".format(sp.get("display_name", sp_name), mtype),
-            description="{} | Clark&Roush1984 BD{}".format(
-                sp.get("formula", sp_name), " | " + refs if refs else ""),
+            description="{} | Clark&Roush1984 BD | mode={}{}".format(
+                sp.get("formula", sp_name), mode, " | " + refs if refs else ""),
             overwrite=True, quiet=True)
 
         output_maps[mtype].append((out_name, bd_arr))

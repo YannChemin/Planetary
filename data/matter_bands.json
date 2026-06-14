@@ -1,34 +1,72 @@
 {
   "_schema": "matter_bands_v1",
-  "_description": "Planetary absorption-band database for p.matter.bands. Wavelengths in micrometres (µm). band_depth method: left/center/right shoulder wavelengths for continuum-removed depth. Entries are science-backed; DOIs listed.",
+  "_description": "Planetary absorption-band database for p.matter.bands. Wavelengths in micrometres (\u00b5m). band_depth method: left/center/right shoulder wavelengths for continuum-removed depth. Entries are science-backed; DOIs listed.",
   "_wavelength_unit": "micrometres",
-  "_matter_types": ["mineral", "ice", "gas", "organic", "liquid"],
+  "_matter_types": [
+    "mineral",
+    "ice",
+    "gas",
+    "organic",
+    "liquid"
+  ],
   "_band_types": {
     "electronic": "Crystal-field, charge-transfer, or conduction-band transition",
     "vibrational_fundamental": "Fundamental molecular vibration (MIR/LWIR)",
     "vibrational_overtone": "Overtone or combination tone (NIR/SWIR)",
     "vibrational_combination": "Combination band (NIR/SWIR)"
   },
-
   "bodies": {
-
     "mars": {
       "_notes": "Mars surface and atmosphere. Ehlmann & Edwards 2014 (Annu. Rev. Earth Planet. Sci.) is the primary review.",
       "minerals": [
         {
           "name": "olivine",
           "formula": "(Mg,Fe)2SiO4",
-          "sub_types": ["Fo50","Fo70","Fo90"],
-          "absorption_bands": [
-            {"center": 1.050, "left": 0.750, "right": 1.550, "type": "electronic", "note": "Fe2+ crystal field, 1-µm complex"},
-            {"center": 1.250, "left": 0.950, "right": 1.550, "type": "electronic", "note": "second Fe2+ site"}
+          "sub_types": [
+            "Fo50",
+            "Fo70",
+            "Fo90"
           ],
-          "sensors": ["CRISM","OMEGA","NIMS","M3","VIR"],
-          "detection_range_um": [0.7, 2.5],
+          "absorption_bands": [
+            {
+              "center": 1.05,
+              "left": 0.75,
+              "right": 1.55,
+              "type": "electronic",
+              "note": "Fe2+ crystal field, 1-\u00b5m complex"
+            },
+            {
+              "center": 1.25,
+              "left": 0.95,
+              "right": 1.55,
+              "type": "electronic",
+              "note": "second Fe2+ site"
+            }
+          ],
+          "sensors": [
+            "CRISM",
+            "OMEGA",
+            "NIMS",
+            "M3",
+            "VIR"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.5
+          ],
           "refs": [
-            {"cite": "Sunshine & Pieters 1993", "doi": "10.1029/93JE01598"},
-            {"cite": "Burns 1993", "doi": "10.1017/CBO9780511524899"},
-            {"cite": "Mustard et al. 2005", "doi": "10.1029/2005JE002495"}
+            {
+              "cite": "Sunshine & Pieters 1993",
+              "doi": "10.1029/93JE01598"
+            },
+            {
+              "cite": "Burns 1993",
+              "doi": "10.1017/CBO9780511524899"
+            },
+            {
+              "cite": "Mustard et al. 2005",
+              "doi": "10.1029/2005JE002495"
+            }
           ]
         },
         {
@@ -36,14 +74,40 @@
           "display_name": "Low-Ca pyroxene (orthopyroxene)",
           "formula": "(Mg,Fe)SiO3",
           "absorption_bands": [
-            {"center": 0.920, "left": 0.750, "right": 1.100, "type": "electronic", "note": "Band I, Fe2+ M2 site"},
-            {"center": 1.850, "left": 1.500, "right": 2.200, "type": "electronic", "note": "Band II, Fe2+ M2 site"}
+            {
+              "center": 0.92,
+              "left": 0.75,
+              "right": 1.1,
+              "type": "electronic",
+              "note": "Band I, Fe2+ M2 site"
+            },
+            {
+              "center": 1.85,
+              "left": 1.5,
+              "right": 2.2,
+              "type": "electronic",
+              "note": "Band II, Fe2+ M2 site"
+            }
           ],
-          "sensors": ["CRISM","OMEGA","VIR","M3"],
-          "detection_range_um": [0.7, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA",
+            "VIR",
+            "M3"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.5
+          ],
           "refs": [
-            {"cite": "Adams 1974", "doi": "10.1029/JB079i032p04829"},
-            {"cite": "Pelkey et al. 2007", "doi": "10.1029/2006JE002831"}
+            {
+              "cite": "Adams 1974",
+              "doi": "10.1029/JB079i032p04829"
+            },
+            {
+              "cite": "Pelkey et al. 2007",
+              "doi": "10.1029/2006JE002831"
+            }
           ]
         },
         {
@@ -51,125 +115,353 @@
           "display_name": "High-Ca pyroxene (clinopyroxene)",
           "formula": "Ca(Mg,Fe)Si2O6",
           "absorption_bands": [
-            {"center": 1.000, "left": 0.750, "right": 1.300, "type": "electronic", "note": "Band I, shifted by Ca"},
-            {"center": 2.300, "left": 1.800, "right": 2.600, "type": "electronic", "note": "Band II, shifted by Ca"}
+            {
+              "center": 1.0,
+              "left": 0.75,
+              "right": 1.3,
+              "type": "electronic",
+              "note": "Band I, shifted by Ca"
+            },
+            {
+              "center": 2.3,
+              "left": 1.8,
+              "right": 2.6,
+              "type": "electronic",
+              "note": "Band II, shifted by Ca"
+            }
           ],
-          "sensors": ["CRISM","OMEGA","VIR"],
-          "detection_range_um": [0.7, 2.6],
+          "sensors": [
+            "CRISM",
+            "OMEGA",
+            "VIR"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.6
+          ],
           "refs": [
-            {"cite": "Adams 1974", "doi": "10.1029/JB079i032p04829"},
-            {"cite": "Viviano-Beck et al. 2014", "doi": "10.1002/2014JE004627"}
+            {
+              "cite": "Adams 1974",
+              "doi": "10.1029/JB079i032p04829"
+            },
+            {
+              "cite": "Viviano-Beck et al. 2014",
+              "doi": "10.1002/2014JE004627"
+            }
           ]
         },
         {
           "name": "plagioclase_feldspar",
           "formula": "(Ca,Na)(Al,Si)AlSi2O8",
           "absorption_bands": [
-            {"center": 1.270, "left": 1.000, "right": 1.600, "type": "electronic", "note": "Rare Fe2+/3+ charge transfer; weak"}
+            {
+              "center": 1.27,
+              "left": 1.0,
+              "right": 1.6,
+              "type": "electronic",
+              "note": "Rare Fe2+/3+ charge transfer; weak"
+            }
           ],
-          "sensors": ["CRISM","M3","VIR"],
-          "detection_range_um": [1.0, 1.6],
+          "sensors": [
+            "CRISM",
+            "M3",
+            "VIR"
+          ],
+          "detection_range_um": [
+            1.0,
+            1.6
+          ],
           "refs": [
-            {"cite": "Cheek & Pieters 2014", "doi": "10.1002/2013JE004522"}
+            {
+              "cite": "Cheek & Pieters 2014",
+              "doi": "10.1002/2013JE004522"
+            }
           ]
         },
         {
           "name": "hematite",
           "formula": "Fe2O3",
           "absorption_bands": [
-            {"center": 0.430, "left": 0.350, "right": 0.550, "type": "electronic", "note": "Fe3+ crystal field + charge transfer"},
-            {"center": 0.535, "left": 0.420, "right": 0.650, "type": "electronic"},
-            {"center": 0.860, "left": 0.700, "right": 1.000, "type": "electronic", "note": "Fe3+ crystal field"}
+            {
+              "center": 0.22,
+              "left": 0.18,
+              "right": 0.28,
+              "type": "electronic_charge_transfer",
+              "note": "O\u2192Fe(III) UV charge-transfer; MAVEN/IUVS range"
+            },
+            {
+              "center": 0.43,
+              "left": 0.35,
+              "right": 0.55,
+              "type": "electronic",
+              "note": "Fe3+ crystal field + charge transfer"
+            },
+            {
+              "center": 0.535,
+              "left": 0.42,
+              "right": 0.65,
+              "type": "electronic"
+            },
+            {
+              "center": 0.86,
+              "left": 0.7,
+              "right": 1.0,
+              "type": "electronic",
+              "note": "Fe3+ crystal field"
+            }
           ],
-          "sensors": ["CRISM","OMEGA","TES","THEMIS"],
-          "detection_range_um": [0.35, 1.0],
+          "sensors": [
+            "CRISM",
+            "OMEGA",
+            "TES",
+            "THEMIS",
+            "MAVEN_IUVS"
+          ],
+          "detection_range_um": [
+            0.18,
+            1.0
+          ],
           "refs": [
-            {"cite": "Morris et al. 1985", "doi": "10.1029/JB090iB04p03115"},
-            {"cite": "Christensen et al. 2001", "doi": "10.1126/science.1056983"}
+            {
+              "cite": "Morris et al. 1985",
+              "doi": "10.1029/JB090iB04p03115"
+            },
+            {
+              "cite": "Christensen et al. 2001",
+              "doi": "10.1126/science.1056983"
+            }
           ]
         },
         {
           "name": "goethite",
           "formula": "FeO(OH)",
           "absorption_bands": [
-            {"center": 0.490, "left": 0.380, "right": 0.600, "type": "electronic"},
-            {"center": 0.660, "left": 0.550, "right": 0.800, "type": "electronic"},
-            {"center": 0.940, "left": 0.780, "right": 1.100, "type": "electronic"}
+            {
+              "center": 0.22,
+              "left": 0.18,
+              "right": 0.28,
+              "type": "electronic_charge_transfer",
+              "note": "O\u2192Fe(III) UV charge-transfer"
+            },
+            {
+              "center": 0.49,
+              "left": 0.38,
+              "right": 0.6,
+              "type": "electronic"
+            },
+            {
+              "center": 0.66,
+              "left": 0.55,
+              "right": 0.8,
+              "type": "electronic"
+            },
+            {
+              "center": 0.94,
+              "left": 0.78,
+              "right": 1.1,
+              "type": "electronic"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [0.35, 1.2],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            0.18,
+            1.2
+          ],
           "refs": [
-            {"cite": "Morris et al. 1985", "doi": "10.1029/JB090iB04p03115"}
+            {
+              "cite": "Morris et al. 1985",
+              "doi": "10.1029/JB090iB04p03115"
+            }
           ]
         },
         {
           "name": "smectite_montmorillonite",
-          "formula": "(Na,Ca)(Al,Mg)2Si4O10(OH)2·nH2O",
+          "formula": "(Na,Ca)(Al,Mg)2Si4O10(OH)2\u00b7nH2O",
           "absorption_bands": [
-            {"center": 1.410, "left": 1.300, "right": 1.530, "type": "vibrational_combination", "note": "H2O combination"},
-            {"center": 1.910, "left": 1.780, "right": 2.050, "type": "vibrational_combination", "note": "H2O combination"},
-            {"center": 2.210, "left": 2.120, "right": 2.320, "type": "vibrational_combination", "note": "Al-OH combination"}
+            {
+              "center": 1.41,
+              "left": 1.3,
+              "right": 1.53,
+              "type": "vibrational_combination",
+              "note": "H2O combination"
+            },
+            {
+              "center": 1.91,
+              "left": 1.78,
+              "right": 2.05,
+              "type": "vibrational_combination",
+              "note": "H2O combination"
+            },
+            {
+              "center": 2.21,
+              "left": 2.12,
+              "right": 2.32,
+              "type": "vibrational_combination",
+              "note": "Al-OH combination"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [1.3, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            1.3,
+            2.5
+          ],
           "refs": [
-            {"cite": "Clark et al. 1990", "doi": "10.1029/JB095iB08p12653"},
-            {"cite": "Carter et al. 2013", "doi": "10.1016/j.icarus.2012.10.011"}
+            {
+              "cite": "Clark et al. 1990",
+              "doi": "10.1029/JB095iB08p12653"
+            },
+            {
+              "cite": "Carter et al. 2013",
+              "doi": "10.1016/j.icarus.2012.10.011"
+            }
           ]
         },
         {
           "name": "nontronite",
           "display_name": "Nontronite (Fe-smectite)",
-          "formula": "Na0.3Fe3+2(Si,Al)4O10(OH)2·nH2O",
+          "formula": "Na0.3Fe3+2(Si,Al)4O10(OH)2\u00b7nH2O",
           "absorption_bands": [
-            {"center": 1.410, "left": 1.300, "right": 1.530, "type": "vibrational_combination"},
-            {"center": 1.910, "left": 1.780, "right": 2.050, "type": "vibrational_combination"},
-            {"center": 2.290, "left": 2.180, "right": 2.380, "type": "vibrational_combination", "note": "Fe-OH combination"}
+            {
+              "center": 1.41,
+              "left": 1.3,
+              "right": 1.53,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.91,
+              "left": 1.78,
+              "right": 2.05,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.29,
+              "left": 2.18,
+              "right": 2.38,
+              "type": "vibrational_combination",
+              "note": "Fe-OH combination"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [1.3, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            1.3,
+            2.5
+          ],
           "refs": [
-            {"cite": "Bishop et al. 2002", "doi": "10.1016/S0019-1035(02)00026-1"},
-            {"cite": "Ehlmann et al. 2009", "doi": "10.1126/science.1175658"}
+            {
+              "cite": "Bishop et al. 2002",
+              "doi": "10.1016/S0019-1035(02)00026-1"
+            },
+            {
+              "cite": "Ehlmann et al. 2009",
+              "doi": "10.1126/science.1175658"
+            }
           ]
         },
         {
           "name": "kaolinite",
           "formula": "Al2Si2O5(OH)4",
           "absorption_bands": [
-            {"center": 1.410, "left": 1.350, "right": 1.500, "type": "vibrational_combination"},
-            {"center": 2.165, "left": 2.100, "right": 2.210, "type": "vibrational_combination", "note": "Al-OH"},
-            {"center": 2.210, "left": 2.150, "right": 2.280, "type": "vibrational_combination", "note": "Al-OH doublet"}
+            {
+              "center": 1.41,
+              "left": 1.35,
+              "right": 1.5,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.165,
+              "left": 2.1,
+              "right": 2.21,
+              "type": "vibrational_combination",
+              "note": "Al-OH"
+            },
+            {
+              "center": 2.21,
+              "left": 2.15,
+              "right": 2.28,
+              "type": "vibrational_combination",
+              "note": "Al-OH doublet"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [1.3, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            1.3,
+            2.5
+          ],
           "refs": [
-            {"cite": "Clark et al. 1990", "doi": "10.1029/JB095iB08p12653"}
+            {
+              "cite": "Clark et al. 1990",
+              "doi": "10.1029/JB095iB08p12653"
+            }
           ]
         },
         {
           "name": "serpentine",
           "formula": "Mg3Si2O5(OH)4",
           "absorption_bands": [
-            {"center": 2.320, "left": 2.200, "right": 2.420, "type": "vibrational_combination", "note": "Mg-OH stretch"}
+            {
+              "center": 2.32,
+              "left": 2.2,
+              "right": 2.42,
+              "type": "vibrational_combination",
+              "note": "Mg-OH stretch"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [2.1, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            2.1,
+            2.5
+          ],
           "refs": [
-            {"cite": "Calvin & King 1997", "doi": "10.1029/97JE00836"},
-            {"cite": "Ehlmann et al. 2010", "doi": "10.1038/ngeo901"}
+            {
+              "cite": "Calvin & King 1997",
+              "doi": "10.1029/97JE00836"
+            },
+            {
+              "cite": "Ehlmann et al. 2010",
+              "doi": "10.1038/ngeo901"
+            }
           ]
         },
         {
           "name": "chlorite",
           "formula": "(Mg,Fe,Al)6(Si,Al)4O10(OH)8",
           "absorption_bands": [
-            {"center": 2.350, "left": 2.250, "right": 2.450, "type": "vibrational_combination", "note": "Mg-OH + Fe-OH"}
+            {
+              "center": 2.35,
+              "left": 2.25,
+              "right": 2.45,
+              "type": "vibrational_combination",
+              "note": "Mg-OH + Fe-OH"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [2.2, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            2.2,
+            2.5
+          ],
           "refs": [
-            {"cite": "King & Clark 1989", "doi": "10.1016/0169-1368(89)90057-8"}
+            {
+              "cite": "King & Clark 1989",
+              "doi": "10.1016/0169-1368(89)90057-8"
+            }
           ]
         },
         {
@@ -177,89 +469,488 @@
           "display_name": "Mg-carbonate (magnesite)",
           "formula": "MgCO3",
           "absorption_bands": [
-            {"center": 2.300, "left": 2.150, "right": 2.450, "type": "vibrational_combination", "note": "CO3 asymmetric stretch overtone"},
-            {"center": 2.500, "left": 2.400, "right": 2.600, "type": "vibrational_combination"},
-            {"center": 3.400, "left": 3.100, "right": 3.700, "type": "vibrational_fundamental", "note": "CO3 C-O stretch"},
-            {"center": 3.900, "left": 3.600, "right": 4.100, "type": "vibrational_fundamental", "note": "CO3 fundamental"}
+            {
+              "center": 2.3,
+              "left": 2.15,
+              "right": 2.45,
+              "type": "vibrational_combination",
+              "note": "CO3 asymmetric stretch overtone"
+            },
+            {
+              "center": 2.5,
+              "left": 2.4,
+              "right": 2.6,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 3.4,
+              "left": 3.1,
+              "right": 3.7,
+              "type": "vibrational_fundamental",
+              "note": "CO3 C-O stretch"
+            },
+            {
+              "center": 3.9,
+              "left": 3.6,
+              "right": 4.1,
+              "type": "vibrational_fundamental",
+              "note": "CO3 fundamental"
+            }
           ],
-          "sensors": ["CRISM","OMEGA","VIR","JWST_MIRI"],
-          "detection_range_um": [2.1, 4.2],
+          "sensors": [
+            "CRISM",
+            "OMEGA",
+            "VIR",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            2.1,
+            4.2
+          ],
           "refs": [
-            {"cite": "Gaffey 1987", "doi": "10.1016/0019-1035(87)90087-0"},
-            {"cite": "Ehlmann et al. 2008", "doi": "10.1029/2008GL034890"}
+            {
+              "cite": "Gaffey 1987",
+              "doi": "10.1016/0019-1035(87)90087-0"
+            },
+            {
+              "cite": "Ehlmann et al. 2008",
+              "doi": "10.1029/2008GL034890"
+            }
           ]
         },
         {
           "name": "gypsum",
-          "formula": "CaSO4·2H2O",
+          "formula": "CaSO4\u00b72H2O",
           "absorption_bands": [
-            {"center": 1.450, "left": 1.350, "right": 1.550, "type": "vibrational_combination"},
-            {"center": 1.750, "left": 1.650, "right": 1.850, "type": "vibrational_combination"},
-            {"center": 1.950, "left": 1.850, "right": 2.060, "type": "vibrational_combination"},
-            {"center": 2.220, "left": 2.100, "right": 2.360, "type": "vibrational_combination", "note": "SO4 + H2O"}
+            {
+              "center": 1.45,
+              "left": 1.35,
+              "right": 1.55,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.75,
+              "left": 1.65,
+              "right": 1.85,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.95,
+              "left": 1.85,
+              "right": 2.06,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.22,
+              "left": 2.1,
+              "right": 2.36,
+              "type": "vibrational_combination",
+              "note": "SO4 + H2O"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [1.3, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            1.3,
+            2.5
+          ],
           "refs": [
-            {"cite": "Clark et al. 1990", "doi": "10.1029/JB095iB08p12653"},
-            {"cite": "Langevin et al. 2005", "doi": "10.1126/science.1109091"}
+            {
+              "cite": "Clark et al. 1990",
+              "doi": "10.1029/JB095iB08p12653"
+            },
+            {
+              "cite": "Langevin et al. 2005",
+              "doi": "10.1126/science.1109091"
+            }
           ]
         },
         {
           "name": "kieserite",
-          "formula": "MgSO4·H2O",
+          "formula": "MgSO4\u00b7H2O",
           "absorption_bands": [
-            {"center": 1.640, "left": 1.540, "right": 1.720, "type": "vibrational_combination"},
-            {"center": 2.130, "left": 2.000, "right": 2.240, "type": "vibrational_combination"}
+            {
+              "center": 1.64,
+              "left": 1.54,
+              "right": 1.72,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.13,
+              "left": 2.0,
+              "right": 2.24,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [1.5, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            1.5,
+            2.5
+          ],
           "refs": [
-            {"cite": "Cloutis et al. 2006", "doi": "10.1016/j.icarus.2006.07.002"},
-            {"cite": "Gendrin et al. 2005", "doi": "10.1126/science.1109087"}
+            {
+              "cite": "Cloutis et al. 2006",
+              "doi": "10.1016/j.icarus.2006.07.002"
+            },
+            {
+              "cite": "Gendrin et al. 2005",
+              "doi": "10.1126/science.1109087"
+            }
           ]
         },
         {
           "name": "jarosite",
           "formula": "KFe3(SO4)2(OH)6",
           "absorption_bands": [
-            {"center": 0.430, "left": 0.350, "right": 0.550, "type": "electronic", "note": "Fe3+ charge transfer"},
-            {"center": 0.930, "left": 0.800, "right": 1.080, "type": "electronic"},
-            {"center": 2.270, "left": 2.150, "right": 2.380, "type": "vibrational_combination"}
+            {
+              "center": 0.43,
+              "left": 0.35,
+              "right": 0.55,
+              "type": "electronic",
+              "note": "Fe3+ charge transfer"
+            },
+            {
+              "center": 0.93,
+              "left": 0.8,
+              "right": 1.08,
+              "type": "electronic"
+            },
+            {
+              "center": 2.27,
+              "left": 2.15,
+              "right": 2.38,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [0.35, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            0.35,
+            2.5
+          ],
           "refs": [
-            {"cite": "Bishop & Murad 1996", "doi": "10.1016/0169-1368(96)00015-7"},
-            {"cite": "Squyres et al. 2004", "doi": "10.1126/science.1099999"}
+            {
+              "cite": "Bishop & Murad 1996",
+              "doi": "10.1016/0169-1368(96)00015-7"
+            },
+            {
+              "cite": "Squyres et al. 2004",
+              "doi": "10.1126/science.1099999"
+            }
           ]
         },
         {
           "name": "alunite",
           "formula": "KAl3(SO4)2(OH)6",
           "absorption_bands": [
-            {"center": 1.770, "left": 1.680, "right": 1.840, "type": "vibrational_combination"},
-            {"center": 2.170, "left": 2.080, "right": 2.260, "type": "vibrational_combination"}
+            {
+              "center": 1.77,
+              "left": 1.68,
+              "right": 1.84,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.17,
+              "left": 2.08,
+              "right": 2.26,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["CRISM","OMEGA"],
-          "detection_range_um": [1.5, 2.5],
+          "sensors": [
+            "CRISM",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            1.5,
+            2.5
+          ],
           "refs": [
-            {"cite": "Clark et al. 1990", "doi": "10.1029/JB095iB08p12653"},
-            {"cite": "Swayze et al. 2008", "doi": "10.1029/2009GL038602"}
+            {
+              "cite": "Clark et al. 1990",
+              "doi": "10.1029/JB095iB08p12653"
+            },
+            {
+              "cite": "Swayze et al. 2008",
+              "doi": "10.1029/2009GL038602"
+            }
           ]
         },
         {
           "name": "perchlorate_hydrate",
-          "formula": "Mg(ClO4)2·nH2O",
+          "formula": "Mg(ClO4)2\u00b7nH2O",
           "absorption_bands": [
-            {"center": 1.630, "left": 1.530, "right": 1.730, "type": "vibrational_combination"},
-            {"center": 1.970, "left": 1.840, "right": 2.060, "type": "vibrational_combination"},
-            {"center": 2.140, "left": 2.020, "right": 2.260, "type": "vibrational_combination"}
+            {
+              "center": 1.63,
+              "left": 1.53,
+              "right": 1.73,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.97,
+              "left": 1.84,
+              "right": 2.06,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.14,
+              "left": 2.02,
+              "right": 2.26,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["CRISM"],
-          "detection_range_um": [1.5, 2.4],
+          "sensors": [
+            "CRISM"
+          ],
+          "detection_range_um": [
+            1.5,
+            2.4
+          ],
           "refs": [
-            {"cite": "Hanley et al. 2012", "doi": "10.1029/2012GL051819"}
+            {
+              "cite": "Hanley et al. 2012",
+              "doi": "10.1029/2012GL051819"
+            }
+          ]
+        },
+        {
+          "name": "olivine_tir",
+          "display_name": "Olivine (TIR)",
+          "formula": "Mg2SiO4/Fe2SiO4",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 10.2,
+              "left": 9.5,
+              "right": 11.2,
+              "type": "Si-O_stretching_reststrahlen"
+            },
+            {
+              "center": 11.9,
+              "left": 11.2,
+              "right": 12.8,
+              "type": "Si-O_bending_reststrahlen"
+            }
+          ],
+          "sensors": [
+            "TES",
+            "THEMIS",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            9.0,
+            13.0
+          ],
+          "refs": [
+            {
+              "cite": "Christensen et al. 2000",
+              "doi": "10.1029/1999JE001065"
+            },
+            {
+              "cite": "Koeppen & Hamilton 2008",
+              "doi": "10.1029/2007JE003019"
+            }
+          ]
+        },
+        {
+          "name": "pyroxene_tir",
+          "display_name": "Pyroxene (TIR)",
+          "formula": "Ca(Fe,Mg)Si2O6",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 9.3,
+              "left": 8.6,
+              "right": 10.0,
+              "type": "Si-O_stretching_reststrahlen"
+            },
+            {
+              "center": 10.9,
+              "left": 10.2,
+              "right": 11.8,
+              "type": "Si-O_bending_reststrahlen"
+            }
+          ],
+          "sensors": [
+            "TES",
+            "THEMIS",
+            "JWST_MIRI",
+            "MERTIS"
+          ],
+          "detection_range_um": [
+            8.5,
+            12.0
+          ],
+          "refs": [
+            {
+              "cite": "Christensen et al. 2001",
+              "doi": "10.1126/science.1058124"
+            },
+            {
+              "cite": "Hamilton et al. 1997",
+              "doi": "10.1029/97JB02900"
+            }
+          ]
+        },
+        {
+          "name": "plagioclase_tir",
+          "display_name": "Plagioclase feldspar (TIR)",
+          "formula": "NaAlSi3O8/CaAl2Si2O8",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 9.7,
+              "left": 9.0,
+              "right": 10.4,
+              "type": "Si-O_Al-O_stretching"
+            },
+            {
+              "center": 12.5,
+              "left": 11.8,
+              "right": 13.2,
+              "type": "Si-O_bending"
+            }
+          ],
+          "sensors": [
+            "TES",
+            "THEMIS"
+          ],
+          "detection_range_um": [
+            8.8,
+            13.5
+          ],
+          "refs": [
+            {
+              "cite": "Bandfield et al. 2000",
+              "doi": "10.1126/science.287.5458.1626"
+            },
+            {
+              "cite": "Hamilton & Christensen 2000",
+              "doi": "10.1029/1999GL010578"
+            }
+          ]
+        },
+        {
+          "name": "carbonate_tir",
+          "display_name": "Carbonate (TIR)",
+          "formula": "MgCO3/CaCO3",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 6.65,
+              "left": 6.3,
+              "right": 7.0,
+              "type": "CO3_asymmetric_stretch"
+            },
+            {
+              "center": 11.4,
+              "left": 10.8,
+              "right": 12.0,
+              "type": "CO3_in_plane_bend"
+            },
+            {
+              "center": 14.0,
+              "left": 13.2,
+              "right": 14.8,
+              "type": "CO3_out_of_plane_bend"
+            }
+          ],
+          "sensors": [
+            "TES",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            6.0,
+            15.0
+          ],
+          "refs": [
+            {
+              "cite": "Bandfield et al. 2003",
+              "doi": "10.1016/S0019-1035(03)00072-2"
+            },
+            {
+              "cite": "Lane & Christensen 1997",
+              "doi": "10.1016/S0019-1035(97)90053-6"
+            }
+          ]
+        },
+        {
+          "name": "volcanic_glass_tir",
+          "display_name": "Volcanic glass / high-silica (TIR)",
+          "formula": "SiO2(amorph)",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 8.5,
+              "left": 7.8,
+              "right": 9.2,
+              "type": "Si-O_stretching_reststrahlen",
+              "note": "Shift toward shorter \u03bb with increasing SiO2 content"
+            }
+          ],
+          "sensors": [
+            "TES",
+            "THEMIS"
+          ],
+          "detection_range_um": [
+            7.5,
+            9.5
+          ],
+          "refs": [
+            {
+              "cite": "Wyatt & McSween 2002",
+              "doi": "10.1038/nature01005"
+            },
+            {
+              "cite": "Minitti et al. 2002",
+              "doi": "10.1029/2002JE001921"
+            }
+          ]
+        },
+        {
+          "name": "silicate_dust_tir",
+          "display_name": "Silicate dust (TIR)",
+          "formula": "SiO2+feldspar dust",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 9.3,
+              "left": 8.5,
+              "right": 10.0,
+              "type": "Si-O_stretching",
+              "note": "Broad suspended dust emission; TES dust opacity"
+            },
+            {
+              "center": 18.0,
+              "left": 16.0,
+              "right": 20.0,
+              "type": "Si-O_bending_LWIR",
+              "note": "TES LWIR dust spectral index region"
+            }
+          ],
+          "sensors": [
+            "TES",
+            "THEMIS"
+          ],
+          "detection_range_um": [
+            8.0,
+            20.0
+          ],
+          "refs": [
+            {
+              "cite": "Smith et al. 2000",
+              "doi": "10.1029/1999JE001088"
+            },
+            {
+              "cite": "Clancy et al. 2003",
+              "doi": "10.1029/2003JE002058"
+            }
           ]
         }
       ],
@@ -267,36 +958,122 @@
         {
           "name": "water_ice",
           "formula": "H2O",
-          "sub_types": ["crystalline","amorphous"],
-          "absorption_bands": [
-            {"center": 0.810, "left": 0.720, "right": 0.900, "type": "vibrational_overtone", "note": "3rd overtone"},
-            {"center": 1.040, "left": 0.950, "right": 1.140, "type": "vibrational_overtone"},
-            {"center": 1.250, "left": 1.140, "right": 1.360, "type": "vibrational_combination"},
-            {"center": 1.520, "left": 1.380, "right": 1.640, "type": "vibrational_combination"},
-            {"center": 2.020, "left": 1.800, "right": 2.180, "type": "vibrational_combination"},
-            {"center": 3.000, "left": 2.700, "right": 3.300, "type": "vibrational_fundamental", "note": "O-H stretch fundamental"}
+          "sub_types": [
+            "crystalline",
+            "amorphous"
           ],
-          "sensors": ["CRISM","OMEGA","M3","VIR","VIMS","JWST_NIRSpec","MISE"],
-          "detection_range_um": [0.7, 3.5],
+          "absorption_bands": [
+            {
+              "center": 0.81,
+              "left": 0.72,
+              "right": 0.9,
+              "type": "vibrational_overtone",
+              "note": "3rd overtone"
+            },
+            {
+              "center": 1.04,
+              "left": 0.95,
+              "right": 1.14,
+              "type": "vibrational_overtone"
+            },
+            {
+              "center": 1.25,
+              "left": 1.14,
+              "right": 1.36,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.38,
+              "right": 1.64,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.8,
+              "right": 2.18,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 3.0,
+              "left": 2.7,
+              "right": 3.3,
+              "type": "vibrational_fundamental",
+              "note": "O-H stretch fundamental"
+            }
+          ],
+          "sensors": [
+            "CRISM",
+            "OMEGA",
+            "M3",
+            "VIR",
+            "VIMS",
+            "JWST_NIRSpec",
+            "MISE"
+          ],
+          "detection_range_um": [
+            0.7,
+            3.5
+          ],
           "refs": [
-            {"cite": "Clark et al. 1986", "doi": "10.1029/JB091iB02p00D233"},
-            {"cite": "Langevin et al. 2007", "doi": "10.1126/science.1145099"}
+            {
+              "cite": "Clark et al. 1986",
+              "doi": "10.1029/JB091iB02p00D233"
+            },
+            {
+              "cite": "Langevin et al. 2007",
+              "doi": "10.1126/science.1145099"
+            }
           ]
         },
         {
           "name": "co2_ice",
           "formula": "CO2",
           "absorption_bands": [
-            {"center": 1.430, "left": 1.360, "right": 1.520, "type": "vibrational_combination"},
-            {"center": 1.966, "left": 1.880, "right": 2.060, "type": "vibrational_combination"},
-            {"center": 2.010, "left": 1.950, "right": 2.080, "type": "vibrational_combination"},
-            {"center": 2.700, "left": 2.500, "right": 2.900, "type": "vibrational_combination"}
+            {
+              "center": 1.43,
+              "left": 1.36,
+              "right": 1.52,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.966,
+              "left": 1.88,
+              "right": 2.06,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.01,
+              "left": 1.95,
+              "right": 2.08,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.7,
+              "left": 2.5,
+              "right": 2.9,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["CRISM","OMEGA","THEMIS","VIMS"],
-          "detection_range_um": [1.3, 3.0],
+          "sensors": [
+            "CRISM",
+            "OMEGA",
+            "THEMIS",
+            "VIMS"
+          ],
+          "detection_range_um": [
+            1.3,
+            3.0
+          ],
           "refs": [
-            {"cite": "Quirico & Schmitt 1997", "doi": "10.1006/icar.1997.5610"},
-            {"cite": "Bibring et al. 2004", "doi": "10.1126/science.1101108"}
+            {
+              "cite": "Quirico & Schmitt 1997",
+              "doi": "10.1006/icar.1997.5610"
+            },
+            {
+              "cite": "Bibring et al. 2004",
+              "doi": "10.1126/science.1101108"
+            }
           ]
         }
       ],
@@ -306,34 +1083,102 @@
           "display_name": "CO2 (atmosphere)",
           "formula": "CO2",
           "absorption_bands": [
-            {"center": 2.010, "left": 1.950, "right": 2.070, "type": "vibrational_combination"},
-            {"center": 2.690, "left": 2.600, "right": 2.800, "type": "vibrational_fundamental"},
-            {"center": 4.260, "left": 4.100, "right": 4.400, "type": "vibrational_fundamental", "note": "Strong nu3 asymmetric stretch"},
-            {"center": 15.00, "left": 13.00, "right": 17.00, "type": "vibrational_fundamental", "note": "nu2 bending, TES/THEMIS range"}
+            {
+              "center": 2.01,
+              "left": 1.95,
+              "right": 2.07,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.69,
+              "left": 2.6,
+              "right": 2.8,
+              "type": "vibrational_fundamental"
+            },
+            {
+              "center": 4.26,
+              "left": 4.1,
+              "right": 4.4,
+              "type": "vibrational_fundamental",
+              "note": "Strong nu3 asymmetric stretch"
+            },
+            {
+              "center": 15.0,
+              "left": 13.0,
+              "right": 17.0,
+              "type": "vibrational_fundamental",
+              "note": "nu2 bending, TES/THEMIS range"
+            },
+            {
+              "center": 9.4,
+              "left": 8.8,
+              "right": 10.0,
+              "type": "vibrational_combination_band",
+              "note": "CO2 combination band; overlaps silicate \u2014 use caution"
+            }
           ],
-          "sensors": ["TES","THEMIS","NOMAD","OMEGA","CRISM","JWST_MIRI"],
-          "detection_range_um": [2.0, 20.0],
+          "sensors": [
+            "TES",
+            "THEMIS",
+            "NOMAD",
+            "OMEGA",
+            "CRISM",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            2.0,
+            20.0
+          ],
           "refs": [
-            {"cite": "Smith 2004", "doi": "10.1029/2003JE002084"}
-          ]
+            {
+              "cite": "Smith 2004",
+              "doi": "10.1029/2003JE002084"
+            }
+          ],
+          "mode": "emissivity"
         },
         {
           "name": "water_vapor_atm",
           "formula": "H2O",
           "absorption_bands": [
-            {"center": 2.700, "left": 2.500, "right": 2.900, "type": "vibrational_fundamental"},
-            {"center": 6.300, "left": 5.800, "right": 6.800, "type": "vibrational_fundamental", "note": "nu2 bending"},
-            {"center": 25.00, "left": 20.00, "right": 30.00, "type": "rotation_band"}
+            {
+              "center": 2.7,
+              "left": 2.5,
+              "right": 2.9,
+              "type": "vibrational_fundamental"
+            },
+            {
+              "center": 6.3,
+              "left": 5.8,
+              "right": 6.8,
+              "type": "vibrational_fundamental",
+              "note": "nu2 bending"
+            },
+            {
+              "center": 25.0,
+              "left": 20.0,
+              "right": 30.0,
+              "type": "rotation_band"
+            }
           ],
-          "sensors": ["TES","NOMAD","OMEGA"],
-          "detection_range_um": [2.5, 30.0],
+          "sensors": [
+            "TES",
+            "NOMAD",
+            "OMEGA"
+          ],
+          "detection_range_um": [
+            2.5,
+            30.0
+          ],
           "refs": [
-            {"cite": "Smith et al. 2001", "doi": "10.1029/2000JE001522"}
+            {
+              "cite": "Smith et al. 2001",
+              "doi": "10.1029/2000JE001522"
+            }
           ]
         }
       ]
     },
-
     "moon": {
       "_notes": "Lunar surface mineralogy dominated by mafic silicates and plagioclase. Space weathering creates nanophase iron reducing band depths. Pieters et al. 2009 (Science) confirmed OH/H2O.",
       "minerals": [
@@ -342,65 +1187,163 @@
           "display_name": "Anorthosite / Plagioclase",
           "formula": "CaAl2Si2O8",
           "absorption_bands": [
-            {"center": 1.270, "left": 1.050, "right": 1.600, "type": "electronic", "note": "Weak Fe2+; often absent in pure anorthosite"}
+            {
+              "center": 1.27,
+              "left": 1.05,
+              "right": 1.6,
+              "type": "electronic",
+              "note": "Weak Fe2+; often absent in pure anorthosite"
+            }
           ],
-          "sensors": ["M3","Kaguya_SP","Clementine"],
-          "detection_range_um": [0.9, 1.7],
+          "sensors": [
+            "M3",
+            "Kaguya_SP",
+            "Clementine"
+          ],
+          "detection_range_um": [
+            0.9,
+            1.7
+          ],
           "refs": [
-            {"cite": "Cheek & Pieters 2014", "doi": "10.1002/2013JE004522"},
-            {"cite": "Ohtake et al. 2009", "doi": "10.1038/nature08146"}
+            {
+              "cite": "Cheek & Pieters 2014",
+              "doi": "10.1002/2013JE004522"
+            },
+            {
+              "cite": "Ohtake et al. 2009",
+              "doi": "10.1038/nature08146"
+            }
           ]
         },
         {
           "name": "olivine",
           "formula": "(Mg,Fe)2SiO4",
           "absorption_bands": [
-            {"center": 1.050, "left": 0.750, "right": 1.550, "type": "electronic"},
-            {"center": 1.250, "left": 0.950, "right": 1.550, "type": "electronic"}
+            {
+              "center": 1.05,
+              "left": 0.75,
+              "right": 1.55,
+              "type": "electronic"
+            },
+            {
+              "center": 1.25,
+              "left": 0.95,
+              "right": 1.55,
+              "type": "electronic"
+            }
           ],
-          "sensors": ["M3","Kaguya_SP","Clementine","JWST_NIRSpec"],
-          "detection_range_um": [0.7, 2.5],
+          "sensors": [
+            "M3",
+            "Kaguya_SP",
+            "Clementine",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.5
+          ],
           "refs": [
-            {"cite": "Mustard et al. 2011", "doi": "10.1038/nature10049"},
-            {"cite": "Yamamoto et al. 2010", "doi": "10.1038/ngeo897"}
+            {
+              "cite": "Mustard et al. 2011",
+              "doi": "10.1038/nature10049"
+            },
+            {
+              "cite": "Yamamoto et al. 2010",
+              "doi": "10.1038/ngeo897"
+            }
           ]
         },
         {
           "name": "orthopyroxene",
           "formula": "(Mg,Fe)SiO3",
           "absorption_bands": [
-            {"center": 0.920, "left": 0.750, "right": 1.100, "type": "electronic"},
-            {"center": 1.850, "left": 1.500, "right": 2.200, "type": "electronic"}
+            {
+              "center": 0.92,
+              "left": 0.75,
+              "right": 1.1,
+              "type": "electronic"
+            },
+            {
+              "center": 1.85,
+              "left": 1.5,
+              "right": 2.2,
+              "type": "electronic"
+            }
           ],
-          "sensors": ["M3","Kaguya_SP","Clementine"],
-          "detection_range_um": [0.7, 2.5],
+          "sensors": [
+            "M3",
+            "Kaguya_SP",
+            "Clementine"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.5
+          ],
           "refs": [
-            {"cite": "Pieters 1999", "doi": "10.1029/1998JE900011"}
+            {
+              "cite": "Pieters 1999",
+              "doi": "10.1029/1998JE900011"
+            }
           ]
         },
         {
           "name": "clinopyroxene",
           "formula": "Ca(Mg,Fe)Si2O6",
           "absorption_bands": [
-            {"center": 1.000, "left": 0.750, "right": 1.300, "type": "electronic"},
-            {"center": 2.300, "left": 1.800, "right": 2.600, "type": "electronic"}
+            {
+              "center": 1.0,
+              "left": 0.75,
+              "right": 1.3,
+              "type": "electronic"
+            },
+            {
+              "center": 2.3,
+              "left": 1.8,
+              "right": 2.6,
+              "type": "electronic"
+            }
           ],
-          "sensors": ["M3","Kaguya_SP"],
-          "detection_range_um": [0.7, 2.6],
+          "sensors": [
+            "M3",
+            "Kaguya_SP"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.6
+          ],
           "refs": [
-            {"cite": "Pieters 1999", "doi": "10.1029/1998JE900011"}
+            {
+              "cite": "Pieters 1999",
+              "doi": "10.1029/1998JE900011"
+            }
           ]
         },
         {
           "name": "ilmenite",
           "formula": "FeTiO3",
           "absorption_bands": [
-            {"center": 0.500, "left": 0.380, "right": 0.700, "type": "electronic", "note": "Fe2+-Ti4+ charge transfer; reduces UV albedo"}
+            {
+              "center": 0.5,
+              "left": 0.38,
+              "right": 0.7,
+              "type": "electronic",
+              "note": "Fe2+-Ti4+ charge transfer; reduces UV albedo"
+            }
           ],
-          "sensors": ["M3","Clementine","Kaguya_MI"],
-          "detection_range_um": [0.38, 0.75],
+          "sensors": [
+            "M3",
+            "Clementine",
+            "Kaguya_MI"
+          ],
+          "detection_range_um": [
+            0.38,
+            0.75
+          ],
           "refs": [
-            {"cite": "Pieters et al. 2000", "doi": "10.1029/1999JE001117"}
+            {
+              "cite": "Pieters et al. 2000",
+              "doi": "10.1029/1999JE001117"
+            }
           ]
         },
         {
@@ -408,12 +1351,133 @@
           "display_name": "Volcanic glass (pyroclastic)",
           "formula": "SiO2(amorphous, Fe-bearing)",
           "absorption_bands": [
-            {"center": 1.000, "left": 0.700, "right": 1.400, "type": "electronic", "note": "Broad Fe2+ in glass; much broader than crystalline pyroxene"}
+            {
+              "center": 1.0,
+              "left": 0.7,
+              "right": 1.4,
+              "type": "electronic",
+              "note": "Broad Fe2+ in glass; much broader than crystalline pyroxene"
+            }
           ],
-          "sensors": ["M3","Kaguya_SP"],
-          "detection_range_um": [0.7, 1.5],
+          "sensors": [
+            "M3",
+            "Kaguya_SP"
+          ],
+          "detection_range_um": [
+            0.7,
+            1.5
+          ],
           "refs": [
-            {"cite": "Sunshine et al. 2010", "doi": "10.1126/science.1186117"}
+            {
+              "cite": "Sunshine et al. 2010",
+              "doi": "10.1126/science.1186117"
+            }
+          ]
+        },
+        {
+          "name": "anorthosite_tir",
+          "display_name": "Anorthosite / plagioclase highland (TIR)",
+          "formula": "CaAl2Si2O8",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 9.7,
+              "left": 9.0,
+              "right": 10.4,
+              "type": "Si-O_Al-O_stretching"
+            },
+            {
+              "center": 12.5,
+              "left": 11.8,
+              "right": 13.3,
+              "type": "Si-O_bending"
+            }
+          ],
+          "sensors": [
+            "Diviner",
+            "MERTIS",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            8.8,
+            13.5
+          ],
+          "refs": [
+            {
+              "cite": "Greenhagen et al. 2010",
+              "doi": "10.1126/science.1192196"
+            },
+            {
+              "cite": "Paige et al. 2010",
+              "doi": "10.1126/science.1187150"
+            }
+          ]
+        },
+        {
+          "name": "pyroxene_tir_moon",
+          "display_name": "Pyroxene mare basalt (TIR)",
+          "formula": "Ca(Fe,Mg)Si2O6",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 9.3,
+              "left": 8.6,
+              "right": 10.0,
+              "type": "Si-O_stretching"
+            },
+            {
+              "center": 10.9,
+              "left": 10.2,
+              "right": 11.6,
+              "type": "Si-O_bending"
+            }
+          ],
+          "sensors": [
+            "Diviner",
+            "MERTIS"
+          ],
+          "detection_range_um": [
+            8.5,
+            12.0
+          ],
+          "refs": [
+            {
+              "cite": "Greenhagen et al. 2010",
+              "doi": "10.1126/science.1192196"
+            }
+          ]
+        },
+        {
+          "name": "spinel_tir",
+          "display_name": "Mg-spinel (TIR) \u2014 anorthositic pure spinel anomaly",
+          "formula": "MgAl2O4",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 13.5,
+              "left": 12.8,
+              "right": 14.5,
+              "type": "Al-O_and_Mg-O_stretching",
+              "note": "Diviner Christian/Glotch pure-spinel anomaly detection"
+            }
+          ],
+          "sensors": [
+            "Diviner",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            12.5,
+            15.0
+          ],
+          "refs": [
+            {
+              "cite": "Pieters et al. 2011",
+              "doi": "10.1029/2011JE003893"
+            },
+            {
+              "cite": "Glotch et al. 2010",
+              "doi": "10.1126/science.1192148"
+            }
           ]
         }
       ],
@@ -423,23 +1487,66 @@
           "formula": "H2O",
           "context": "Permanently Shadowed Regions (PSRs) at poles; also thin OH layer at all latitudes",
           "absorption_bands": [
-            {"center": 1.040, "left": 0.950, "right": 1.140, "type": "vibrational_overtone"},
-            {"center": 1.250, "left": 1.140, "right": 1.360, "type": "vibrational_combination"},
-            {"center": 1.520, "left": 1.380, "right": 1.640, "type": "vibrational_combination"},
-            {"center": 2.020, "left": 1.800, "right": 2.180, "type": "vibrational_combination"},
-            {"center": 2.800, "left": 2.600, "right": 3.100, "type": "vibrational_fundamental", "note": "OH/H2O stretch; detected by M3"}
+            {
+              "center": 1.04,
+              "left": 0.95,
+              "right": 1.14,
+              "type": "vibrational_overtone"
+            },
+            {
+              "center": 1.25,
+              "left": 1.14,
+              "right": 1.36,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.38,
+              "right": 1.64,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.8,
+              "right": 2.18,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.8,
+              "left": 2.6,
+              "right": 3.1,
+              "type": "vibrational_fundamental",
+              "note": "OH/H2O stretch; detected by M3"
+            }
           ],
-          "sensors": ["M3","Chandrayaan-1_M3","LCROSS","MiniRF","JWST_NIRSpec"],
-          "detection_range_um": [0.9, 3.2],
+          "sensors": [
+            "M3",
+            "Chandrayaan-1_M3",
+            "LCROSS",
+            "MiniRF",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.9,
+            3.2
+          ],
           "refs": [
-            {"cite": "Pieters et al. 2009", "doi": "10.1126/science.1178658"},
-            {"cite": "Clark et al. 2009", "doi": "10.1126/science.1178105"},
-            {"cite": "Colaprete et al. 2010", "doi": "10.1126/science.1186986"}
+            {
+              "cite": "Pieters et al. 2009",
+              "doi": "10.1126/science.1178658"
+            },
+            {
+              "cite": "Clark et al. 2009",
+              "doi": "10.1126/science.1178105"
+            },
+            {
+              "cite": "Colaprete et al. 2010",
+              "doi": "10.1126/science.1186986"
+            }
           ]
         }
       ]
     },
-
     "mercury": {
       "_notes": "Mercury has extremely low FeO content (<2 wt%). Dark material is graphite. Sulfur-bearing minerals (CaS, MgS) are unique to Mercury. MESSENGER XRS/VIRS data. Nittler et al. 2011.",
       "minerals": [
@@ -447,13 +1554,32 @@
           "name": "graphite",
           "formula": "C",
           "absorption_bands": [
-            {"center": 0.200, "left": 0.150, "right": 0.300, "type": "electronic", "note": "Darkens UV; no sharp feature, low albedo across full range"}
+            {
+              "center": 0.2,
+              "left": 0.15,
+              "right": 0.3,
+              "type": "electronic",
+              "note": "Darkens UV; no sharp feature, low albedo across full range"
+            }
           ],
-          "sensors": ["MESSENGER_UVVS","MESSENGER_VIRS","BepiColombo_SIMBIO-SYS"],
-          "detection_range_um": [0.15, 1.1],
+          "sensors": [
+            "MESSENGER_UVVS",
+            "MESSENGER_VIRS",
+            "BepiColombo_SIMBIO-SYS"
+          ],
+          "detection_range_um": [
+            0.15,
+            1.1
+          ],
           "refs": [
-            {"cite": "Denevi et al. 2009", "doi": "10.1126/science.1172666"},
-            {"cite": "Murchie et al. 2015", "doi": "10.1126/science.1250527"}
+            {
+              "cite": "Denevi et al. 2009",
+              "doi": "10.1126/science.1172666"
+            },
+            {
+              "cite": "Murchie et al. 2015",
+              "doi": "10.1126/science.1250527"
+            }
           ]
         },
         {
@@ -461,12 +1587,26 @@
           "display_name": "CaS (oldhamite, hypothesized)",
           "formula": "CaS",
           "absorption_bands": [
-            {"center": 0.580, "left": 0.450, "right": 0.750, "type": "electronic", "note": "Tentative; laboratory spectra show shoulder ~0.5-0.6 µm"}
+            {
+              "center": 0.58,
+              "left": 0.45,
+              "right": 0.75,
+              "type": "electronic",
+              "note": "Tentative; laboratory spectra show shoulder ~0.5-0.6 \u00b5m"
+            }
           ],
-          "sensors": ["BepiColombo_SIMBIO-SYS"],
-          "detection_range_um": [0.4, 0.9],
+          "sensors": [
+            "BepiColombo_SIMBIO-SYS"
+          ],
+          "detection_range_um": [
+            0.4,
+            0.9
+          ],
           "refs": [
-            {"cite": "Blewett et al. 2011", "doi": "10.1126/science.1211681"}
+            {
+              "cite": "Blewett et al. 2011",
+              "doi": "10.1126/science.1211681"
+            }
           ]
         },
         {
@@ -474,33 +1614,169 @@
           "display_name": "Enstatite (MgSiO3, low-FeO)",
           "formula": "MgSiO3",
           "absorption_bands": [
-            {"center": 0.920, "left": 0.750, "right": 1.100, "type": "electronic", "note": "Very weak due to low FeO; detection marginal from orbit"}
+            {
+              "center": 0.92,
+              "left": 0.75,
+              "right": 1.1,
+              "type": "electronic",
+              "note": "Very weak due to low FeO; detection marginal from orbit"
+            }
           ],
-          "sensors": ["BepiColombo_SIMBIO-SYS","MESSENGER_VIRS"],
-          "detection_range_um": [0.7, 2.2],
+          "sensors": [
+            "BepiColombo_SIMBIO-SYS",
+            "MESSENGER_VIRS"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.2
+          ],
           "refs": [
-            {"cite": "Izenberg et al. 2014", "doi": "10.1016/j.icarus.2014.06.018"}
+            {
+              "cite": "Izenberg et al. 2014",
+              "doi": "10.1016/j.icarus.2014.06.018"
+            }
+          ]
+        },
+        {
+          "name": "pyroxene_tir_mercury",
+          "display_name": "Pyroxene (TIR Mercury)",
+          "formula": "MgSiO3",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 9.1,
+              "left": 8.4,
+              "right": 9.8,
+              "type": "Si-O_stretching"
+            }
+          ],
+          "sensors": [
+            "MERTIS"
+          ],
+          "detection_range_um": [
+            8.0,
+            10.5
+          ],
+          "refs": [
+            {
+              "cite": "Sprague et al. 1994",
+              "doi": "10.1006/icar.1994.1092"
+            },
+            {
+              "cite": "Helbert et al. 2013",
+              "doi": "10.1016/j.pss.2012.09.006"
+            }
+          ]
+        },
+        {
+          "name": "sulfide_tir",
+          "display_name": "Sulfide / oldhamite (TIR) \u2014 hollow-forming volatile",
+          "formula": "CaS/MgS",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 10.5,
+              "left": 9.5,
+              "right": 11.5,
+              "type": "metal-S_stretching",
+              "note": "Hollows candidate \u2014 low-reflectance pits"
+            }
+          ],
+          "sensors": [
+            "MERTIS"
+          ],
+          "detection_range_um": [
+            9.0,
+            12.0
+          ],
+          "refs": [
+            {
+              "cite": "Blewett et al. 2011",
+              "doi": "10.1126/science.1203634"
+            },
+            {
+              "cite": "Vilas et al. 2016",
+              "doi": "10.1002/2015GL067423"
+            }
           ]
         }
       ]
     },
-
     "venus": {
-      "_notes": "Venus surface observed only through NIR atmospheric windows (1.02, 1.10, 1.18, 2.26, 2.3 µm). Atmosphere opaque elsewhere. EnVision/VenSpec will open UV window (0.2-0.4 µm). Hashimoto & Sugita 2003.",
+      "_notes": "Venus surface observed only through NIR atmospheric windows (1.02, 1.10, 1.18, 2.26, 2.3 \u00b5m). Atmosphere opaque elsewhere. EnVision/VenSpec will open UV window (0.2-0.4 \u00b5m). Hashimoto & Sugita 2003.",
       "minerals": [
         {
           "name": "volcanic_basalt_emissivity",
           "display_name": "Mafic volcanic surface (emissivity contrast)",
           "formula": "Basalt",
           "absorption_bands": [
-            {"center": 1.180, "left": 1.050, "right": 1.300, "type": "electronic", "note": "NIR atmospheric window; lower emissivity = older/tesserae terrain"},
-            {"center": 2.300, "left": 2.200, "right": 2.400, "type": "vibrational_combination", "note": "2.3 µm window; pyroxene/carbonate overlap"}
+            {
+              "center": 1.18,
+              "left": 1.05,
+              "right": 1.3,
+              "type": "electronic",
+              "note": "NIR atmospheric window; lower emissivity = older/tesserae terrain"
+            },
+            {
+              "center": 2.3,
+              "left": 2.2,
+              "right": 2.4,
+              "type": "vibrational_combination",
+              "note": "2.3 \u00b5m window; pyroxene/carbonate overlap"
+            }
           ],
-          "sensors": ["VIRTIS_VenusExpress","EnVision_VenSpec-M"],
-          "detection_range_um": [1.0, 2.5],
+          "sensors": [
+            "VIRTIS_VenusExpress",
+            "EnVision_VenSpec-M"
+          ],
+          "detection_range_um": [
+            1.0,
+            2.5
+          ],
           "refs": [
-            {"cite": "Hashimoto & Sugita 2003", "doi": "10.1029/2003JE002091"},
-            {"cite": "Smrekar et al. 2010", "doi": "10.1126/science.1190366"}
+            {
+              "cite": "Hashimoto & Sugita 2003",
+              "doi": "10.1029/2003JE002091"
+            },
+            {
+              "cite": "Smrekar et al. 2010",
+              "doi": "10.1126/science.1190366"
+            }
+          ]
+        },
+        {
+          "name": "anhydrite_tir",
+          "display_name": "Anhydrite / CaSO4 (TIR Venus surface window)",
+          "formula": "CaSO4",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 8.7,
+              "left": 8.0,
+              "right": 9.5,
+              "type": "SO4_asymmetric_stretch",
+              "note": "1 \u00b5m surface window + MERTIS-V; extreme surface T ~735 K"
+            },
+            {
+              "center": 14.2,
+              "left": 13.0,
+              "right": 15.5,
+              "type": "SO4_bending"
+            }
+          ],
+          "sensors": [
+            "EnVision_MERTIS-V",
+            "VIRA"
+          ],
+          "detection_range_um": [
+            8.0,
+            16.0
+          ],
+          "refs": [
+            {
+              "cite": "Treiman et al. 2016",
+              "doi": "10.1016/j.icarus.2015.11.011"
+            }
           ]
         }
       ],
@@ -509,16 +1785,51 @@
           "name": "sulfur_dioxide_atm",
           "formula": "SO2",
           "absorption_bands": [
-            {"center": 0.280, "left": 0.220, "right": 0.330, "type": "electronic", "note": "UV band; cloud deck photochemistry"},
-            {"center": 4.000, "left": 3.800, "right": 4.200, "type": "vibrational_combination"},
-            {"center": 7.300, "left": 6.800, "right": 7.800, "type": "vibrational_fundamental"},
-            {"center": 8.700, "left": 8.200, "right": 9.200, "type": "vibrational_fundamental"},
-            {"center": 19.00, "left": 17.00, "right": 21.00, "type": "vibrational_fundamental"}
+            {
+              "center": 0.28,
+              "left": 0.22,
+              "right": 0.33,
+              "type": "electronic",
+              "note": "UV band; cloud deck photochemistry"
+            },
+            {
+              "center": 4.0,
+              "left": 3.8,
+              "right": 4.2,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 7.3,
+              "left": 6.8,
+              "right": 7.8,
+              "type": "vibrational_fundamental"
+            },
+            {
+              "center": 8.7,
+              "left": 8.2,
+              "right": 9.2,
+              "type": "vibrational_fundamental"
+            },
+            {
+              "center": 19.0,
+              "left": 17.0,
+              "right": 21.0,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["EnVision_VenSpec-U","VIRTIS_VenusExpress"],
-          "detection_range_um": [0.22, 21.0],
+          "sensors": [
+            "EnVision_VenSpec-U",
+            "VIRTIS_VenusExpress"
+          ],
+          "detection_range_um": [
+            0.22,
+            21.0
+          ],
           "refs": [
-            {"cite": "Esposito et al. 1988", "doi": "10.1016/0019-1035(88)90109-5"}
+            {
+              "cite": "Esposito et al. 1988",
+              "doi": "10.1016/0019-1035(88)90109-5"
+            }
           ]
         },
         {
@@ -526,34 +1837,109 @@
           "display_name": "HCl (atmosphere)",
           "formula": "HCl",
           "absorption_bands": [
-            {"center": 1.760, "left": 1.700, "right": 1.830, "type": "vibrational_overtone"},
-            {"center": 3.460, "left": 3.350, "right": 3.550, "type": "vibrational_fundamental"}
+            {
+              "center": 1.76,
+              "left": 1.7,
+              "right": 1.83,
+              "type": "vibrational_overtone"
+            },
+            {
+              "center": 3.46,
+              "left": 3.35,
+              "right": 3.55,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["EnVision_VenSpec-M"],
-          "detection_range_um": [1.6, 3.7],
+          "sensors": [
+            "EnVision_VenSpec-M"
+          ],
+          "detection_range_um": [
+            1.6,
+            3.7
+          ],
           "refs": [
-            {"cite": "Meadows & Crisp 1996", "doi": "10.1029/96JE01589"}
+            {
+              "cite": "Meadows & Crisp 1996",
+              "doi": "10.1029/96JE01589"
+            }
+          ]
+        },
+        {
+          "name": "unknown_uv_absorber_venus",
+          "display_name": "Unknown UV absorber (Venus cloud deck)",
+          "formula": "?",
+          "absorption_bands": [
+            {
+              "center": 0.36,
+              "left": 0.3,
+              "right": 0.42,
+              "type": "unknown_electronic",
+              "note": "~50 % contrast at 0.36 \u00b5m in cloud tops; candidates: FeCl3, S3, OSSO, chlorine-based"
+            }
+          ],
+          "sensors": [
+            "EnVision_VenSpec-U",
+            "Akatsuki_UVI",
+            "DAVINCI_UVS"
+          ],
+          "detection_range_um": [
+            0.28,
+            0.45
+          ],
+          "refs": [
+            {
+              "cite": "P\u00e9rez-Hoyos et al. 2018",
+              "doi": "10.1029/2018JE005558"
+            },
+            {
+              "cite": "Encrenaz et al. 2019",
+              "doi": "10.1051/0004-6361/201935297"
+            }
           ]
         }
       ]
     },
-
     "titan": {
-      "_notes": "Saturn's largest moon. Dense N2/CH4 atmosphere. Surface organic sediments and hydrocarbon lakes. Cassini VIMS (0.35-5.1 µm) primary data source. Clark et al. 2010.",
+      "_notes": "Saturn's largest moon. Dense N2/CH4 atmosphere. Surface organic sediments and hydrocarbon lakes. Cassini VIMS (0.35-5.1 \u00b5m) primary data source. Clark et al. 2010.",
       "organics": [
         {
           "name": "tholins",
           "display_name": "Tholins (complex N-C organics, haze)",
           "formula": "CxHyNz (complex)",
           "absorption_bands": [
-            {"center": 0.280, "left": 0.200, "right": 0.400, "type": "electronic", "note": "Strong UV absorption slope; Khare et al. 1984 lab spectra"},
-            {"center": 0.550, "left": 0.400, "right": 0.750, "type": "electronic", "note": "Broad orange-red color of haze"}
+            {
+              "center": 0.28,
+              "left": 0.2,
+              "right": 0.4,
+              "type": "electronic",
+              "note": "Strong UV absorption slope; Khare et al. 1984 lab spectra"
+            },
+            {
+              "center": 0.55,
+              "left": 0.4,
+              "right": 0.75,
+              "type": "electronic",
+              "note": "Broad orange-red color of haze"
+            }
           ],
-          "sensors": ["VIMS","Dragonfly_cameras","future_UV_orbiter"],
-          "detection_range_um": [0.2, 1.0],
+          "sensors": [
+            "VIMS",
+            "Dragonfly_cameras",
+            "future_UV_orbiter"
+          ],
+          "detection_range_um": [
+            0.2,
+            1.0
+          ],
           "refs": [
-            {"cite": "Khare et al. 1984", "doi": "10.1016/0019-1035(84)90195-X"},
-            {"cite": "Clark et al. 2010", "doi": "10.1016/j.icarus.2010.02.008"}
+            {
+              "cite": "Khare et al. 1984",
+              "doi": "10.1016/0019-1035(84)90195-X"
+            },
+            {
+              "cite": "Clark et al. 2010",
+              "doi": "10.1016/j.icarus.2010.02.008"
+            }
           ]
         },
         {
@@ -561,15 +1947,46 @@
           "display_name": "Aliphatic C-H (organic sediments)",
           "formula": "-CH2-, -CH3",
           "absorption_bands": [
-            {"center": 1.720, "left": 1.650, "right": 1.790, "type": "vibrational_overtone", "note": "C-H stretch 1st overtone"},
-            {"center": 2.310, "left": 2.250, "right": 2.380, "type": "vibrational_combination"},
-            {"center": 3.400, "left": 3.300, "right": 3.500, "type": "vibrational_fundamental", "note": "Aliphatic C-H fundamental"}
+            {
+              "center": 1.72,
+              "left": 1.65,
+              "right": 1.79,
+              "type": "vibrational_overtone",
+              "note": "C-H stretch 1st overtone"
+            },
+            {
+              "center": 2.31,
+              "left": 2.25,
+              "right": 2.38,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 3.4,
+              "left": 3.3,
+              "right": 3.5,
+              "type": "vibrational_fundamental",
+              "note": "Aliphatic C-H fundamental"
+            }
           ],
-          "sensors": ["VIMS","JWST_NIRSpec","JWST_MIRI","Dragonfly_DraMS"],
-          "detection_range_um": [1.6, 3.6],
+          "sensors": [
+            "VIMS",
+            "JWST_NIRSpec",
+            "JWST_MIRI",
+            "Dragonfly_DraMS"
+          ],
+          "detection_range_um": [
+            1.6,
+            3.6
+          ],
           "refs": [
-            {"cite": "Cruikshank et al. 2001", "doi": "10.1006/icar.2000.6558"},
-            {"cite": "Soderblom et al. 2007", "doi": "10.1126/science.1148127"}
+            {
+              "cite": "Cruikshank et al. 2001",
+              "doi": "10.1006/icar.2000.6558"
+            },
+            {
+              "cite": "Soderblom et al. 2007",
+              "doi": "10.1126/science.1148127"
+            }
           ]
         }
       ],
@@ -579,13 +1996,32 @@
           "formula": "H2O",
           "context": "Bedrock material; rare surface exposure beneath organic sediments",
           "absorption_bands": [
-            {"center": 1.520, "left": 1.380, "right": 1.640, "type": "vibrational_combination"},
-            {"center": 2.020, "left": 1.800, "right": 2.180, "type": "vibrational_combination"}
+            {
+              "center": 1.52,
+              "left": 1.38,
+              "right": 1.64,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.8,
+              "right": 2.18,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["VIMS","JWST_NIRSpec"],
-          "detection_range_um": [1.3, 2.5],
+          "sensors": [
+            "VIMS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.3,
+            2.5
+          ],
           "refs": [
-            {"cite": "Tobie et al. 2019", "doi": "10.1029/2018GL080228"}
+            {
+              "cite": "Tobie et al. 2019",
+              "doi": "10.1029/2018GL080228"
+            }
           ]
         }
       ],
@@ -595,72 +2031,284 @@
           "display_name": "Liquid CH4/C2H6 (Kraken/Ligeia mare)",
           "formula": "CH4 + C2H6",
           "absorption_bands": [
-            {"center": 2.000, "left": 1.800, "right": 2.200, "type": "vibrational_combination", "note": "Specular reflection / low emissivity; Stofan et al. 2007"},
-            {"center": 3.300, "left": 3.200, "right": 3.400, "type": "vibrational_fundamental", "note": "C-H stretch of CH4 liquid"}
+            {
+              "center": 2.0,
+              "left": 1.8,
+              "right": 2.2,
+              "type": "vibrational_combination",
+              "note": "Specular reflection / low emissivity; Stofan et al. 2007"
+            },
+            {
+              "center": 3.3,
+              "left": 3.2,
+              "right": 3.4,
+              "type": "vibrational_fundamental",
+              "note": "C-H stretch of CH4 liquid"
+            }
           ],
-          "sensors": ["VIMS","Dragonfly_cameras","future_Titan_orbiter"],
-          "detection_range_um": [1.5, 5.0],
+          "sensors": [
+            "VIMS",
+            "Dragonfly_cameras",
+            "future_Titan_orbiter"
+          ],
+          "detection_range_um": [
+            1.5,
+            5.0
+          ],
           "refs": [
-            {"cite": "Stofan et al. 2007", "doi": "10.1038/nature05438"},
-            {"cite": "Brown et al. 2008", "doi": "10.1038/nature07100"}
+            {
+              "cite": "Stofan et al. 2007",
+              "doi": "10.1038/nature05438"
+            },
+            {
+              "cite": "Brown et al. 2008",
+              "doi": "10.1038/nature07100"
+            }
+          ]
+        }
+      ],
+      "gases": [
+        {
+          "name": "benzene_titan",
+          "display_name": "Benzene C6H6 (stratosphere)",
+          "formula": "C6H6",
+          "absorption_bands": [
+            {
+              "center": 0.21,
+              "left": 0.195,
+              "right": 0.225,
+              "type": "electronic_B2u-A1g",
+              "note": "UV CASSINI/UVIS; photochemical haze source"
+            },
+            {
+              "center": 3.3,
+              "left": 3.2,
+              "right": 3.42,
+              "type": "C-H_stretch"
+            },
+            {
+              "center": 14.85,
+              "left": 14.0,
+              "right": 15.7,
+              "type": "C-C_ring_deformation"
+            }
+          ],
+          "sensors": [
+            "Cassini_UVIS",
+            "JWST_MIRI",
+            "Dragonfly_DraMS"
+          ],
+          "detection_range_um": [
+            0.19,
+            16.0
+          ],
+          "refs": [
+            {
+              "cite": "Coustenis et al. 2007",
+              "doi": "10.1016/j.icarus.2006.09.024"
+            }
+          ]
+        },
+        {
+          "name": "hcn_titan",
+          "display_name": "HCN (nitrile haze precursor)",
+          "formula": "HCN",
+          "absorption_bands": [
+            {
+              "center": 3.01,
+              "left": 2.92,
+              "right": 3.1,
+              "type": "C-H_stretch"
+            },
+            {
+              "center": 14.05,
+              "left": 13.3,
+              "right": 14.8,
+              "type": "C-N_bending"
+            }
+          ],
+          "sensors": [
+            "Cassini_CIRS",
+            "JWST_MIRI",
+            "ALMA"
+          ],
+          "detection_range_um": [
+            2.9,
+            15.0
+          ],
+          "refs": [
+            {
+              "cite": "Maguire et al. 1981",
+              "doi": "10.1038/292683a0"
+            }
           ]
         }
       ]
     },
-
     "europa": {
-      "_notes": "Jupiter's icy moon. Ocean world. Irradiation products from Jovian magnetosphere modify surface. Europa Clipper/MISE (0.8-5.0 µm) will provide hyperspectral mapping. McCord et al. 1998 (Nature) foundational.",
+      "_notes": "Jupiter's icy moon. Ocean world. Irradiation products from Jovian magnetosphere modify surface. Europa Clipper/MISE (0.8-5.0 \u00b5m) will provide hyperspectral mapping. McCord et al. 1998 (Nature) foundational.",
       "ices": [
         {
           "name": "water_ice_crystalline",
           "formula": "H2O (crystalline)",
           "absorption_bands": [
-            {"center": 1.040, "left": 0.950, "right": 1.140, "type": "vibrational_overtone"},
-            {"center": 1.250, "left": 1.140, "right": 1.360, "type": "vibrational_combination"},
-            {"center": 1.520, "left": 1.380, "right": 1.640, "type": "vibrational_combination"},
-            {"center": 2.020, "left": 1.800, "right": 2.200, "type": "vibrational_combination"},
-            {"center": 3.000, "left": 2.700, "right": 3.300, "type": "vibrational_fundamental"}
+            {
+              "center": 1.04,
+              "left": 0.95,
+              "right": 1.14,
+              "type": "vibrational_overtone"
+            },
+            {
+              "center": 1.25,
+              "left": 1.14,
+              "right": 1.36,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.38,
+              "right": 1.64,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.8,
+              "right": 2.2,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 3.0,
+              "left": 2.7,
+              "right": 3.3,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["NIMS","VIMS","JWST_NIRSpec","MISE"],
-          "detection_range_um": [0.9, 3.5],
+          "sensors": [
+            "NIMS",
+            "VIMS",
+            "JWST_NIRSpec",
+            "MISE"
+          ],
+          "detection_range_um": [
+            0.9,
+            3.5
+          ],
           "refs": [
-            {"cite": "Clark 1981", "doi": "10.1029/JB086iB04p03087"},
-            {"cite": "Hansen & McCord 2004", "doi": "10.1029/2003JE002200"}
+            {
+              "cite": "Clark 1981",
+              "doi": "10.1029/JB086iB04p03087"
+            },
+            {
+              "cite": "Hansen & McCord 2004",
+              "doi": "10.1029/2003JE002200"
+            }
           ]
         },
         {
           "name": "hydrated_sulfuric_acid",
-          "display_name": "Hydrated sulfuric acid H2SO4·8H2O",
-          "formula": "H2SO4·8H2O",
+          "display_name": "Hydrated sulfuric acid H2SO4\u00b78H2O",
+          "formula": "H2SO4\u00b78H2O",
           "absorption_bands": [
-            {"center": 0.975, "left": 0.880, "right": 1.080, "type": "vibrational_combination"},
-            {"center": 1.090, "left": 0.980, "right": 1.200, "type": "vibrational_combination"},
-            {"center": 1.590, "left": 1.490, "right": 1.700, "type": "vibrational_combination"},
-            {"center": 2.000, "left": 1.850, "right": 2.150, "type": "vibrational_combination"},
-            {"center": 2.940, "left": 2.750, "right": 3.150, "type": "vibrational_fundamental", "note": "S-OH stretch"}
+            {
+              "center": 0.975,
+              "left": 0.88,
+              "right": 1.08,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.09,
+              "left": 0.98,
+              "right": 1.2,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.59,
+              "left": 1.49,
+              "right": 1.7,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.0,
+              "left": 1.85,
+              "right": 2.15,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.94,
+              "left": 2.75,
+              "right": 3.15,
+              "type": "vibrational_fundamental",
+              "note": "S-OH stretch"
+            }
           ],
-          "sensors": ["NIMS","MISE"],
-          "detection_range_um": [0.8, 3.5],
+          "sensors": [
+            "NIMS",
+            "MISE"
+          ],
+          "detection_range_um": [
+            0.8,
+            3.5
+          ],
           "refs": [
-            {"cite": "Carlson et al. 1999", "doi": "10.1126/science.283.5400.2062"},
-            {"cite": "Carlson et al. 2005", "doi": "10.1016/j.icarus.2005.04.010"}
+            {
+              "cite": "Carlson et al. 1999",
+              "doi": "10.1126/science.283.5400.2062"
+            },
+            {
+              "cite": "Carlson et al. 2005",
+              "doi": "10.1016/j.icarus.2005.04.010"
+            }
           ]
         },
         {
           "name": "epsomite",
-          "display_name": "Epsomite (MgSO4·7H2O)",
-          "formula": "MgSO4·7H2O",
+          "display_name": "Epsomite (MgSO4\u00b77H2O)",
+          "formula": "MgSO4\u00b77H2O",
           "absorption_bands": [
-            {"center": 1.080, "left": 0.970, "right": 1.200, "type": "vibrational_combination"},
-            {"center": 1.460, "left": 1.360, "right": 1.570, "type": "vibrational_combination"},
-            {"center": 1.780, "left": 1.680, "right": 1.890, "type": "vibrational_combination"},
-            {"center": 2.000, "left": 1.900, "right": 2.100, "type": "vibrational_combination"},
-            {"center": 2.430, "left": 2.310, "right": 2.580, "type": "vibrational_combination"}
+            {
+              "center": 1.08,
+              "left": 0.97,
+              "right": 1.2,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.46,
+              "left": 1.36,
+              "right": 1.57,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.78,
+              "left": 1.68,
+              "right": 1.89,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.0,
+              "left": 1.9,
+              "right": 2.1,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.43,
+              "left": 2.31,
+              "right": 2.58,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["NIMS","MISE"],
-          "detection_range_um": [0.9, 2.7],
+          "sensors": [
+            "NIMS",
+            "MISE"
+          ],
+          "detection_range_um": [
+            0.9,
+            2.7
+          ],
           "refs": [
-            {"cite": "Dalton et al. 2005", "doi": "10.1016/j.icarus.2004.10.016"}
+            {
+              "cite": "Dalton et al. 2005",
+              "doi": "10.1016/j.icarus.2004.10.016"
+            }
           ]
         },
         {
@@ -668,12 +2316,62 @@
           "display_name": "NaCl (halite, chaos terrain)",
           "formula": "NaCl",
           "absorption_bands": [
-            {"center": 0.450, "left": 0.350, "right": 0.600, "type": "electronic", "note": "Color centers from irradiation; Trumbo et al. 2019"}
+            {
+              "center": 0.45,
+              "left": 0.35,
+              "right": 0.6,
+              "type": "electronic",
+              "note": "Color centers from irradiation; Trumbo et al. 2019"
+            }
           ],
-          "sensors": ["HST_STIS","MISE"],
-          "detection_range_um": [0.3, 0.7],
+          "sensors": [
+            "HST_STIS",
+            "MISE"
+          ],
+          "detection_range_um": [
+            0.3,
+            0.7
+          ],
           "refs": [
-            {"cite": "Trumbo et al. 2019", "doi": "10.1126/sciadv.aaw7123"}
+            {
+              "cite": "Trumbo et al. 2019",
+              "doi": "10.1126/sciadv.aaw7123"
+            }
+          ]
+        },
+        {
+          "name": "h2o_ice_mir",
+          "display_name": "H2O ice (MIR) \u2014 libration and phonon bands",
+          "formula": "H2O",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 6.06,
+              "left": 5.5,
+              "right": 6.7,
+              "type": "libration_overtone"
+            },
+            {
+              "center": 12.0,
+              "left": 11.0,
+              "right": 13.0,
+              "type": "translational_lattice",
+              "note": "Temperature-dependent; shifts with crystallinity"
+            }
+          ],
+          "sensors": [
+            "JWST_MIRI",
+            "Europa_Clipper_MISE"
+          ],
+          "detection_range_um": [
+            5.5,
+            13.5
+          ],
+          "refs": [
+            {
+              "cite": "Mastrapa et al. 2008",
+              "doi": "10.1016/j.icarus.2008.04.008"
+            }
           ]
         }
       ],
@@ -682,30 +2380,62 @@
           "name": "hydrogen_peroxide",
           "formula": "H2O2",
           "absorption_bands": [
-            {"center": 3.500, "left": 3.350, "right": 3.700, "type": "vibrational_fundamental", "note": "O-H stretch; radiolysis product"}
+            {
+              "center": 3.5,
+              "left": 3.35,
+              "right": 3.7,
+              "type": "vibrational_fundamental",
+              "note": "O-H stretch; radiolysis product"
+            }
           ],
-          "sensors": ["NIMS","MISE"],
-          "detection_range_um": [3.2, 3.8],
+          "sensors": [
+            "NIMS",
+            "MISE"
+          ],
+          "detection_range_um": [
+            3.2,
+            3.8
+          ],
           "refs": [
-            {"cite": "Carlson et al. 1999b", "doi": "10.1126/science.286.5437.97"}
+            {
+              "cite": "Carlson et al. 1999b",
+              "doi": "10.1126/science.286.5437.97"
+            }
           ]
         },
         {
           "name": "co2_surface",
           "formula": "CO2",
           "absorption_bands": [
-            {"center": 4.260, "left": 4.150, "right": 4.380, "type": "vibrational_fundamental"}
+            {
+              "center": 4.26,
+              "left": 4.15,
+              "right": 4.38,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["NIMS","JWST_NIRSpec","MISE"],
-          "detection_range_um": [4.0, 4.5],
+          "sensors": [
+            "NIMS",
+            "JWST_NIRSpec",
+            "MISE"
+          ],
+          "detection_range_um": [
+            4.0,
+            4.5
+          ],
           "refs": [
-            {"cite": "McCord et al. 1998", "doi": "10.1126/science.280.5367.1242"},
-            {"cite": "Trumbo & Brown 2023", "doi": "10.1126/science.adg4279"}
+            {
+              "cite": "McCord et al. 1998",
+              "doi": "10.1126/science.280.5367.1242"
+            },
+            {
+              "cite": "Trumbo & Brown 2023",
+              "doi": "10.1126/science.adg4279"
+            }
           ]
         }
       ]
     },
-
     "io": {
       "_notes": "Jupiter's volcanic moon. SO2 frost dominates. Sulfur allotropes produce distinctive UV-VIS colors. NIMS (Galileo) primary spectral data. Future: JUICE/MAJIS.",
       "ices": [
@@ -714,16 +2444,52 @@
           "display_name": "SO2 frost",
           "formula": "SO2",
           "absorption_bands": [
-            {"center": 0.280, "left": 0.220, "right": 0.340, "type": "electronic", "note": "UV; primary detection from Voyager/HST"},
-            {"center": 2.130, "left": 2.050, "right": 2.220, "type": "vibrational_combination"},
-            {"center": 2.700, "left": 2.600, "right": 2.800, "type": "vibrational_combination"},
-            {"center": 4.080, "left": 3.950, "right": 4.200, "type": "vibrational_fundamental", "note": "Dominant SO2 feature in NIMS"}
+            {
+              "center": 0.28,
+              "left": 0.22,
+              "right": 0.34,
+              "type": "electronic",
+              "note": "UV; primary detection from Voyager/HST"
+            },
+            {
+              "center": 2.13,
+              "left": 2.05,
+              "right": 2.22,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.7,
+              "left": 2.6,
+              "right": 2.8,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 4.08,
+              "left": 3.95,
+              "right": 4.2,
+              "type": "vibrational_fundamental",
+              "note": "Dominant SO2 feature in NIMS"
+            }
           ],
-          "sensors": ["NIMS","VIMS","JWST_NIRSpec","MAJIS"],
-          "detection_range_um": [0.2, 4.3],
+          "sensors": [
+            "NIMS",
+            "VIMS",
+            "JWST_NIRSpec",
+            "MAJIS"
+          ],
+          "detection_range_um": [
+            0.2,
+            4.3
+          ],
           "refs": [
-            {"cite": "Smythe et al. 1995", "doi": "10.1006/icar.1995.1104"},
-            {"cite": "Douté et al. 2004", "doi": "10.1016/j.icarus.2003.12.005"}
+            {
+              "cite": "Smythe et al. 1995",
+              "doi": "10.1006/icar.1995.1104"
+            },
+            {
+              "cite": "Dout\u00e9 et al. 2004",
+              "doi": "10.1016/j.icarus.2003.12.005"
+            }
           ]
         },
         {
@@ -731,18 +2497,139 @@
           "display_name": "Elemental sulfur (S2, S8, Sn)",
           "formula": "S8 (ring), S2 (chain), etc.",
           "absorption_bands": [
-            {"center": 0.400, "left": 0.300, "right": 0.500, "type": "electronic", "note": "S2 / polysulfides absorb blue-UV; causes Io's yellow/orange color"},
-            {"center": 0.540, "left": 0.450, "right": 0.650, "type": "electronic"}
+            {
+              "center": 0.4,
+              "left": 0.3,
+              "right": 0.5,
+              "type": "electronic",
+              "note": "S2 / polysulfides absorb blue-UV; causes Io's yellow/orange color"
+            },
+            {
+              "center": 0.54,
+              "left": 0.45,
+              "right": 0.65,
+              "type": "electronic"
+            }
           ],
-          "sensors": ["VIMS","MAJIS","future_Io_orbiter"],
-          "detection_range_um": [0.3, 0.7],
+          "sensors": [
+            "VIMS",
+            "MAJIS",
+            "future_Io_orbiter"
+          ],
+          "detection_range_um": [
+            0.3,
+            0.7
+          ],
           "refs": [
-            {"cite": "Nash & Howell 1989", "doi": "10.1016/0019-1035(89)90065-5"}
+            {
+              "cite": "Nash & Howell 1989",
+              "doi": "10.1016/0019-1035(89)90065-5"
+            }
+          ]
+        },
+        {
+          "name": "s2_disulfur",
+          "display_name": "S2 (disulfur) \u2014 lava lake hot spot gas",
+          "formula": "S2",
+          "absorption_bands": [
+            {
+              "center": 0.38,
+              "left": 0.33,
+              "right": 0.42,
+              "type": "electronic_B-X",
+              "note": "Schumann-Runge-like UV-VIS band system; Hubble/HST detectable"
+            }
+          ],
+          "sensors": [
+            "HST_STIS",
+            "JUICE_UVS"
+          ],
+          "detection_range_um": [
+            0.3,
+            0.45
+          ],
+          "refs": [
+            {
+              "cite": "Spencer et al. 2000",
+              "doi": "10.1126/science.288.5469.1208"
+            },
+            {
+              "cite": "Jessup et al. 2007",
+              "doi": "10.1016/j.icarus.2007.06.002"
+            }
+          ]
+        },
+        {
+          "name": "polysulfur_sn",
+          "display_name": "Polysulfur Sn \u2014 coloured lava surface",
+          "formula": "Sn (n=2-8)",
+          "absorption_bands": [
+            {
+              "center": 0.5,
+              "left": 0.42,
+              "right": 0.6,
+              "type": "electronic_broad",
+              "note": "Responsible for yellow-orange surface colour; variable with temperature"
+            }
+          ],
+          "sensors": [
+            "HST_WFC3",
+            "NIMS"
+          ],
+          "detection_range_um": [
+            0.38,
+            0.65
+          ],
+          "refs": [
+            {
+              "cite": "Carlson et al. 2007",
+              "doi": "10.1016/j.icarus.2006.11.002"
+            }
+          ]
+        },
+        {
+          "name": "so2_frost_tir",
+          "display_name": "SO2 frost (TIR)",
+          "formula": "SO2",
+          "mode": "emissivity",
+          "absorption_bands": [
+            {
+              "center": 7.3,
+              "left": 6.8,
+              "right": 7.8,
+              "type": "v1_symmetric_stretch"
+            },
+            {
+              "center": 8.7,
+              "left": 8.2,
+              "right": 9.2,
+              "type": "v3_asymmetric_stretch"
+            },
+            {
+              "center": 19.4,
+              "left": 17.5,
+              "right": 21.0,
+              "type": "v2_bending"
+            }
+          ],
+          "sensors": [
+            "NIMS",
+            "JIRAM",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            6.5,
+            22.0
+          ],
+          "refs": [
+            {
+              "cite": "Carlson et al. 1997",
+              "doi": "10.1006/icar.1997.5783"
+            }
           ]
         }
       ]
     },
-
     "enceladus": {
       "_notes": "Saturn's plume-active moon. Nearly pure H2O ice surface. Plume contains H2O, CO2, CH4, H2, organics. Cassini VIMS/CIRS primary data. Future: proposed Enceladus orbiter.",
       "ices": [
@@ -751,17 +2638,54 @@
           "display_name": "H2O ice (pure, crystalline)",
           "formula": "H2O",
           "absorption_bands": [
-            {"center": 1.040, "left": 0.950, "right": 1.140, "type": "vibrational_overtone"},
-            {"center": 1.250, "left": 1.140, "right": 1.360, "type": "vibrational_combination"},
-            {"center": 1.520, "left": 1.380, "right": 1.640, "type": "vibrational_combination"},
-            {"center": 2.020, "left": 1.800, "right": 2.200, "type": "vibrational_combination"},
-            {"center": 3.100, "left": 2.800, "right": 3.400, "type": "vibrational_fundamental"}
+            {
+              "center": 1.04,
+              "left": 0.95,
+              "right": 1.14,
+              "type": "vibrational_overtone"
+            },
+            {
+              "center": 1.25,
+              "left": 1.14,
+              "right": 1.36,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 1.52,
+              "left": 1.38,
+              "right": 1.64,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.8,
+              "right": 2.2,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 3.1,
+              "left": 2.8,
+              "right": 3.4,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["VIMS","JWST_NIRSpec"],
-          "detection_range_um": [0.9, 3.5],
+          "sensors": [
+            "VIMS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.9,
+            3.5
+          ],
           "refs": [
-            {"cite": "Brown et al. 2006", "doi": "10.1126/science.1123588"},
-            {"cite": "Emery et al. 2005", "doi": "10.1051/0004-6361:20041802"}
+            {
+              "cite": "Brown et al. 2006",
+              "doi": "10.1126/science.1123588"
+            },
+            {
+              "cite": "Emery et al. 2005",
+              "doi": "10.1051/0004-6361:20041802"
+            }
           ]
         }
       ],
@@ -771,18 +2695,82 @@
           "display_name": "Complex organics (plume material)",
           "formula": "C,H,O,N complex",
           "absorption_bands": [
-            {"center": 3.400, "left": 3.300, "right": 3.500, "type": "vibrational_fundamental", "note": "C-H stretch; detected in plume"},
-            {"center": 6.200, "left": 6.000, "right": 6.500, "type": "vibrational_fundamental", "note": "C=C aromatic (JWST MIRI)"}
+            {
+              "center": 3.4,
+              "left": 3.3,
+              "right": 3.5,
+              "type": "vibrational_fundamental",
+              "note": "C-H stretch; detected in plume"
+            },
+            {
+              "center": 6.2,
+              "left": 6.0,
+              "right": 6.5,
+              "type": "vibrational_fundamental",
+              "note": "C=C aromatic (JWST MIRI)"
+            }
           ],
-          "sensors": ["VIMS","JWST_MIRI","future_Enceladus_orbiter"],
-          "detection_range_um": [3.0, 7.0],
+          "sensors": [
+            "VIMS",
+            "JWST_MIRI",
+            "future_Enceladus_orbiter"
+          ],
+          "detection_range_um": [
+            3.0,
+            7.0
+          ],
           "refs": [
-            {"cite": "Postberg et al. 2018", "doi": "10.1038/s41586-018-0246-4"}
+            {
+              "cite": "Postberg et al. 2018",
+              "doi": "10.1038/s41586-018-0246-4"
+            }
+          ]
+        }
+      ],
+      "gases": [
+        {
+          "name": "nh3_plume",
+          "display_name": "NH3 (plume and surface)",
+          "formula": "NH3",
+          "absorption_bands": [
+            {
+              "center": 2.24,
+              "left": 2.16,
+              "right": 2.32,
+              "type": "N-H_combination"
+            },
+            {
+              "center": 2.96,
+              "left": 2.85,
+              "right": 3.1,
+              "type": "N-H_stretch"
+            },
+            {
+              "center": 9.0,
+              "left": 8.4,
+              "right": 9.6,
+              "type": "NH3_umbrella_fundamental",
+              "mode": "emissivity"
+            }
+          ],
+          "sensors": [
+            "Cassini_VIMS",
+            "JWST_NIRSpec",
+            "JWST_MIRI"
+          ],
+          "detection_range_um": [
+            2.1,
+            10.0
+          ],
+          "refs": [
+            {
+              "cite": "Waite et al. 2009",
+              "doi": "10.1038/nature07788"
+            }
           ]
         }
       ]
     },
-
     "ceres": {
       "_notes": "Largest asteroid / dwarf planet. Ammoniated phyllosilicates detected by Dawn VIR. Water ice at Oxo crater. Occator bright spots are NaCl/hydrated carbonates. De Sanctis et al. 2015 (Nature).",
       "minerals": [
@@ -791,14 +2779,38 @@
           "display_name": "NH4-bearing phyllosilicate (antigorite/serpentine)",
           "formula": "(Mg,Fe)3Si2O5(OH)4 + NH4+",
           "absorption_bands": [
-            {"center": 2.720, "left": 2.600, "right": 2.820, "type": "vibrational_combination", "note": "O-H stretch of phyllosilicate"},
-            {"center": 3.060, "left": 2.930, "right": 3.200, "type": "vibrational_combination", "note": "N-H stretch of NH4+; diagnostic for Ceres"}
+            {
+              "center": 2.72,
+              "left": 2.6,
+              "right": 2.82,
+              "type": "vibrational_combination",
+              "note": "O-H stretch of phyllosilicate"
+            },
+            {
+              "center": 3.06,
+              "left": 2.93,
+              "right": 3.2,
+              "type": "vibrational_combination",
+              "note": "N-H stretch of NH4+; diagnostic for Ceres"
+            }
           ],
-          "sensors": ["VIR_Dawn","JWST_NIRSpec"],
-          "detection_range_um": [2.5, 3.5],
+          "sensors": [
+            "VIR_Dawn",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            2.5,
+            3.5
+          ],
           "refs": [
-            {"cite": "De Sanctis et al. 2015", "doi": "10.1038/nature14334"},
-            {"cite": "Ammannito et al. 2016", "doi": "10.1126/science.aaf4279"}
+            {
+              "cite": "De Sanctis et al. 2015",
+              "doi": "10.1038/nature14334"
+            },
+            {
+              "cite": "Ammannito et al. 2016",
+              "doi": "10.1126/science.aaf4279"
+            }
           ]
         },
         {
@@ -806,14 +2818,36 @@
           "display_name": "Mg/Ca carbonates (Occator faculae)",
           "formula": "MgCO3/CaCO3/Na2CO3",
           "absorption_bands": [
-            {"center": 3.400, "left": 3.250, "right": 3.600, "type": "vibrational_fundamental"},
-            {"center": 3.950, "left": 3.750, "right": 4.200, "type": "vibrational_fundamental"}
+            {
+              "center": 3.4,
+              "left": 3.25,
+              "right": 3.6,
+              "type": "vibrational_fundamental"
+            },
+            {
+              "center": 3.95,
+              "left": 3.75,
+              "right": 4.2,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["VIR_Dawn","JWST_NIRSpec"],
-          "detection_range_um": [3.0, 4.5],
+          "sensors": [
+            "VIR_Dawn",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            3.0,
+            4.5
+          ],
           "refs": [
-            {"cite": "Carrozzo et al. 2018", "doi": "10.1126/sciadv.1701645"},
-            {"cite": "De Sanctis et al. 2016", "doi": "10.1038/nature18290"}
+            {
+              "cite": "Carrozzo et al. 2018",
+              "doi": "10.1126/sciadv.1701645"
+            },
+            {
+              "cite": "De Sanctis et al. 2016",
+              "doi": "10.1038/nature18290"
+            }
           ]
         }
       ],
@@ -823,18 +2857,36 @@
           "formula": "H2O",
           "context": "Oxo crater (fresh exposure); subsurface ice layer inferred",
           "absorption_bands": [
-            {"center": 1.040, "left": 0.950, "right": 1.140, "type": "vibrational_overtone"},
-            {"center": 2.020, "left": 1.800, "right": 2.200, "type": "vibrational_combination"}
+            {
+              "center": 1.04,
+              "left": 0.95,
+              "right": 1.14,
+              "type": "vibrational_overtone"
+            },
+            {
+              "center": 2.02,
+              "left": 1.8,
+              "right": 2.2,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["VIR_Dawn","JWST_NIRSpec"],
-          "detection_range_um": [0.9, 2.5],
+          "sensors": [
+            "VIR_Dawn",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.9,
+            2.5
+          ],
           "refs": [
-            {"cite": "Combe et al. 2016", "doi": "10.1126/science.aaf3010"}
+            {
+              "cite": "Combe et al. 2016",
+              "doi": "10.1126/science.aaf3010"
+            }
           ]
         }
       ]
     },
-
     "asteroid_c_type": {
       "_notes": "Carbonaceous chondrite parent bodies. Hydrated silicates, organics, dark carbon. Key missions: Hayabusa2/Ryugu (Kitazato 2019), OSIRIS-REx/Bennu (Hamilton 2019).",
       "minerals": [
@@ -843,15 +2895,113 @@
           "display_name": "Hydrated phyllosilicate (serpentine/saponite)",
           "formula": "Mg3Si2O5(OH)4 / (Ca,Na)(Mg,Fe,Al)3(Si,Al)4O10(OH)2",
           "absorption_bands": [
-            {"center": 0.700, "left": 0.600, "right": 0.800, "type": "electronic", "note": "Fe2+/Fe3+ charge transfer; 0.7-µm drop; diagnostic for C-types"},
-            {"center": 2.720, "left": 2.600, "right": 2.820, "type": "vibrational_fundamental", "note": "O-H stretch; detected on Ryugu (Kitazato 2019)"},
-            {"center": 2.940, "left": 2.800, "right": 3.100, "type": "vibrational_fundamental"}
+            {
+              "center": 0.7,
+              "left": 0.6,
+              "right": 0.8,
+              "type": "electronic",
+              "note": "Fe2+/Fe3+ charge transfer; 0.7-\u00b5m drop; diagnostic for C-types"
+            },
+            {
+              "center": 2.72,
+              "left": 2.6,
+              "right": 2.82,
+              "type": "vibrational_fundamental",
+              "note": "O-H stretch; detected on Ryugu (Kitazato 2019)"
+            },
+            {
+              "center": 2.94,
+              "left": 2.8,
+              "right": 3.1,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["NIRS3_Hayabusa2","OVIRS_OSIRIS-REx","VIR_Dawn","JWST_NIRSpec"],
-          "detection_range_um": [0.5, 3.2],
+          "sensors": [
+            "NIRS3_Hayabusa2",
+            "OVIRS_OSIRIS-REx",
+            "VIR_Dawn",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.5,
+            3.2
+          ],
           "refs": [
-            {"cite": "Kitazato et al. 2019", "doi": "10.1126/science.aav7432"},
-            {"cite": "Hamilton et al. 2019", "doi": "10.1038/s41550-019-0894-3"}
+            {
+              "cite": "Kitazato et al. 2019",
+              "doi": "10.1126/science.aav7432"
+            },
+            {
+              "cite": "Hamilton et al. 2019",
+              "doi": "10.1038/s41550-019-0894-3"
+            }
+          ]
+        },
+        {
+          "name": "magnetite_uv",
+          "display_name": "Magnetite UV slope (C-complex)",
+          "formula": "Fe3O4",
+          "absorption_bands": [
+            {
+              "center": 0.35,
+              "left": 0.27,
+              "right": 0.43,
+              "type": "electronic_UV_slope",
+              "note": "Featureless UV reddening; diagnostic of C-complex vs. D-type"
+            }
+          ],
+          "sensors": [
+            "HST_ACS",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.24,
+            0.5
+          ],
+          "refs": [
+            {
+              "cite": "Bus & Binzel 2002",
+              "doi": "10.1016/S0019-1035(02)00006-8"
+            }
+          ]
+        },
+        {
+          "name": "phyllosilicate_tir",
+          "display_name": "Phyllosilicate / OH (TIR 3 \u00b5m) C-asteroid",
+          "formula": "Mg/Fe-serpentine",
+          "absorption_bands": [
+            {
+              "center": 2.7,
+              "left": 2.55,
+              "right": 2.85,
+              "type": "O-H_stretch",
+              "note": "Aqueous alteration tracer; Ryugu/Bennu Hayabusa2/OSIRIS-REx"
+            },
+            {
+              "center": 3.1,
+              "left": 2.95,
+              "right": 3.25,
+              "type": "O-H_stretch_NH4"
+            }
+          ],
+          "sensors": [
+            "NIRS3_Hayabusa2",
+            "OVIRS_OSIRIS-REx",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            2.5,
+            3.4
+          ],
+          "refs": [
+            {
+              "cite": "Kitazato et al. 2019",
+              "doi": "10.1126/science.aav7484"
+            },
+            {
+              "cite": "Hamilton et al. 2019",
+              "doi": "10.1038/s41550-019-0722-2"
+            }
           ]
         }
       ],
@@ -861,19 +3011,43 @@
           "display_name": "Aliphatic C-H organic matter",
           "formula": "-CH2-, -CH3",
           "absorption_bands": [
-            {"center": 3.400, "left": 3.300, "right": 3.520, "type": "vibrational_fundamental", "note": "C-H stretch; detected on Ryugu samples (Yabuta et al. 2023)"},
-            {"center": 3.280, "left": 3.200, "right": 3.360, "type": "vibrational_fundamental", "note": "Aromatic C-H stretch"}
+            {
+              "center": 3.4,
+              "left": 3.3,
+              "right": 3.52,
+              "type": "vibrational_fundamental",
+              "note": "C-H stretch; detected on Ryugu samples (Yabuta et al. 2023)"
+            },
+            {
+              "center": 3.28,
+              "left": 3.2,
+              "right": 3.36,
+              "type": "vibrational_fundamental",
+              "note": "Aromatic C-H stretch"
+            }
           ],
-          "sensors": ["NIRS3_Hayabusa2","OVIRS_OSIRIS-REx","JWST_NIRSpec"],
-          "detection_range_um": [3.1, 3.6],
+          "sensors": [
+            "NIRS3_Hayabusa2",
+            "OVIRS_OSIRIS-REx",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            3.1,
+            3.6
+          ],
           "refs": [
-            {"cite": "Yabuta et al. 2023", "doi": "10.1126/science.abn9471"},
-            {"cite": "Kaplan et al. 2020", "doi": "10.1029/2020GL089953"}
+            {
+              "cite": "Yabuta et al. 2023",
+              "doi": "10.1126/science.abn9471"
+            },
+            {
+              "cite": "Kaplan et al. 2020",
+              "doi": "10.1029/2020GL089953"
+            }
           ]
         }
       ]
     },
-
     "asteroid_s_type": {
       "_notes": "Stony (ordinary chondrite / LL) parent bodies. Dominated by olivine+pyroxene+metal. Space weathering reduces band depth. Itokawa (Hayabusa) paradigm case.",
       "minerals": [
@@ -881,32 +3055,74 @@
           "name": "olivine",
           "formula": "(Mg,Fe)2SiO4",
           "absorption_bands": [
-            {"center": 1.050, "left": 0.750, "right": 1.550, "type": "electronic"},
-            {"center": 1.250, "left": 0.950, "right": 1.550, "type": "electronic"}
+            {
+              "center": 1.05,
+              "left": 0.75,
+              "right": 1.55,
+              "type": "electronic"
+            },
+            {
+              "center": 1.25,
+              "left": 0.95,
+              "right": 1.55,
+              "type": "electronic"
+            }
           ],
-          "sensors": ["NIRS_Hayabusa","Lucy_Ralph","JWST_NIRSpec"],
-          "detection_range_um": [0.7, 2.5],
+          "sensors": [
+            "NIRS_Hayabusa",
+            "Lucy_Ralph",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.5
+          ],
           "refs": [
-            {"cite": "Binzel et al. 2002", "doi": "10.1016/S0019-1035(02)00011-X"},
-            {"cite": "Noguchi et al. 2011", "doi": "10.1126/science.1207794"}
+            {
+              "cite": "Binzel et al. 2002",
+              "doi": "10.1016/S0019-1035(02)00011-X"
+            },
+            {
+              "cite": "Noguchi et al. 2011",
+              "doi": "10.1126/science.1207794"
+            }
           ]
         },
         {
           "name": "orthopyroxene",
           "formula": "(Mg,Fe)SiO3",
           "absorption_bands": [
-            {"center": 0.920, "left": 0.750, "right": 1.100, "type": "electronic"},
-            {"center": 1.850, "left": 1.500, "right": 2.200, "type": "electronic"}
+            {
+              "center": 0.92,
+              "left": 0.75,
+              "right": 1.1,
+              "type": "electronic"
+            },
+            {
+              "center": 1.85,
+              "left": 1.5,
+              "right": 2.2,
+              "type": "electronic"
+            }
           ],
-          "sensors": ["NIRS_Hayabusa","Lucy_Ralph","JWST_NIRSpec"],
-          "detection_range_um": [0.7, 2.5],
+          "sensors": [
+            "NIRS_Hayabusa",
+            "Lucy_Ralph",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.7,
+            2.5
+          ],
           "refs": [
-            {"cite": "Binzel et al. 2002", "doi": "10.1016/S0019-1035(02)00011-X"}
+            {
+              "cite": "Binzel et al. 2002",
+              "doi": "10.1016/S0019-1035(02)00011-X"
+            }
           ]
         }
       ]
     },
-
     "comet": {
       "_notes": "Cometary nuclei and comae. Organics dominant on surface (Capaccioni et al. 2015 for 67P/VIRTIS). Ices sublimate to form coma. Future: Comet Interceptor (2029 launch).",
       "organics": [
@@ -915,15 +3131,47 @@
           "display_name": "Organic-rich dark material (refractory)",
           "formula": "C,H,O,N,S complex",
           "absorption_bands": [
-            {"center": 3.200, "left": 3.000, "right": 3.400, "type": "vibrational_fundamental", "note": "Aromatic C-H + other C-H; dominant in 67P VIRTIS (Capaccioni 2015)"},
-            {"center": 3.400, "left": 3.280, "right": 3.520, "type": "vibrational_fundamental", "note": "Aliphatic C-H"},
-            {"center": 6.200, "left": 6.000, "right": 6.500, "type": "vibrational_fundamental", "note": "C=C aromatic (requires JWST MIRI range)"}
+            {
+              "center": 3.2,
+              "left": 3.0,
+              "right": 3.4,
+              "type": "vibrational_fundamental",
+              "note": "Aromatic C-H + other C-H; dominant in 67P VIRTIS (Capaccioni 2015)"
+            },
+            {
+              "center": 3.4,
+              "left": 3.28,
+              "right": 3.52,
+              "type": "vibrational_fundamental",
+              "note": "Aliphatic C-H"
+            },
+            {
+              "center": 6.2,
+              "left": 6.0,
+              "right": 6.5,
+              "type": "vibrational_fundamental",
+              "note": "C=C aromatic (requires JWST MIRI range)"
+            }
           ],
-          "sensors": ["VIRTIS_Rosetta","OVIRS_OSIRIS-REx","JWST_NIRSpec","Comet_Interceptor"],
-          "detection_range_um": [3.0, 7.0],
+          "sensors": [
+            "VIRTIS_Rosetta",
+            "OVIRS_OSIRIS-REx",
+            "JWST_NIRSpec",
+            "Comet_Interceptor"
+          ],
+          "detection_range_um": [
+            3.0,
+            7.0
+          ],
           "refs": [
-            {"cite": "Capaccioni et al. 2015", "doi": "10.1126/science.aaa0628"},
-            {"cite": "Quirico et al. 2016", "doi": "10.1016/j.icarus.2016.06.028"}
+            {
+              "cite": "Capaccioni et al. 2015",
+              "doi": "10.1126/science.aaa0628"
+            },
+            {
+              "cite": "Quirico et al. 2016",
+              "doi": "10.1016/j.icarus.2016.06.028"
+            }
           ]
         }
       ],
@@ -932,72 +3180,336 @@
           "name": "water_ice_coma_surface",
           "formula": "H2O",
           "absorption_bands": [
-            {"center": 1.520, "left": 1.380, "right": 1.640, "type": "vibrational_combination"},
-            {"center": 2.020, "left": 1.800, "right": 2.200, "type": "vibrational_combination"},
-            {"center": 2.700, "left": 2.500, "right": 2.900, "type": "vibrational_fundamental", "note": "O-H stretch; coma emission at 2.65-2.73 µm"}
+            {
+              "center": 1.52,
+              "left": 1.38,
+              "right": 1.64,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.02,
+              "left": 1.8,
+              "right": 2.2,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.7,
+              "left": 2.5,
+              "right": 2.9,
+              "type": "vibrational_fundamental",
+              "note": "O-H stretch; coma emission at 2.65-2.73 \u00b5m"
+            }
           ],
-          "sensors": ["VIRTIS_Rosetta","JWST_NIRSpec","Comet_Interceptor"],
-          "detection_range_um": [1.3, 3.0],
+          "sensors": [
+            "VIRTIS_Rosetta",
+            "JWST_NIRSpec",
+            "Comet_Interceptor"
+          ],
+          "detection_range_um": [
+            1.3,
+            3.0
+          ],
           "refs": [
-            {"cite": "De Sanctis et al. 2015b", "doi": "10.1038/nature14129"}
+            {
+              "cite": "De Sanctis et al. 2015b",
+              "doi": "10.1038/nature14129"
+            }
           ]
         },
         {
           "name": "co2_coma",
           "formula": "CO2",
           "absorption_bands": [
-            {"center": 4.260, "left": 4.150, "right": 4.380, "type": "vibrational_fundamental", "note": "Strong nu3; coma emission"}
+            {
+              "center": 4.26,
+              "left": 4.15,
+              "right": 4.38,
+              "type": "vibrational_fundamental",
+              "note": "Strong nu3; coma emission"
+            }
           ],
-          "sensors": ["VIRTIS_Rosetta","JWST_NIRSpec","MIRI"],
-          "detection_range_um": [4.0, 4.5],
+          "sensors": [
+            "VIRTIS_Rosetta",
+            "JWST_NIRSpec",
+            "MIRI"
+          ],
+          "detection_range_um": [
+            4.0,
+            4.5
+          ],
           "refs": [
-            {"cite": "Filacchione et al. 2016", "doi": "10.1016/j.icarus.2016.03.020"}
+            {
+              "cite": "Filacchione et al. 2016",
+              "doi": "10.1016/j.icarus.2016.03.020"
+            }
+          ]
+        },
+        {
+          "name": "h2o_coma_fir",
+          "display_name": "H2O (coma) FIR rotational lines",
+          "formula": "H2O",
+          "absorption_bands": [
+            {
+              "center": 56.9,
+              "left": 55.0,
+              "right": 59.0,
+              "type": "rotational",
+              "note": "1(1,0)\u21921(0,1) ortho-H2O; Herschel PACS bright line"
+            },
+            {
+              "center": 179.5,
+              "left": 176.0,
+              "right": 183.0,
+              "type": "rotational",
+              "note": "1(1,1)\u21920(0,0) fundamental; strongest submm outgassing tracer"
+            }
+          ],
+          "sensors": [
+            "Herschel_PACS",
+            "Herschel_HIFI",
+            "ALMA"
+          ],
+          "detection_range_um": [
+            50.0,
+            200.0
+          ],
+          "refs": [
+            {
+              "cite": "Hartogh et al. 2011",
+              "doi": "10.1038/nature10519"
+            },
+            {
+              "cite": "Bockel\u00e9e-Morvan et al. 2012",
+              "doi": "10.1051/0004-6361/201219000"
+            }
+          ]
+        }
+      ],
+      "gases": [
+        {
+          "name": "oh_coma",
+          "display_name": "OH radical (coma) \u2014 water photodissociation product",
+          "formula": "OH",
+          "absorption_bands": [
+            {
+              "center": 0.308,
+              "left": 0.29,
+              "right": 0.32,
+              "type": "electronic_A-X_fluorescence",
+              "note": "Strongest UV tracer of water outgassing rate; parent of H and O"
+            }
+          ],
+          "sensors": [
+            "IUE",
+            "HST_ACS",
+            "SOHO_UVCS",
+            "Comet_Interceptor_UV"
+          ],
+          "detection_range_um": [
+            0.28,
+            0.33
+          ],
+          "refs": [
+            {
+              "cite": "A'Hearn et al. 1995",
+              "doi": "10.1126/science.275.5297.191"
+            },
+            {
+              "cite": "Feldman et al. 2004",
+              "doi": "10.1016/S0273-1177(03)00903-2"
+            }
+          ]
+        },
+        {
+          "name": "cn_coma",
+          "display_name": "CN radical (coma) \u2014 violet system",
+          "formula": "CN",
+          "absorption_bands": [
+            {
+              "center": 0.388,
+              "left": 0.372,
+              "right": 0.4,
+              "type": "electronic_B-X_Delta_v0",
+              "note": "Brightest coma emission outside OH; photodissociation of HCN"
+            }
+          ],
+          "sensors": [
+            "HST_ACS",
+            "GALEX",
+            "ground_violet"
+          ],
+          "detection_range_um": [
+            0.36,
+            0.41
+          ],
+          "refs": [
+            {
+              "cite": "Schleicher 2010",
+              "doi": "10.1016/j.icarus.2010.03.018"
+            }
+          ]
+        },
+        {
+          "name": "cs_coma",
+          "display_name": "CS radical (coma) \u2014 UV sulfur tracer",
+          "formula": "CS",
+          "absorption_bands": [
+            {
+              "center": 0.258,
+              "left": 0.245,
+              "right": 0.27,
+              "type": "electronic_A-X",
+              "note": "Photodissociation product of CS2; abundant in bright comets"
+            }
+          ],
+          "sensors": [
+            "IUE",
+            "HST_STIS"
+          ],
+          "detection_range_um": [
+            0.24,
+            0.28
+          ],
+          "refs": [
+            {
+              "cite": "A'Hearn et al. 1983",
+              "doi": "10.1086/161264"
+            }
           ]
         }
       ]
     },
-
     "pluto": {
-      "_notes": "Dwarf planet / KBO. New Horizons LEISA (1.25-2.5 µm) revealed complex volatile ice distribution. CH4 > N2 > CO > CO2 > H2O. Grundy et al. 2016 (Science).",
+      "_notes": "Dwarf planet / KBO. New Horizons LEISA (1.25-2.5 \u00b5m) revealed complex volatile ice distribution. CH4 > N2 > CO > CO2 > H2O. Grundy et al. 2016 (Science).",
       "ices": [
         {
           "name": "methane_ice",
           "formula": "CH4",
           "absorption_bands": [
-            {"center": 1.670, "left": 1.600, "right": 1.730, "type": "vibrational_combination"},
-            {"center": 2.320, "left": 2.250, "right": 2.390, "type": "vibrational_combination"},
-            {"center": 3.320, "left": 3.200, "right": 3.440, "type": "vibrational_fundamental"}
+            {
+              "center": 1.67,
+              "left": 1.6,
+              "right": 1.73,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 2.32,
+              "left": 2.25,
+              "right": 2.39,
+              "type": "vibrational_combination"
+            },
+            {
+              "center": 3.32,
+              "left": 3.2,
+              "right": 3.44,
+              "type": "vibrational_fundamental"
+            }
           ],
-          "sensors": ["LEISA_NewHorizons","JWST_NIRSpec"],
-          "detection_range_um": [1.5, 3.5],
+          "sensors": [
+            "LEISA_NewHorizons",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.5,
+            3.5
+          ],
           "refs": [
-            {"cite": "Grundy et al. 2016", "doi": "10.1126/science.aad9189"},
-            {"cite": "Protopapa et al. 2017", "doi": "10.1016/j.icarus.2016.09.006"}
+            {
+              "cite": "Grundy et al. 2016",
+              "doi": "10.1126/science.aad9189"
+            },
+            {
+              "cite": "Protopapa et al. 2017",
+              "doi": "10.1016/j.icarus.2016.09.006"
+            }
           ]
         },
         {
           "name": "nitrogen_ice",
           "formula": "N2",
           "absorption_bands": [
-            {"center": 2.150, "left": 2.100, "right": 2.200, "type": "vibrational_overtone", "note": "Very weak; N-N stretch 2nd harmonic; detected in Tombaugh Regio"}
+            {
+              "center": 2.15,
+              "left": 2.1,
+              "right": 2.2,
+              "type": "vibrational_overtone",
+              "note": "Very weak; N-N stretch 2nd harmonic; detected in Tombaugh Regio"
+            }
           ],
-          "sensors": ["LEISA_NewHorizons","JWST_NIRSpec"],
-          "detection_range_um": [2.0, 2.3],
+          "sensors": [
+            "LEISA_NewHorizons",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            2.0,
+            2.3
+          ],
           "refs": [
-            {"cite": "Cruikshank et al. 1993", "doi": "10.1126/science.261.5122.742"}
+            {
+              "cite": "Cruikshank et al. 1993",
+              "doi": "10.1126/science.261.5122.742"
+            }
           ]
         },
         {
           "name": "co_ice",
           "formula": "CO",
           "absorption_bands": [
-            {"center": 1.580, "left": 1.540, "right": 1.620, "type": "vibrational_overtone", "note": "2nd overtone C-O stretch"},
-            {"center": 2.350, "left": 2.300, "right": 2.400, "type": "vibrational_combination"}
+            {
+              "center": 1.58,
+              "left": 1.54,
+              "right": 1.62,
+              "type": "vibrational_overtone",
+              "note": "2nd overtone C-O stretch"
+            },
+            {
+              "center": 2.35,
+              "left": 2.3,
+              "right": 2.4,
+              "type": "vibrational_combination"
+            }
           ],
-          "sensors": ["LEISA_NewHorizons","JWST_NIRSpec"],
-          "detection_range_um": [1.5, 2.5],
+          "sensors": [
+            "LEISA_NewHorizons",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            1.5,
+            2.5
+          ],
           "refs": [
-            {"cite": "Grundy et al. 2016", "doi": "10.1126/science.aad9189"}
+            {
+              "cite": "Grundy et al. 2016",
+              "doi": "10.1126/science.aad9189"
+            }
+          ]
+        },
+        {
+          "name": "ch4_ice_uv_pluto",
+          "display_name": "CH4 ice (UV) \u2014 Pluto dark terrain",
+          "formula": "CH4",
+          "absorption_bands": [
+            {
+              "center": 0.3,
+              "left": 0.26,
+              "right": 0.34,
+              "type": "electronic",
+              "note": "UV absorption drives tholin formation; Lyman edge photolysis products"
+            }
+          ],
+          "sensors": [
+            "HST_COS",
+            "HST_ACS"
+          ],
+          "detection_range_um": [
+            0.24,
+            0.36
+          ],
+          "refs": [
+            {
+              "cite": "Grundy et al. 2018",
+              "doi": "10.1016/j.icarus.2017.12.017"
+            }
           ]
         }
       ],
@@ -1007,54 +3519,485 @@
           "display_name": "Tholins (dark reddish terrain)",
           "formula": "CxHyNz",
           "absorption_bands": [
-            {"center": 0.350, "left": 0.250, "right": 0.550, "type": "electronic", "note": "UV-VIS reddening slope"}
+            {
+              "center": 0.35,
+              "left": 0.25,
+              "right": 0.55,
+              "type": "electronic",
+              "note": "UV-VIS reddening slope"
+            }
           ],
-          "sensors": ["MVIC_NewHorizons","LEISA_NewHorizons","JWST_NIRSpec"],
-          "detection_range_um": [0.25, 1.0],
+          "sensors": [
+            "MVIC_NewHorizons",
+            "LEISA_NewHorizons",
+            "JWST_NIRSpec"
+          ],
+          "detection_range_um": [
+            0.25,
+            1.0
+          ],
           "refs": [
-            {"cite": "Stern et al. 2015", "doi": "10.1126/science.aad1815"}
+            {
+              "cite": "Stern et al. 2015",
+              "doi": "10.1126/science.aad1815"
+            }
           ]
         }
       ]
     }
   },
-
   "missions": {
     "past": [
-      {"name": "VIMS", "spacecraft": "Cassini", "range_um": [0.35, 5.10], "spectral_res_nm": 16, "bodies": ["Saturn","Titan","Enceladus","Io","Europa","Phoebe"], "status": "ended 2017", "ref_doi": "10.1007/978-1-4020-2766-2_3"},
-      {"name": "CRISM", "spacecraft": "MRO", "range_um": [0.362, 3.92], "spectral_res_nm": 6.55, "bodies": ["Mars"], "status": "ended 2023", "ref_doi": "10.1029/2006JE002682"},
-      {"name": "OMEGA", "spacecraft": "Mars Express", "range_um": [0.38, 5.10], "spectral_res_nm": 13, "bodies": ["Mars"], "status": "ended 2022", "ref_doi": "10.1016/S0273-1177(03)00241-2"},
-      {"name": "TES", "spacecraft": "MGS", "range_um": [5.8, 50.0], "spectral_res_nm": null, "bodies": ["Mars"], "status": "ended 2006", "ref_doi": "10.1029/2001JE001582"},
-      {"name": "THEMIS", "spacecraft": "Mars Odyssey", "range_um": [6.78, 14.88], "spectral_res_nm": null, "bodies": ["Mars"], "status": "active", "ref_doi": "10.1029/2002JE001994"},
-      {"name": "M3", "spacecraft": "Chandrayaan-1", "range_um": [0.43, 3.00], "spectral_res_nm": 20, "bodies": ["Moon"], "status": "ended 2009", "ref_doi": "10.1029/2009GL040879"},
-      {"name": "NIMS", "spacecraft": "Galileo", "range_um": [0.70, 5.20], "spectral_res_nm": 25, "bodies": ["Io","Europa","Ganymede","Callisto"], "status": "ended 2003", "ref_doi": "10.1126/science.272.5263.848"},
-      {"name": "VIR", "spacecraft": "Dawn", "range_um": [0.25, 5.00], "spectral_res_nm": 9, "bodies": ["Vesta","Ceres"], "status": "ended 2018", "ref_doi": "10.1016/j.pss.2014.04.007"},
-      {"name": "VIRTIS", "spacecraft": "Venus Express / Rosetta", "range_um": [0.25, 5.00], "spectral_res_nm": 2, "bodies": ["Venus","comet_67P"], "status": "ended 2014/2016", "ref_doi": "10.1007/s11214-006-9085-z"},
-      {"name": "OVIRS", "spacecraft": "OSIRIS-REx", "range_um": [0.39, 4.30], "spectral_res_nm": 7, "bodies": ["Bennu"], "status": "ended sample return 2023", "ref_doi": "10.1007/s11214-017-0373-5"},
-      {"name": "OTES", "spacecraft": "OSIRIS-REx", "range_um": [5.7, 100.0], "spectral_res_nm": null, "bodies": ["Bennu"], "status": "ended 2023", "ref_doi": "10.1007/s11214-017-0375-3"},
-      {"name": "NIRS3", "spacecraft": "Hayabusa2", "range_um": [1.80, 3.20], "spectral_res_nm": 18, "bodies": ["Ryugu"], "status": "ended fly-by 2019", "ref_doi": "10.1007/s11214-016-0341-7"},
-      {"name": "LEISA", "spacecraft": "New Horizons", "range_um": [1.25, 2.50], "spectral_res_nm": 7, "bodies": ["Pluto","Charon","Arrokoth"], "status": "fly-by 2015/2019", "ref_doi": "10.1007/s11214-008-9358-6"},
-      {"name": "MESSENGER_VIRS", "spacecraft": "MESSENGER", "range_um": [0.30, 1.45], "spectral_res_nm": 5, "bodies": ["Mercury"], "status": "ended 2015", "ref_doi": "10.1007/s11214-014-0097-3"},
-      {"name": "Kaguya_SP", "spacecraft": "Kaguya", "range_um": [0.51, 2.60], "spectral_res_nm": 6, "bodies": ["Moon"], "status": "ended 2009", "ref_doi": "10.1029/2007GL032224"}
+      {
+        "name": "VIMS",
+        "spacecraft": "Cassini",
+        "range_um": [
+          0.35,
+          5.1
+        ],
+        "spectral_res_nm": 16,
+        "bodies": [
+          "Saturn",
+          "Titan",
+          "Enceladus",
+          "Io",
+          "Europa",
+          "Phoebe"
+        ],
+        "status": "ended 2017",
+        "ref_doi": "10.1007/978-1-4020-2766-2_3"
+      },
+      {
+        "name": "CRISM",
+        "spacecraft": "MRO",
+        "range_um": [
+          0.362,
+          3.92
+        ],
+        "spectral_res_nm": 6.55,
+        "bodies": [
+          "Mars"
+        ],
+        "status": "ended 2023",
+        "ref_doi": "10.1029/2006JE002682"
+      },
+      {
+        "name": "OMEGA",
+        "spacecraft": "Mars Express",
+        "range_um": [
+          0.38,
+          5.1
+        ],
+        "spectral_res_nm": 13,
+        "bodies": [
+          "Mars"
+        ],
+        "status": "ended 2022",
+        "ref_doi": "10.1016/S0273-1177(03)00241-2"
+      },
+      {
+        "name": "TES",
+        "spacecraft": "MGS",
+        "range_um": [
+          5.8,
+          50.0
+        ],
+        "spectral_res_nm": null,
+        "bodies": [
+          "Mars"
+        ],
+        "status": "ended 2006",
+        "ref_doi": "10.1029/2001JE001582"
+      },
+      {
+        "name": "THEMIS",
+        "spacecraft": "Mars Odyssey",
+        "range_um": [
+          6.78,
+          14.88
+        ],
+        "spectral_res_nm": null,
+        "bodies": [
+          "Mars"
+        ],
+        "status": "active",
+        "ref_doi": "10.1029/2002JE001994"
+      },
+      {
+        "name": "M3",
+        "spacecraft": "Chandrayaan-1",
+        "range_um": [
+          0.43,
+          3.0
+        ],
+        "spectral_res_nm": 20,
+        "bodies": [
+          "Moon"
+        ],
+        "status": "ended 2009",
+        "ref_doi": "10.1029/2009GL040879"
+      },
+      {
+        "name": "NIMS",
+        "spacecraft": "Galileo",
+        "range_um": [
+          0.7,
+          5.2
+        ],
+        "spectral_res_nm": 25,
+        "bodies": [
+          "Io",
+          "Europa",
+          "Ganymede",
+          "Callisto"
+        ],
+        "status": "ended 2003",
+        "ref_doi": "10.1126/science.272.5263.848"
+      },
+      {
+        "name": "VIR",
+        "spacecraft": "Dawn",
+        "range_um": [
+          0.25,
+          5.0
+        ],
+        "spectral_res_nm": 9,
+        "bodies": [
+          "Vesta",
+          "Ceres"
+        ],
+        "status": "ended 2018",
+        "ref_doi": "10.1016/j.pss.2014.04.007"
+      },
+      {
+        "name": "VIRTIS",
+        "spacecraft": "Venus Express / Rosetta",
+        "range_um": [
+          0.25,
+          5.0
+        ],
+        "spectral_res_nm": 2,
+        "bodies": [
+          "Venus",
+          "comet_67P"
+        ],
+        "status": "ended 2014/2016",
+        "ref_doi": "10.1007/s11214-006-9085-z"
+      },
+      {
+        "name": "OVIRS",
+        "spacecraft": "OSIRIS-REx",
+        "range_um": [
+          0.39,
+          4.3
+        ],
+        "spectral_res_nm": 7,
+        "bodies": [
+          "Bennu"
+        ],
+        "status": "ended sample return 2023",
+        "ref_doi": "10.1007/s11214-017-0373-5"
+      },
+      {
+        "name": "OTES",
+        "spacecraft": "OSIRIS-REx",
+        "range_um": [
+          5.7,
+          100.0
+        ],
+        "spectral_res_nm": null,
+        "bodies": [
+          "Bennu"
+        ],
+        "status": "ended 2023",
+        "ref_doi": "10.1007/s11214-017-0375-3"
+      },
+      {
+        "name": "NIRS3",
+        "spacecraft": "Hayabusa2",
+        "range_um": [
+          1.8,
+          3.2
+        ],
+        "spectral_res_nm": 18,
+        "bodies": [
+          "Ryugu"
+        ],
+        "status": "ended fly-by 2019",
+        "ref_doi": "10.1007/s11214-016-0341-7"
+      },
+      {
+        "name": "LEISA",
+        "spacecraft": "New Horizons",
+        "range_um": [
+          1.25,
+          2.5
+        ],
+        "spectral_res_nm": 7,
+        "bodies": [
+          "Pluto",
+          "Charon",
+          "Arrokoth"
+        ],
+        "status": "fly-by 2015/2019",
+        "ref_doi": "10.1007/s11214-008-9358-6"
+      },
+      {
+        "name": "MESSENGER_VIRS",
+        "spacecraft": "MESSENGER",
+        "range_um": [
+          0.3,
+          1.45
+        ],
+        "spectral_res_nm": 5,
+        "bodies": [
+          "Mercury"
+        ],
+        "status": "ended 2015",
+        "ref_doi": "10.1007/s11214-014-0097-3"
+      },
+      {
+        "name": "Kaguya_SP",
+        "spacecraft": "Kaguya",
+        "range_um": [
+          0.51,
+          2.6
+        ],
+        "spectral_res_nm": 6,
+        "bodies": [
+          "Moon"
+        ],
+        "status": "ended 2009",
+        "ref_doi": "10.1029/2007GL032224"
+      }
     ],
     "present": [
-      {"name": "NOMAD", "spacecraft": "ExoMars TGO", "range_um": [0.20, 3.80], "spectral_res_nm": 0.15, "bodies": ["Mars"], "status": "active", "ref_doi": "10.1016/j.pss.2018.03.003"},
-      {"name": "JWST_NIRSpec", "spacecraft": "JWST", "range_um": [0.60, 5.30], "spectral_res_nm": 5, "bodies": ["Solar system objects (all)"], "status": "active", "ref_doi": "10.1051/0004-6361/202141663"},
-      {"name": "JWST_MIRI", "spacecraft": "JWST", "range_um": [5.00, 28.00], "spectral_res_nm": 100, "bodies": ["Solar system objects (all)"], "status": "active", "ref_doi": "10.1051/0004-6361/202141663"},
-      {"name": "LUCI_LICIACube", "spacecraft": "LICIACube", "range_um": [0.40, 0.90], "spectral_res_nm": null, "bodies": ["Dimorphos"], "status": "fly-by 2022", "ref_doi": "10.1016/j.pss.2021.105278"}
+      {
+        "name": "NOMAD",
+        "spacecraft": "ExoMars TGO",
+        "range_um": [
+          0.2,
+          3.8
+        ],
+        "spectral_res_nm": 0.15,
+        "bodies": [
+          "Mars"
+        ],
+        "status": "active",
+        "ref_doi": "10.1016/j.pss.2018.03.003"
+      },
+      {
+        "name": "JWST_NIRSpec",
+        "spacecraft": "JWST",
+        "range_um": [
+          0.6,
+          5.3
+        ],
+        "spectral_res_nm": 5,
+        "bodies": [
+          "Solar system objects (all)"
+        ],
+        "status": "active",
+        "ref_doi": "10.1051/0004-6361/202141663"
+      },
+      {
+        "name": "JWST_MIRI",
+        "spacecraft": "JWST",
+        "range_um": [
+          5.0,
+          28.0
+        ],
+        "spectral_res_nm": 100,
+        "bodies": [
+          "Solar system objects (all)"
+        ],
+        "status": "active",
+        "ref_doi": "10.1051/0004-6361/202141663"
+      },
+      {
+        "name": "LUCI_LICIACube",
+        "spacecraft": "LICIACube",
+        "range_um": [
+          0.4,
+          0.9
+        ],
+        "spectral_res_nm": null,
+        "bodies": [
+          "Dimorphos"
+        ],
+        "status": "fly-by 2022",
+        "ref_doi": "10.1016/j.pss.2021.105278"
+      }
     ],
     "future": [
-      {"name": "MISE", "spacecraft": "Europa Clipper", "range_um": [0.80, 5.00], "spectral_res_nm": 10, "bodies": ["Europa","Ganymede","Callisto"], "launch": "2024", "arrival": "2030", "ref_doi": "10.1007/s11214-022-00892-z"},
-      {"name": "MAJIS", "spacecraft": "JUICE", "range_um": [0.50, 5.54], "spectral_res_nm": 3, "bodies": ["Ganymede","Callisto","Europa","Io"], "launch": "2023", "arrival": "2031", "ref_doi": "10.1007/s11214-021-00MAJIS"},
-      {"name": "VenSpec-M", "spacecraft": "EnVision", "range_um": [0.85, 4.20], "spectral_res_nm": 10, "bodies": ["Venus"], "launch": "2031", "arrival": "2038", "ref_doi": "10.1016/j.pss.2021.105377"},
-      {"name": "VenSpec-U", "spacecraft": "EnVision", "range_um": [0.20, 0.40], "spectral_res_nm": 1, "bodies": ["Venus"], "launch": "2031", "arrival": "2038", "ref_doi": "10.1016/j.pss.2021.105377"},
-      {"name": "DraMS", "spacecraft": "Dragonfly", "range_um": null, "instrument_type": "GC-MS + Raman LIBS", "bodies": ["Titan"], "launch": "2028", "arrival": "2034", "ref_doi": "10.1089/ast.2018.1970"},
-      {"name": "Comet_Interceptor_CSI", "spacecraft": "Comet Interceptor", "range_um": [0.25, 5.00], "spectral_res_nm": 10, "bodies": ["dynamically new comet"], "launch": "2029", "ref_doi": "10.1051/0004-6361/202141634"},
-      {"name": "SIMBIO-SYS_VIHI", "spacecraft": "BepiColombo", "range_um": [0.40, 2.00], "spectral_res_nm": 6, "bodies": ["Mercury"], "launch": "2018", "arrival": "2026", "ref_doi": "10.1007/s11214-021-00SIMBIO"},
-      {"name": "Lucy_Ralph", "spacecraft": "Lucy", "range_um": [0.34, 3.80], "spectral_res_nm": 30, "bodies": ["Trojans","Eurybates+satellite","Orus","Leucus"], "launch": "2021", "status": "en_route", "ref_doi": "10.1007/s11214-021-00782-7"},
-      {"name": "Lucy_OTES2", "spacecraft": "Lucy", "range_um": [5.7, 100.0], "spectral_res_nm": null, "bodies": ["Trojans"], "launch": "2021", "status": "en_route"},
-      {"name": "Trident_IDS", "spacecraft": "Trident (proposed)", "range_um": [0.40, 5.00], "spectral_res_nm": 10, "bodies": ["Triton"], "status": "proposed Decadal 2023-2032"},
-      {"name": "Uranus_Orbiter_probe", "spacecraft": "Uranus Orbiter and Probe (proposed)", "range_um": [0.30, 5.00], "spectral_res_nm": null, "bodies": ["Uranus","Ariel","Titania","Oberon","Umbriel"], "status": "recommended Decadal 2023 #1 priority"}
+      {
+        "name": "MISE",
+        "spacecraft": "Europa Clipper",
+        "range_um": [
+          0.8,
+          5.0
+        ],
+        "spectral_res_nm": 10,
+        "bodies": [
+          "Europa",
+          "Ganymede",
+          "Callisto"
+        ],
+        "launch": "2024",
+        "arrival": "2030",
+        "ref_doi": "10.1007/s11214-022-00892-z"
+      },
+      {
+        "name": "MAJIS",
+        "spacecraft": "JUICE",
+        "range_um": [
+          0.5,
+          5.54
+        ],
+        "spectral_res_nm": 3,
+        "bodies": [
+          "Ganymede",
+          "Callisto",
+          "Europa",
+          "Io"
+        ],
+        "launch": "2023",
+        "arrival": "2031",
+        "ref_doi": "10.1007/s11214-021-00MAJIS"
+      },
+      {
+        "name": "VenSpec-M",
+        "spacecraft": "EnVision",
+        "range_um": [
+          0.85,
+          4.2
+        ],
+        "spectral_res_nm": 10,
+        "bodies": [
+          "Venus"
+        ],
+        "launch": "2031",
+        "arrival": "2038",
+        "ref_doi": "10.1016/j.pss.2021.105377"
+      },
+      {
+        "name": "VenSpec-U",
+        "spacecraft": "EnVision",
+        "range_um": [
+          0.2,
+          0.4
+        ],
+        "spectral_res_nm": 1,
+        "bodies": [
+          "Venus"
+        ],
+        "launch": "2031",
+        "arrival": "2038",
+        "ref_doi": "10.1016/j.pss.2021.105377"
+      },
+      {
+        "name": "DraMS",
+        "spacecraft": "Dragonfly",
+        "range_um": null,
+        "instrument_type": "GC-MS + Raman LIBS",
+        "bodies": [
+          "Titan"
+        ],
+        "launch": "2028",
+        "arrival": "2034",
+        "ref_doi": "10.1089/ast.2018.1970"
+      },
+      {
+        "name": "Comet_Interceptor_CSI",
+        "spacecraft": "Comet Interceptor",
+        "range_um": [
+          0.25,
+          5.0
+        ],
+        "spectral_res_nm": 10,
+        "bodies": [
+          "dynamically new comet"
+        ],
+        "launch": "2029",
+        "ref_doi": "10.1051/0004-6361/202141634"
+      },
+      {
+        "name": "SIMBIO-SYS_VIHI",
+        "spacecraft": "BepiColombo",
+        "range_um": [
+          0.4,
+          2.0
+        ],
+        "spectral_res_nm": 6,
+        "bodies": [
+          "Mercury"
+        ],
+        "launch": "2018",
+        "arrival": "2026",
+        "ref_doi": "10.1007/s11214-021-00SIMBIO"
+      },
+      {
+        "name": "Lucy_Ralph",
+        "spacecraft": "Lucy",
+        "range_um": [
+          0.34,
+          3.8
+        ],
+        "spectral_res_nm": 30,
+        "bodies": [
+          "Trojans",
+          "Eurybates+satellite",
+          "Orus",
+          "Leucus"
+        ],
+        "launch": "2021",
+        "status": "en_route",
+        "ref_doi": "10.1007/s11214-021-00782-7"
+      },
+      {
+        "name": "Lucy_OTES2",
+        "spacecraft": "Lucy",
+        "range_um": [
+          5.7,
+          100.0
+        ],
+        "spectral_res_nm": null,
+        "bodies": [
+          "Trojans"
+        ],
+        "launch": "2021",
+        "status": "en_route"
+      },
+      {
+        "name": "Trident_IDS",
+        "spacecraft": "Trident (proposed)",
+        "range_um": [
+          0.4,
+          5.0
+        ],
+        "spectral_res_nm": 10,
+        "bodies": [
+          "Triton"
+        ],
+        "status": "proposed Decadal 2023-2032"
+      },
+      {
+        "name": "Uranus_Orbiter_probe",
+        "spacecraft": "Uranus Orbiter and Probe (proposed)",
+        "range_um": [
+          0.3,
+          5.0
+        ],
+        "spectral_res_nm": null,
+        "bodies": [
+          "Uranus",
+          "Ariel",
+          "Titania",
+          "Oberon",
+          "Umbriel"
+        ],
+        "status": "recommended Decadal 2023 #1 priority"
+      }
     ]
   }
 }
