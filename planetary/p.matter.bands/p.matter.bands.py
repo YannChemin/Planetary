@@ -209,7 +209,11 @@ def _find_nearest_band(wl_dict, target_um, tolerance_um=0.030):
     """
     Return (band_name, actual_wavelength) of the band closest to target_um,
     or (None, None) if no band is within tolerance.
+
+    Tolerance scales with wavelength (3 % of target) to accommodate the coarser
+    spectral sampling of MIR/FIR instruments (TES ~0.1 µm, PACS ~1 µm).
     """
+    tol = max(tolerance_um, 0.03 * target_um)
     best_name, best_wl, best_d = None, None, float("inf")
     for name, wl in wl_dict.items():
         if wl is None:
@@ -217,7 +221,7 @@ def _find_nearest_band(wl_dict, target_um, tolerance_um=0.030):
         d = abs(wl - target_um)
         if d < best_d:
             best_d, best_name, best_wl = d, name, wl
-    return (best_name, best_wl) if best_d <= tolerance_um else (None, None)
+    return (best_name, best_wl) if best_d <= tol else (None, None)
 
 
 # ── Raster I/O ────────────────────────────────────────────────────────────────
