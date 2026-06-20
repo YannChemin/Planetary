@@ -366,6 +366,28 @@ with lower confidence.
 - Prevents a low-confidence single-band detection from dominating the composite
   over a fully confirmed multi-band detection with slightly lower BD
 
+### Phase 6 — Classification and uncertainty propagation ✓ COMPLETE
+
+**6.1 Dominant-species classification map (`-k`)**
+- Flag `-k`: writes `<output_prefix>_classification`, a CELL raster where each
+  pixel holds the category code of the species with the highest
+  `confidence × BD` score at that location
+- `r.category` labels attach each code to its species name; `r.colors color=random`
+  gives a distinguishable per-category colour table
+- NULL where no species cleared `min_bd`/`min_conf` at that pixel
+- Useful as a single browse product analogous to CRISM/OMEGA mineral-class maps
+
+**6.2 Radiometric uncertainty propagation (`-e`, `radiometric_noise=`)**
+- `radiometric_noise=` (default 0.0 = disabled): fractional 1-sigma uncertainty
+  assumed on every input reflectance/emissivity sample
+- Propagated analytically through the linear-continuum band-depth formula
+  (first-order error propagation on `BD = 1 − R_c/R_cont`); per-feature sigmas
+  combined with the same diagnostic-band weights used for the BD itself
+- Flag `-e` writes `<prefix>_<species>_unc` (1-sigma BD uncertainty, grey
+  colour table); without `radiometric_noise=` set, `-e` has no effect (warns)
+- Scales with any space-weathering correction applied (same linear factor)
+- JSON report gains a `mean_uncertainty` field per detection (`null` when disabled)
+
 ### Phase 4 — Advanced detection modes ✓ COMPLETE
 
 **4.1 Spectral unmixing integration**
@@ -1062,7 +1084,7 @@ Yann Chemin
 
 ## STATUS
 
-Phases 1–5 complete.
+Phases 1–6 complete.
 
 Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
@@ -1078,11 +1100,12 @@ asteroid_d_type) + expansion of Europa, Titan, Venus.  Database now holds
 123 species across 19 bodies, wavelength range 0.18–200 µm.  Testsuite
 has 46 tests across three test classes (Phase 1: 11, Phase 2: 15, Phase 3: 20).
 
-Phase 4: advanced detection modes — NNLS spectral unmixing (`-u endmembers=`);
-temperature-dependent ice band-center correction (`temperature=`); space
-weathering correction (`space_weathering=`, body-specific α from `body_meta`
-in the database); Hapke atmospheric correction pre-step (`-a atcorr_*=`).
-Phase 4 adds 14 testsuite tests (class TestPmatterbandsPhase4; total: 60 tests).
+Phase 4: advanced detection modes — NNLS spectral unmixing (`-u endmembers=`,
+one full-spectrum image group per endmember); temperature-dependent ice
+band-center correction (`temperature=`); space weathering correction
+(`space_weathering=`, body-specific α from `body_meta` in the database);
+Hapke atmospheric correction pre-step (`-a atcorr_*=`). Phase 4 adds 13
+testsuite tests (class TestPmatterbandsPhase4; total: 59 tests).
 
 Phase 5: confidence & quality outputs — per-species band-concordance confidence
 raster (`-q`, value = n_bands_matched / n_diagnostic_bands); minimum confidence
@@ -1090,4 +1113,12 @@ filter (`min_conf=`, default 0.0) to suppress under-constrained detections;
 structured JSON detection report (`report=`) listing per-species confidence,
 mean/max BD, n_matched/n_total, and skipped-species reasons; composite RGB
 channel selection upgraded from mean-BD to confidence × mean-BD weighting.
-Phase 5 adds 13 testsuite tests (class TestPmatterbandsPhase5; total: 73 tests).
+Phase 5 adds 11 testsuite tests (class TestPmatterbandsPhase5; total: 70 tests).
+
+Phase 6: classification and uncertainty propagation — dominant-species
+classification raster (`-k`, `<prefix>_classification`, category code of the
+highest confidence-weighted BD species per pixel, with `r.category` labels);
+radiometric uncertainty propagation (`radiometric_noise=` + `-e`, analytic
+first-order error propagation through the band-depth formula, written as
+`<prefix>_<species>_unc`); JSON report gains a `mean_uncertainty` field.
+Phase 6 adds 10 testsuite tests (class TestPmatterbandsPhase6; total: 80 tests).

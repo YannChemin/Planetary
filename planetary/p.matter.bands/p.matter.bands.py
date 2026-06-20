@@ -179,6 +179,15 @@ LICENSE:   GNU GPL >=2
 # % description: Write a structured JSON summary of all detections (species, confidence, mean/max BD, n_bands) to this file. Written after all species are processed.
 # %end
 
+# %option
+# % key: radiometric_noise
+# % type: double
+# % required: no
+# % answer: 0.0
+# % label: 1-sigma relative radiometric noise [0.0 = disabled]
+# % description: Fractional 1-sigma uncertainty on each input reflectance/emissivity sample (e.g. 0.02 = two percent). Propagated analytically through the band-depth formula to produce per-species uncertainty. Use with -e to write uncertainty rasters.
+# %end
+
 # %flag
 # % key: l
 # % description: List detectable species for this body/sensor combination (no raster output)
@@ -207,6 +216,16 @@ LICENSE:   GNU GPL >=2
 # %flag
 # % key: v
 # % description: Verbose: report band depth statistics for each species map
+# %end
+
+# %flag
+# % key: e
+# % description: Output per-species uncertainty raster (<prefix>_<species>_unc), propagated analytically from radiometric_noise= through the band-depth formula
+# %end
+
+# %flag
+# % key: k
+# % description: Output a dominant-species classification raster (<prefix>_classification) — category code of the species with highest confidence-weighted band depth at each pixel
 # %end
 
 import os
@@ -493,6 +512,33 @@ def _set_colors(map_name):
     gs.run_command("r.colors", map=map_name, color="ryb", quiet=True)
 
 
+def _write_classification(cat_arr, map_name, region, species_names):
+    """Write an integer category raster (NaN -> NULL) with r.category labels.
+
+    cat_arr values are 1-based species indices matching species_names order.
+    """
+    import numpy as np
+    tmp = tempfile.mktemp(suffix=".bin")
+    flat = np.where(np.isnan(cat_arr), -9999, cat_arr).astype("int32")
+    flat.tofile(tmp)
+    gs.run_command(
+        "r.in.bin",
+        input=tmp, output=map_name,
+        bytes=4,
+        north=region["n"], south=region["s"],
+        east=region["e"],  west=region["w"],
+        rows=int(region["rows"]), cols=int(region["cols"]),
+        anull="-9999",
+        overwrite=True, quiet=True,
+    )
+    os.unlink(tmp)
+    rules = "\n".join(
+        "{}:{}".format(i + 1, name) for i, name in enumerate(species_names))
+    gs.write_command("r.category", map=map_name, rules="-",
+                     separator=":", stdin=rules, quiet=True)
+    gs.run_command("r.colors", map=map_name, color="random", quiet=True)
+
+
 # ── Spectral computation ──────────────────────────────────────────────────────
 
 def _band_depth(r_left, r_center, r_right, wl_left, wl_center, wl_right):
@@ -515,21 +561,62 @@ def _band_depth(r_left, r_center, r_right, wl_left, wl_center, wl_right):
     return np.clip(bd, 0.0, 1.0)
 
 
-def _detect_species(species, wl_dict, min_bd, temperature_K=None):
+def _band_depth_uncertainty(r_left, r_center, r_right, wl_left, wl_center, wl_right,
+                            rel_noise):
+    """
+    Propagate 1-sigma relative radiometric noise through the linear-continuum
+    band-depth formula (analytic first-order error propagation):
+
+        BD = 1 - R_c / R_cont,   R_cont = R_l*(1-t) + R_r*t
+
+        dBD/dR_c = -1 / R_cont
+        dBD/dR_l = R_c*(1-t) / R_cont^2
+        dBD/dR_r = R_c*t     / R_cont^2
+
+        sigma_x  = rel_noise * R_x      (independent per-band noise)
+        sigma_BD = sqrt( (dBD/dR_c * sigma_c)^2
+                        + (dBD/dR_l * sigma_l)^2
+                        + (dBD/dR_r * sigma_r)^2 )
+
+    Returns an array of 1-sigma BD uncertainties (NaN where invalid).
+    """
+    import numpy as np
+    span = wl_right - wl_left
+    if abs(span) < 1.0e-10 or rel_noise <= 0.0:
+        return np.full_like(r_center, float("nan"))
+    t = (wl_center - wl_left) / span
+    r_cont = r_left * (1.0 - t) + r_right * t
+    with np.errstate(invalid="ignore", divide="ignore"):
+        d_c = -1.0 / r_cont
+        d_l = r_center * (1.0 - t) / (r_cont ** 2)
+        d_r = r_center * t / (r_cont ** 2)
+        sigma_c = rel_noise * np.abs(r_center)
+        sigma_l = rel_noise * np.abs(r_left)
+        sigma_r = rel_noise * np.abs(r_right)
+        unc = np.sqrt((d_c * sigma_c) ** 2 + (d_l * sigma_l) ** 2 + (d_r * sigma_r) ** 2)
+    unc = np.where(r_cont <= 0.0, float("nan"), unc)
+    return unc
+
+
+def _detect_species(species, wl_dict, min_bd, temperature_K=None, radiometric_noise=0.0):
     """
     Compute weighted multi-feature absorption band depth for a species.
 
     Primary feature (i=0) weight = 1.0; confirming features = 0.6.
     temperature_K: if given, shift ice band centers before band matching (Phase 4.2).
-    Returns (bd_array, note_str) where bd_array is None if no bands covered.
+    radiometric_noise: if > 0, propagate 1-sigma relative noise through the BD
+        formula and return a combined uncertainty array (Phase 6.2).
+    Returns (bd_array, note_str, n_matched, n_total, unc_array) where bd_array
+    and unc_array are None if no bands covered or noise propagation disabled.
     """
     import numpy as np
 
     feat_list = species.get("absorption_bands", [])
     if not feat_list:
-        return None, "no absorption bands defined"
+        return None, "no absorption bands defined", 0, 0, None
 
     bd_sum, w_sum = None, 0.0
+    unc_sum_sq = None
     covered, skipped = [], []
 
     for i, ab in enumerate(feat_list):
@@ -564,16 +651,28 @@ def _detect_species(species, wl_dict, min_bd, temperature_K=None):
         w_sum  += w
         covered.append("{:.4f}µm".format(wl_c))
 
+        if radiometric_noise > 0.0:
+            sigma = _band_depth_uncertainty(
+                r_l, r_c, r_r, actual_l, actual_c, actual_r, radiometric_noise)
+            if unc_sum_sq is None:
+                unc_sum_sq = np.zeros_like(bd)
+            unc_sum_sq += (w ** 2) * (sigma ** 2)
+
     if bd_sum is None or w_sum == 0.0:
-        return None, "skipped: " + "; ".join(skipped), 0, len(feat_list)
+        return None, "skipped: " + "; ".join(skipped), 0, len(feat_list), None
 
     bd_final = bd_sum / w_sum
     bd_final[bd_final < min_bd] = float("nan")
 
+    unc_final = None
+    if unc_sum_sq is not None:
+        unc_final = np.sqrt(unc_sum_sq) / w_sum
+        unc_final[np.isnan(bd_final)] = float("nan")
+
     note = "features: " + ",".join(covered)
     if skipped:
         note += " | gaps: " + ",".join(skipped)
-    return bd_final, note, len(covered), len(feat_list)
+    return bd_final, note, len(covered), len(feat_list), unc_final
 
 
 # ── List mode ────────────────────────────────────────────────────────────────
@@ -626,10 +725,17 @@ def main():
     flag_comp    = flags["c"]
     flag_verbose = flags["v"]
     flag_quality = flags["q"]       # Phase 5.1 confidence rasters
+    flag_uncert  = flags["e"]       # Phase 6.2 uncertainty rasters
+    flag_classify = flags["k"]      # Phase 6.1 classification map
 
     # Phase 5 options
     min_conf  = float(options["min_conf"])
     report_path = options["report"] or None
+
+    # Phase 6.2 — radiometric noise propagation
+    radiometric_noise = float(options["radiometric_noise"])
+    if flag_uncert and radiometric_noise <= 0.0:
+        gs.warning("-e given but radiometric_noise=0.0 (disabled) — no uncertainty computed.")
 
     # Phase 4.1 — NNLS
     em_group   = options["endmembers"] or None
@@ -803,6 +909,8 @@ def main():
         return
 
     # ── Compute band depths ───────────────────────────────────────────────────
+    classification_entries = []  # Phase 6.1: (sp_name, bd_arr, confidence)
+
     for sp in in_range:
         sp_name  = sp["name"]
         mtype    = sp.get("_mtype", "unknown")
@@ -810,8 +918,8 @@ def main():
 
         gs.message("  [{:8s}] {} …".format(mtype, sp_name))
 
-        bd_arr, note, n_matched, n_total = _detect_species(
-            sp, wl_dict, min_bd, temperature_K)
+        bd_arr, note, n_matched, n_total, unc_arr = _detect_species(
+            sp, wl_dict, min_bd, temperature_K, radiometric_noise)
         confidence = n_matched / n_total if n_total > 0 else 0.0
 
         if bd_arr is None:
@@ -833,7 +941,10 @@ def main():
 
         # Phase 4.3 — space weathering correction
         if sw_factor > 0.0:
+            denom = 1.0 - sw_alpha * sw_factor
             bd_arr = _apply_space_weathering(bd_arr, sw_factor, sw_alpha)
+            if unc_arr is not None and abs(denom) > 1e-6:
+                unc_arr = unc_arr / denom  # linear correction scales sigma identically
             note += " | SW-corr α={:.2f} Is/FeO={:.2f}".format(sw_alpha, sw_factor)
 
         n_valid = int(np.sum(~np.isnan(bd_arr)))
@@ -860,6 +971,20 @@ def main():
                                n_matched, n_total, confidence),
                            overwrite=True, quiet=True)
 
+        # Phase 6.2 — per-species uncertainty raster
+        mean_unc = None
+        if unc_arr is not None:
+            mean_unc = float(np.nanmean(unc_arr)) if n_valid > 0 else None
+            if flag_uncert:
+                unc_map = "{}_unc".format(out_name)
+                _write_band(unc_arr, unc_map, region)
+                gs.run_command("r.colors", map=unc_map, color="grey", quiet=True)
+                gs.run_command("r.support", map=unc_map,
+                               title="{} band-depth uncertainty (1-sigma)".format(sp_name),
+                               description="Propagated from radiometric_noise={:.4f}".format(
+                                   radiometric_noise),
+                               overwrite=True, quiet=True)
+
         sw_desc = " | SW-corr α={:.2f}".format(sw_alpha) if sw_factor > 0.0 else ""
         tc_desc = " | T={:.0f}K".format(temperature_K) if temperature_K else ""
         refs = "; ".join(
@@ -875,6 +1000,7 @@ def main():
         mean_bd = float(np.nanmean(bd_arr))
         max_bd  = float(np.nanmax(bd_arr))
         output_maps[mtype].append((out_name, bd_arr, confidence))
+        classification_entries.append((sp_name, bd_arr, confidence))
 
         # Phase 5.2 — accumulate detection record
         report_data["detections"].append({
@@ -884,6 +1010,7 @@ def main():
             "n_valid_pixels": n_valid,
             "mean_bd": round(mean_bd, 6),
             "max_bd":  round(max_bd,  6),
+            "mean_uncertainty": round(mean_unc, 6) if mean_unc is not None else None,
             "output_map": out_name,
             "note": note,
         })
@@ -896,6 +1023,25 @@ def main():
         else:
             gs.message("    {} valid pixels | conf={}/{} | {}".format(
                 n_valid, n_matched, n_total, note))
+
+    # ── Phase 6.1 — dominant-species classification map ──────────────────────
+    if flag_classify:
+        if classification_entries:
+            score_stack = np.stack(
+                [bd * conf for (_, bd, conf) in classification_entries], axis=0)
+            valid_mask = ~np.all(np.isnan(score_stack), axis=0)
+            safe_stack = np.where(np.isnan(score_stack), -np.inf, score_stack)
+            cat_idx = np.argmax(safe_stack, axis=0).astype(float) + 1.0
+            cat_idx[~valid_mask] = float("nan")
+            class_map = "{}_classification".format(out_prefix)
+            species_names = [e[0] for e in classification_entries]
+            _write_classification(cat_idx, class_map, region, species_names)
+            gs.message("Classification map '{}' written ({} categories).".format(
+                class_map, len(species_names)))
+        else:
+            gs.warning(
+                "-k given but no species were detected; "
+                "classification map not written.")
 
     # ── Composite false-colour RGB ────────────────────────────────────────────
     if flag_comp:

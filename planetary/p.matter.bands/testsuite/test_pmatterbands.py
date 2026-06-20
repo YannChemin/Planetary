@@ -1833,6 +1833,11 @@ class TestPmatterbandsPhase5(TestCase):
                          "p.matter.bands not installed")
     def test_min_conf_suppresses_low_confidence_species(self):
         """min_conf=0.9 suppresses 3-band species (conf=0.33) from narrow sensor."""
+        # Clear any stale map left by another test sharing this prefix/group
+        # (the module skips writing when min_conf gates a species, so a
+        # pre-existing raster of the same name would not be overwritten).
+        gs.run_command("g.remove", flags="f", type="raster",
+                       name="pmb_p5_narrow_out_pmb_p5_mineral_3band", quiet=True)
         module = SimpleModule(
             "p.matter.bands",
             group="pmb_p5_narrow_group",
@@ -1997,6 +2002,301 @@ class TestPmatterbandsPhase5(TestCase):
                 data = json.load(f)
             skipped_names = [s["name"] for s in data["skipped"]]
             self.assertIn("pmb_p5_mineral_3band", skipped_names)
+        finally:
+            try:
+                os.unlink(report)
+            except OSError:
+                pass
+
+
+class TestPmatterbandsPhase6(TestCase):
+    """Phase 6 tests: dominant-species classification map, uncertainty propagation."""
+
+    _DB_P6 = {
+        "_schema": "matter_bands_v1",
+        "body_meta": {},
+        "bodies": {
+            "mars": {
+                "minerals": [
+                    {
+                        "name": "pmb_p6_mineral_strong",
+                        "display_name": "P6 strong absorber",
+                        "formula": "S",
+                        "detection_range_um": [1.0, 2.5],
+                        "absorption_bands": [
+                            {"center": 1.30, "left": 1.10, "right": 1.50, "type": "test"},
+                        ],
+                        "refs": [],
+                    },
+                    {
+                        "name": "pmb_p6_mineral_weak",
+                        "display_name": "P6 weak absorber",
+                        "formula": "W",
+                        "detection_range_um": [1.0, 2.5],
+                        "absorption_bands": [
+                            {"center": 1.80, "left": 1.60, "right": 2.00, "type": "test"},
+                        ],
+                        "refs": [],
+                    },
+                ],
+                "ices": [], "gases": [], "organics": [], "liquids": [],
+            },
+        },
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        cls.db_p6 = tempfile.mktemp(suffix=".json")
+        with open(cls.db_p6, "w") as f:
+            json.dump(cls._DB_P6, f)
+
+        import numpy as np
+
+        cls.wl = [1.0 + i * (1.5 / 19) for i in range(20)]
+        cls.wl_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_csv, cls.wl)
+
+        wl_arr = np.array(cls.wl)
+        # Strong absorber: deep (0.6) feature at 1.30 µm.
+        # Weak absorber: shallow (0.2) feature at 1.80 µm.
+        refl_strong = _gaussian_absorption(wl_arr, center_um=1.30, depth=0.6, fwhm_um=0.08)
+        refl_weak   = _gaussian_absorption(wl_arr, center_um=1.80, depth=0.2, fwhm_um=0.08)
+        # Combine: each band carries whichever dip is larger at that wavelength
+        # (both species' diagnostic regions don't overlap, so plain averaging
+        # preserves each feature's depth where it matters).
+        refl_combined = np.minimum(refl_strong, refl_weak)
+
+        cls.band_names = []
+        for i in range(len(cls.wl)):
+            name = "pmb_p6_band_{:03d}".format(i)
+            _create_synthetic_band(name, float(refl_combined[i]), cls.region)
+            cls.band_names.append(name)
+        gs.run_command("i.group", group="pmb_p6_group",
+                       input=",".join(cls.band_names),
+                       overwrite=True, quiet=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p6_*", quiet=True)
+        for tmp in [cls.db_p6, cls.wl_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    # ── 6.1 Dominant-species classification map (-k) ─────────────────────────
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_classification_map_created_with_k_flag(self):
+        """Flag -k produces <prefix>_classification."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="k",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_out",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p6_out_classification")
+
+    def test_no_classification_map_without_k_flag(self):
+        """Without -k, no classification map is written."""
+        module = SimpleModule(
+            "p.matter.bands",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_nok",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p6_nok_classification", element="cell")["name"],
+            "Classification map must NOT be created without -k flag")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_classification_dominant_species_wins_everywhere(self):
+        """The strong absorber (deeper BD) dominates the classification raster
+        at every pixel since both species have equal (1/1) confidence."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="k",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_out",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            overwrite=True,
+        )
+        self.assertModule(module)
+        class_map = "pmb_p6_out_classification"
+        if gs.find_file(class_map, element="cell")["name"]:
+            stats = gs.parse_command("r.univar", flags="g", map=class_map)
+            # Species are appended in DB order: strong=1, weak=2
+            self.assertAlmostEqual(float(stats["mean"]), 1.0, places=3)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_classification_category_labels_present(self):
+        """r.category labels on the classification map match species names."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="k",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_out",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            overwrite=True,
+        )
+        self.assertModule(module)
+        class_map = "pmb_p6_out_classification"
+        if gs.find_file(class_map, element="cell")["name"]:
+            cats = gs.read_command("r.category", map=class_map, quiet=True)
+            self.assertIn("pmb_p6_mineral_strong", cats)
+
+    def test_classification_no_detections_warns_not_fatal(self):
+        """-k with min_bd so high that nothing is detected must warn, not crash."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="k",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_nodet",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            min_bd="0.999",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p6_nodet_classification", element="cell")["name"])
+
+    # ── 6.2 Radiometric uncertainty propagation (-e, radiometric_noise=) ─────
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_uncertainty_raster_created_with_e_and_noise(self):
+        """-e with radiometric_noise>0 writes <prefix>_<species>_unc."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="e",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_out",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            radiometric_noise="0.02",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p6_out_pmb_p6_mineral_strong_unc")
+
+    def test_no_uncertainty_raster_without_radiometric_noise(self):
+        """-e with radiometric_noise=0 (default) writes no uncertainty raster."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="e",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_noe",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p6_noe_pmb_p6_mineral_strong_unc",
+                         element="cell")["name"])
+
+    def test_no_uncertainty_raster_without_e_flag(self):
+        """radiometric_noise>0 without -e does not write the raster either."""
+        module = SimpleModule(
+            "p.matter.bands",
+            group="pmb_p6_group",
+            body="mars",
+            output_prefix="pmb_p6_nof",
+            wavelengths=self.wl_csv,
+            db=self.db_p6,
+            radiometric_noise="0.02",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p6_nof_pmb_p6_mineral_strong_unc",
+                         element="cell")["name"])
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_uncertainty_scales_linearly_with_noise(self):
+        """Mean uncertainty at noise=0.05 ≈ 5× mean uncertainty at noise=0.01
+        (the propagation formula is linear in radiometric_noise)."""
+        report_lo = tempfile.mktemp(suffix=".json")
+        report_hi = tempfile.mktemp(suffix=".json")
+        try:
+            mod_lo = SimpleModule(
+                "p.matter.bands",
+                group="pmb_p6_group", body="mars",
+                output_prefix="pmb_p6_out", wavelengths=self.wl_csv,
+                db=self.db_p6, radiometric_noise="0.01",
+                report=report_lo, overwrite=True)
+            mod_hi = SimpleModule(
+                "p.matter.bands",
+                group="pmb_p6_group", body="mars",
+                output_prefix="pmb_p6_out", wavelengths=self.wl_csv,
+                db=self.db_p6, radiometric_noise="0.05",
+                report=report_hi, overwrite=True)
+            self.assertModule(mod_lo)
+            self.assertModule(mod_hi)
+            with open(report_lo) as f:
+                data_lo = json.load(f)
+            with open(report_hi) as f:
+                data_hi = json.load(f)
+            det_lo = next(d for d in data_lo["detections"]
+                          if d["name"] == "pmb_p6_mineral_strong")
+            det_hi = next(d for d in data_hi["detections"]
+                          if d["name"] == "pmb_p6_mineral_strong")
+            self.assertIsNotNone(det_lo["mean_uncertainty"])
+            self.assertIsNotNone(det_hi["mean_uncertainty"])
+            ratio = det_hi["mean_uncertainty"] / det_lo["mean_uncertainty"]
+            self.assertAlmostEqual(ratio, 5.0, delta=0.5)
+        finally:
+            for r in [report_lo, report_hi]:
+                try:
+                    os.unlink(r)
+                except OSError:
+                    pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_report_mean_uncertainty_null_when_disabled(self):
+        """JSON report's mean_uncertainty is null when radiometric_noise=0."""
+        report = tempfile.mktemp(suffix=".json")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                group="pmb_p6_group", body="mars",
+                output_prefix="pmb_p6_out", wavelengths=self.wl_csv,
+                db=self.db_p6, report=report, overwrite=True)
+            self.assertModule(module)
+            with open(report) as f:
+                data = json.load(f)
+            det = next(d for d in data["detections"]
+                      if d["name"] == "pmb_p6_mineral_strong")
+            self.assertIn("mean_uncertainty", det)
+            self.assertIsNone(det["mean_uncertainty"])
         finally:
             try:
                 os.unlink(report)
