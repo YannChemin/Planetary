@@ -27,6 +27,12 @@ case "$1" in
                      "$gisbase"/bin/spice-*; do
                 [ -L "$b" ] && rm -f "$b"
             done
+            if [ -d "$gisbase/etc/planetary" ]; then
+                for f in "$gisbase"/etc/planetary/*; do
+                    [ -L "$f" ] && rm -f "$f"
+                done
+                rmdir "$gisbase/etc/planetary" 2>/dev/null || true
+            fi
             echo "grass-planetary-addons: removed symlinks from $gisbase"
         done
 

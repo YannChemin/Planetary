@@ -102,6 +102,13 @@ override_dh_auto_install:
 	for f in bodies/moon.json bodies/mars.json bodies/venus.json; do \
 	    install -m 0644 $$f $(ADDONS)/$$f; \
 	done
+	# p.matter.bands spectral band database — installed under
+	# $(ADDONS)/etc/planetary/ and symlinked into each GISBASE/etc/planetary/
+	# by postinst, so _db_search_paths()'s "system installation" lookup
+	# ($GISBASE/etc/planetary/matter_bands.json) resolves at runtime.
+	mkdir -p $(ADDONS)/etc/planetary
+	install -m 0644 data/matter_bands.json \
+	    $(ADDONS)/etc/planetary/matter_bands.json
 	for f in missions/*.json missions/README.md; do \
 	    [ -f "$$f" ] && install -m 0644 $$f \
 	        $(ADDONS)/missions/$$(basename $$f) || true; \
