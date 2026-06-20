@@ -88,9 +88,114 @@ LICENSE:   GNU GPL >=2
 # % description: Output pixels with BD below this value are set to NULL (no detection).
 # %end
 
+# %option G_OPT_I_GROUP
+# % key: endmembers
+# % required: no
+# % label: Endmember library group for NNLS unmixing (-u)
+# % description: Image group containing one pure-spectrum band per endmember. Must have the same band count as the input group (same wavelength order). Output: one abundance map [0,1] per endmember band name.
+# %end
+
+# %option
+# % key: temperature
+# % type: double
+# % required: no
+# % label: Scene temperature in Kelvin — shifts ice band centers before matching
+# % description: Corrects temperature-dependent wavelength shifts in volatile ice bands (H2O, N2, CH4, CO, CO2). Critical for Europa (80–130 K), Enceladus (80 K), Pluto (40 K), Triton (36 K). Refs: Mastrapa et al. 2008; Quirico & Schmitt 1997.
+# %end
+
+# %option
+# % key: space_weathering
+# % type: double
+# % required: no
+# % answer: 0.0
+# % label: Space weathering Is/FeO factor [0.0 = disabled]
+# % description: NPFe nanophase iron correction: BD_corr = BD / (1 − α × Is/FeO). Body-specific α from database (Moon 0.40, Mercury 0.35, S-type 0.30). Hapke 2001; Clark et al. 2002.
+# %end
+
+# %option
+# % key: min_abund
+# % type: double
+# % required: no
+# % answer: 0.01
+# % label: Minimum endmember abundance threshold for NNLS output [0.0–1.0]
+# %end
+
+# %option G_OPT_R_INPUT
+# % key: atcorr_incidence
+# % required: no
+# % label: Per-pixel incidence angle map (°) from p.phocube [--atcorr]
+# %end
+
+# %option G_OPT_R_INPUT
+# % key: atcorr_emission
+# % required: no
+# % label: Per-pixel emission angle map (°) from p.phocube [--atcorr]
+# %end
+
+# %option G_OPT_R_INPUT
+# % key: atcorr_phase
+# % required: no
+# % label: Per-pixel phase angle map (°) from p.phocube [--atcorr]
+# %end
+
+# %option
+# % key: atcorr_model
+# % type: string
+# % required: no
+# % options: Isotropic1,Isotropic2,Anisotropic1,Anisotropic2
+# % answer: Isotropic2
+# % label: Hapke scattering model for atmospheric correction [--atcorr]
+# %end
+
+# %option
+# % key: atcorr_tau
+# % type: double
+# % required: no
+# % label: Atmospheric optical depth τ [--atcorr]
+# %end
+
+# %option
+# % key: atcorr_wha
+# % type: double
+# % required: no
+# % label: Hapke single-scattering albedo wha [--atcorr]
+# %end
+
+# %option
+# % key: min_conf
+# % type: double
+# % required: no
+# % answer: 0.0
+# % label: Minimum band-concordance confidence [0.0–1.0, default 0.0]
+# % description: Species whose matched-band fraction (n_bands_in_sensor / n_diagnostic_bands) falls below this value are suppressed. E.g. min_conf=0.5 requires at least half the diagnostic bands to be covered. Use with -q to also write confidence rasters.
+# %end
+
+# %option
+# % key: report
+# % type: string
+# % required: no
+# % label: Path for JSON detection report
+# % description: Write a structured JSON summary of all detections (species, confidence, mean/max BD, n_bands) to this file. Written after all species are processed.
+# %end
+
 # %flag
 # % key: l
 # % description: List detectable species for this body/sensor combination (no raster output)
+# %end
+
+# %flag
+# % key: q
+# % description: Output per-species confidence raster (<prefix>_<species>_conf) — value = fraction of diagnostic bands covered by the sensor [0,1]
+# %end
+
+# %flag
+# % key: u
+# % description: NNLS spectral unmixing mode — output endmember abundance maps instead of band-depth maps (requires endmembers=)
+# %end
+
+# %flag
+# % key: a
+# % description: Apply Hapke atmospheric correction via p.atcorr.hapke before detection (requires atcorr_incidence=, atcorr_emission=, atcorr_phase=, atcorr_tau=, atcorr_wha=)
 # %end
 
 # %flag
@@ -224,6 +329,128 @@ def _find_nearest_band(wl_dict, target_um, tolerance_um=0.030):
     return (best_name, best_wl) if best_d <= tol else (None, None)
 
 
+# ── Phase 4.2 — Temperature correction ───────────────────────────────────────
+
+def _temp_corrected_center(ab, temperature_K):
+    """Return temperature-adjusted band center (µm).
+
+    Uses per-band temp_ref_K / temp_shift_um_per_K fields from the database.
+    Falls back to the nominal center when no coefficient is stored.
+    """
+    center = ab["center"]
+    if temperature_K is None:
+        return center
+    t_ref   = ab.get("temp_ref_K")
+    t_shift = ab.get("temp_shift_um_per_K")
+    if t_ref is None or t_shift is None:
+        return center
+    return center + t_shift * (temperature_K - t_ref)
+
+
+# ── Phase 4.3 — Space weathering correction ───────────────────────────────────
+
+def _apply_space_weathering(bd_arr, sw_factor, sw_alpha):
+    """Apply NPFe nanophase-iron band-depth correction.
+
+    BD_corr = BD / (1 − alpha × Is/FeO)
+    Clips result to [0, 1]. Returns bd_arr unchanged if sw_factor = 0.
+    """
+    import numpy as np
+    if sw_factor <= 0.0 or sw_alpha <= 0.0:
+        return bd_arr
+    denom = 1.0 - sw_alpha * sw_factor
+    if abs(denom) < 1e-6:
+        gs.warning("Space weathering denominator near zero — correction skipped.")
+        return bd_arr
+    return np.clip(bd_arr / denom, 0.0, 1.0)
+
+
+# ── Phase 4.4 — Atmospheric correction pre-step ───────────────────────────────
+
+def _atcorr_band(band_name, tmp_prefix, atcorr_params):
+    """Run p.atcorr.hapke on one band; return corrected raster name."""
+    import shutil
+    if not shutil.which("p.atcorr.hapke"):
+        gs.fatal(
+            "p.atcorr.hapke not found in PATH. "
+            "Install the Planetary GRASS addons (make install) first.")
+    out = "{}_ac_{}".format(tmp_prefix, band_name)
+    kw = {
+        "input":     band_name,
+        "output":    out,
+        "model":     atcorr_params["model"],
+        "incidence": atcorr_params["incidence"],
+        "emission":  atcorr_params["emission"],
+        "phase":     atcorr_params["phase"],
+        "tau":       str(atcorr_params["tau"]),
+        "wha":       str(atcorr_params["wha"]),
+    }
+    if atcorr_params.get("hnorm"):
+        kw["hnorm"] = str(atcorr_params["hnorm"])
+    if atcorr_params.get("bha"):
+        kw["bha"] = str(atcorr_params["bha"])
+    gs.run_command("p.atcorr.hapke", overwrite=True, quiet=True, **kw)
+    return out
+
+
+def _atcorr_group(band_names, wl_dict, tmp_prefix, atcorr_params):
+    """Atmospherically correct all bands; return updated band_names and wl_dict."""
+    gs.message("Applying Hapke atmospheric correction to {} bands …".format(
+        len(band_names)))
+    new_names = []
+    new_wl_dict = {}
+    for bn in band_names:
+        corr = _atcorr_band(bn, tmp_prefix, atcorr_params)
+        new_names.append(corr)
+        new_wl_dict[corr] = wl_dict[bn]
+    return new_names, new_wl_dict
+
+
+# ── Phase 4.1 — NNLS spectral unmixing ───────────────────────────────────────
+
+def _read_all_bands(band_names):
+    """Return list of 2-D float64 arrays, one per band."""
+    return [_read_band(n) for n in band_names]
+
+
+def _unmix_nnls(em_matrix, band_stack, min_abund=0.01):
+    """Per-pixel non-negative least-squares spectral unmixing.
+
+    em_matrix  : (nEndmembers, nBands) — library endmember spectra
+    band_stack : list of nBands 2-D (nRows, nCols) float64 arrays
+    min_abund  : pixels with abundance below this threshold → NaN
+    Returns    : list of nEndmembers 2-D abundance arrays in [0, 1]
+    """
+    import numpy as np
+    try:
+        from scipy.optimize import nnls
+    except ImportError:
+        gs.fatal(
+            "scipy is required for NNLS unmixing (-u). "
+            "Install with: pip install scipy")
+
+    nEM, nBands = em_matrix.shape
+    nRows, nCols = band_stack[0].shape
+    A = em_matrix.T  # (nBands, nEM)
+    stack = np.stack(band_stack, axis=0)  # (nBands, nRows, nCols)
+    abund = [np.full((nRows, nCols), float("nan")) for _ in range(nEM)]
+
+    for row in range(nRows):
+        col_spec = stack[:, row, :]   # (nBands, nCols)
+        for col in range(nCols):
+            r = col_spec[:, col]
+            if np.any(np.isnan(r)):
+                continue
+            x, _ = nnls(A, r)
+            s = x.sum()
+            if s > 1e-10:
+                x = x / s          # normalize abundances to sum = 1
+            for i in range(nEM):
+                if x[i] >= min_abund:
+                    abund[i][row, col] = float(x[i])
+    return abund
+
+
 # ── Raster I/O ────────────────────────────────────────────────────────────────
 
 def _read_band(band_name):
@@ -287,11 +514,12 @@ def _band_depth(r_left, r_center, r_right, wl_left, wl_center, wl_right):
     return np.clip(bd, 0.0, 1.0)
 
 
-def _detect_species(species, wl_dict, min_bd):
+def _detect_species(species, wl_dict, min_bd, temperature_K=None):
     """
     Compute weighted multi-feature absorption band depth for a species.
 
     Primary feature (i=0) weight = 1.0; confirming features = 0.6.
+    temperature_K: if given, shift ice band centers before band matching (Phase 4.2).
     Returns (bd_array, note_str) where bd_array is None if no bands covered.
     """
     import numpy as np
@@ -304,7 +532,7 @@ def _detect_species(species, wl_dict, min_bd):
     covered, skipped = [], []
 
     for i, ab in enumerate(feat_list):
-        wl_c = ab["center"]
+        wl_c = _temp_corrected_center(ab, temperature_K)
         wl_l = ab.get("left",  wl_c * 0.950)
         wl_r = ab.get("right", wl_c * 1.050)
 
@@ -336,7 +564,7 @@ def _detect_species(species, wl_dict, min_bd):
         covered.append("{:.4f}µm".format(wl_c))
 
     if bd_sum is None or w_sum == 0.0:
-        return None, "skipped: " + "; ".join(skipped)
+        return None, "skipped: " + "; ".join(skipped), 0, len(feat_list)
 
     bd_final = bd_sum / w_sum
     bd_final[bd_final < min_bd] = float("nan")
@@ -344,7 +572,7 @@ def _detect_species(species, wl_dict, min_bd):
     note = "features: " + ",".join(covered)
     if skipped:
         note += " | gaps: " + ",".join(skipped)
-    return bd_final, note
+    return bd_final, note, len(covered), len(feat_list)
 
 
 # ── List mode ────────────────────────────────────────────────────────────────
@@ -367,6 +595,15 @@ def _print_species_list(body, sensor_min, sensor_max, in_range, out_range):
                 sp["name"], float(dr[0]), float(dr[1])))
 
 
+# ── Cleanup ──────────────────────────────────────────────────────────────────
+
+def _cleanup_ac_maps(map_names):
+    """Remove temporary atmospherically-corrected rasters."""
+    for m in map_names:
+        gs.run_command("g.remove", flags="f", type="raster",
+                       name=m, quiet=True)
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -383,8 +620,45 @@ def main():
     min_bd       = float(options["min_bd"])
     mode         = options["mode"]  # "reflectance" or "emissivity"
     flag_list    = flags["l"]
+    flag_unmix   = flags["u"]       # Phase 4.1 NNLS
+    flag_atcorr  = flags["a"]       # Phase 4.4 atmospheric correction
     flag_comp    = flags["c"]
     flag_verbose = flags["v"]
+    flag_quality = flags["q"]       # Phase 5.1 confidence rasters
+
+    # Phase 5 options
+    min_conf  = float(options["min_conf"])
+    report_path = options["report"] or None
+
+    # Phase 4.1 — NNLS
+    em_group   = options["endmembers"] or None
+    min_abund  = float(options["min_abund"])
+    if flag_unmix and not em_group:
+        gs.fatal("-u (NNLS unmixing) requires endmembers= group.")
+
+    # Phase 4.2 — temperature correction
+    temperature_K = float(options["temperature"]) if options["temperature"] else None
+
+    # Phase 4.3 — space weathering
+    sw_factor = float(options["space_weathering"])
+    body_meta = db_path and {}  # loaded after DB; placeholder
+    sw_alpha  = 0.0             # resolved after DB load below
+
+    # Phase 4.4 — atmospheric correction
+    atcorr_params = None
+    if flag_atcorr:
+        for req in ["atcorr_incidence", "atcorr_emission", "atcorr_phase",
+                    "atcorr_tau", "atcorr_wha"]:
+            if not options[req]:
+                gs.fatal("--atcorr requires {}=".format(req))
+        atcorr_params = {
+            "incidence": options["atcorr_incidence"],
+            "emission":  options["atcorr_emission"],
+            "phase":     options["atcorr_phase"],
+            "model":     options["atcorr_model"],
+            "tau":       options["atcorr_tau"],
+            "wha":       options["atcorr_wha"],
+        }
 
     if "all" in matter_types:
         matter_types = ["minerals", "ices", "gases", "organics", "liquids"]
@@ -416,6 +690,14 @@ def main():
             body, matter_types))
         return
 
+    # Phase 4.3 — resolve space-weathering alpha from body_meta
+    sw_alpha = db.get("body_meta", {}).get(body, {}).get("sw_alpha", 0.0)
+    if sw_factor > 0.0 and sw_alpha == 0.0:
+        gs.warning(
+            "space_weathering={} given but body '{}' has no sw_alpha in body_meta "
+            "(correction not applicable). Ignored.".format(sw_factor, body))
+        sw_factor = 0.0
+
     # ── Resolve wavelengths ───────────────────────────────────────────────────
     band_names = _get_group_bands(group)
     if not band_names:
@@ -443,6 +725,13 @@ def main():
     sensor_min = min(wl_dict.values())
     sensor_max = max(wl_dict.values())
 
+    # Phase 4.4 — atmospheric correction pre-step (replaces band_names/wl_dict)
+    ac_tmp_maps = []
+    if flag_atcorr:
+        tmp_pfx = "{}__ac_tmp".format(out_prefix)
+        band_names, wl_dict = _atcorr_group(band_names, wl_dict, tmp_pfx, atcorr_params)
+        ac_tmp_maps = list(band_names)  # track for cleanup
+
     # ── Filter species by sensor coverage and mode ───────────────────────────
     in_range, out_range = [], []
     for sp in all_species:
@@ -467,10 +756,47 @@ def main():
         _print_species_list(body, sensor_min, sensor_max, in_range, out_range)
         return
 
-    # ── Compute band depths ───────────────────────────────────────────────────
     region = gs.region()
     output_maps = {mt: [] for mt in ["minerals", "ices", "gases", "organics", "liquids"]}
 
+    # Phase 5.2 — detection report accumulator
+    report_data = {
+        "body": body, "mode": mode,
+        "sensor_min_um": sensor_min, "sensor_max_um": sensor_max,
+        "n_bands": len(band_names),
+        "in_range": len(in_range), "out_of_range": len(out_range),
+        "detections": [], "skipped": [],
+    }
+
+    # ── Phase 4.1 — NNLS spectral unmixing ───────────────────────────────────
+    if flag_unmix:
+        em_band_names = _get_group_bands(em_group)
+        if len(em_band_names) != len(band_names):
+            gs.fatal(
+                "endmembers= group has {} bands but input group has {} bands — "
+                "must match.".format(len(em_band_names), len(band_names)))
+        gs.message("NNLS unmixing: {} endmembers × {} bands".format(
+            len(em_band_names), len(band_names)))
+        em_spectra_list = _read_all_bands(em_band_names)
+        em_matrix = np.stack([s.flatten() for s in em_spectra_list], axis=0)
+        band_stack = _read_all_bands(band_names)
+        abund_maps = _unmix_nnls(em_matrix, band_stack, min_abund)
+        for i, em_name in enumerate(em_band_names):
+            out_name = "{}_abund_{}".format(out_prefix, em_name)
+            _write_band(abund_maps[i], out_name, region)
+            gs.run_command("r.support", map=out_name,
+                           title="NNLS abundance: {}".format(em_name),
+                           description="Endmember {} | NNLS unmixing | body={}".format(
+                               em_name, body),
+                           overwrite=True, quiet=True)
+            n_valid = int(np.sum(~np.isnan(abund_maps[i])))
+            gs.message("  {} → {} valid pixels".format(em_name, n_valid))
+            output_maps.setdefault("minerals", []).append((out_name, abund_maps[i], 1.0))
+        _cleanup_ac_maps(ac_tmp_maps)
+        gs.message("NNLS done. {} abundance maps written.".format(len(em_band_names)))
+        return
+
+    # ── Compute band depths ───────────────────────────────────────────────────
     for sp in in_range:
         sp_name  = sp["name"]
         mtype    = sp.get("_mtype", "unknown")
@@ -478,37 +804,92 @@ def main():
 
         gs.message("  [{:8s}] {} …".format(mtype, sp_name))
 
-        bd_arr, note = _detect_species(sp, wl_dict, min_bd)
+        bd_arr, note, n_matched, n_total = _detect_species(
+            sp, wl_dict, min_bd, temperature_K)
+        confidence = n_matched / n_total if n_total > 0 else 0.0
+
         if bd_arr is None:
             gs.message("    Skipped: {}".format(note))
+            report_data["skipped"].append(
+                {"name": sp_name, "mtype": mtype, "reason": note})
             continue
+
+        # Phase 5 — minimum confidence gate
+        if confidence < min_conf:
+            gs.message(
+                "    Skipped: confidence {}/{} = {:.2f} < min_conf={:.2f}".format(
+                    n_matched, n_total, confidence, min_conf))
+            report_data["skipped"].append(
+                {"name": sp_name, "mtype": mtype,
+                 "reason": "confidence {:.2f} < min_conf {:.2f}".format(
+                     confidence, min_conf)})
+            continue
+
+        # Phase 4.3 — space weathering correction
+        if sw_factor > 0.0:
+            bd_arr = _apply_space_weathering(bd_arr, sw_factor, sw_alpha)
+            note += " | SW-corr α={:.2f} Is/FeO={:.2f}".format(sw_alpha, sw_factor)
 
         n_valid = int(np.sum(~np.isnan(bd_arr)))
         if n_valid == 0:
             gs.message("    No pixels exceed min_bd={:.3f}; map not written.".format(min_bd))
+            report_data["skipped"].append(
+                {"name": sp_name, "mtype": mtype,
+                 "reason": "no pixels exceed min_bd={:.3f}".format(min_bd)})
             continue
 
         _write_band(bd_arr, out_name, region)
         _set_colors(out_name)
 
+        # Phase 5.1 — per-species confidence raster
+        if flag_quality:
+            conf_arr = np.full_like(bd_arr, confidence)
+            conf_arr[np.isnan(bd_arr)] = float("nan")
+            conf_map = "{}_conf".format(out_name)
+            _write_band(conf_arr, conf_map, region)
+            gs.run_command("r.colors", map=conf_map, color="grey", quiet=True)
+            gs.run_command("r.support", map=conf_map,
+                           title="{} band-concordance confidence".format(sp_name),
+                           description="n_matched={} / n_total={} = {:.2f}".format(
+                               n_matched, n_total, confidence),
+                           overwrite=True, quiet=True)
+
+        sw_desc = " | SW-corr α={:.2f}".format(sw_alpha) if sw_factor > 0.0 else ""
+        tc_desc = " | T={:.0f}K".format(temperature_K) if temperature_K else ""
         refs = "; ".join(
             r.get("cite", "") for r in sp.get("refs", [])[:2] if r.get("cite"))
         gs.run_command(
             "r.support", map=out_name,
             title="{} band depth [{}]".format(sp.get("display_name", sp_name), mtype),
-            description="{} | Clark&Roush1984 BD | mode={}{}".format(
-                sp.get("formula", sp_name), mode, " | " + refs if refs else ""),
+            description="{} | Clark&Roush1984 BD | conf={:.2f} | mode={}{}{}{}".format(
+                sp.get("formula", sp_name), confidence, mode, tc_desc, sw_desc,
+                " | " + refs if refs else ""),
             overwrite=True, quiet=True)
 
-        output_maps[mtype].append((out_name, bd_arr))
+        mean_bd = float(np.nanmean(bd_arr))
+        max_bd  = float(np.nanmax(bd_arr))
+        output_maps[mtype].append((out_name, bd_arr, confidence))
+
+        # Phase 5.2 — accumulate detection record
+        report_data["detections"].append({
+            "name": sp_name, "mtype": mtype,
+            "n_diagnostic_bands": n_total, "n_matched": n_matched,
+            "confidence": round(confidence, 4),
+            "n_valid_pixels": n_valid,
+            "mean_bd": round(mean_bd, 6),
+            "max_bd":  round(max_bd,  6),
+            "output_map": out_name,
+            "note": note,
+        })
 
         if flag_verbose:
             gs.message(
-                "    {} valid pixels | mean BD={:.4f} max={:.4f} | {}".format(
-                    n_valid, float(np.nanmean(bd_arr)),
-                    float(np.nanmax(bd_arr)), note))
+                "    {} valid pixels | conf={}/{} | mean BD={:.4f} max={:.4f} | {}".format(
+                    n_valid, n_matched, n_total,
+                    mean_bd, max_bd, note))
         else:
-            gs.message("    {} valid pixels | {}".format(n_valid, note))
+            gs.message("    {} valid pixels | conf={}/{} | {}".format(
+                n_valid, n_matched, n_total, note))
 
     # ── Composite false-colour RGB ────────────────────────────────────────────
     if flag_comp:
@@ -527,7 +908,9 @@ def main():
                     overwrite=True, quiet=True)
                 rgb_maps.append(placeholder)
             else:
-                best = max(maps_list, key=lambda x: float(np.nanmean(x[1])))[0]
+                # Phase 5 — weight by confidence × mean BD for defensible composite
+                best = max(maps_list,
+                           key=lambda x: float(np.nanmean(x[1])) * x[2])[0]
                 rgb_maps.append(best)
 
         comp_group = "{}_composite_RGB".format(out_prefix)
@@ -537,6 +920,16 @@ def main():
             overwrite=True, quiet=True)
         gs.message("Composite RGB group '{}': R={}, G={}, B={}".format(
             comp_group, *rgb_maps))
+
+    _cleanup_ac_maps(ac_tmp_maps)
+
+    # Phase 5.2 — write JSON detection report
+    if report_path:
+        report_data["n_detections"] = len(report_data["detections"])
+        report_data["n_skipped"]    = len(report_data["skipped"])
+        with open(report_path, "w") as f:
+            json.dump(report_data, f, indent=2)
+        gs.message("Detection report written to: {}".format(report_path))
 
     total = sum(len(v) for v in output_maps.values())
     gs.message("\nDone. {} species maps written with prefix '{}'.".format(

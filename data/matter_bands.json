@@ -1040,13 +1040,17 @@
               "center": 1.966,
               "left": 1.88,
               "right": 2.06,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.01,
               "left": 1.95,
               "right": 2.08,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.7,
@@ -1491,7 +1495,9 @@
               "center": 1.04,
               "left": 0.95,
               "right": 1.14,
-              "type": "vibrational_overtone"
+              "type": "vibrational_overtone",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.25,
@@ -1503,13 +1509,17 @@
               "center": 1.52,
               "left": 1.38,
               "right": 1.64,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.8,
               "right": 2.18,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             },
             {
               "center": 2.8,
@@ -2413,7 +2423,9 @@
               "center": 1.04,
               "left": 0.95,
               "right": 1.14,
-              "type": "vibrational_overtone"
+              "type": "vibrational_overtone",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.25,
@@ -2425,13 +2437,17 @@
               "center": 1.52,
               "left": 1.38,
               "right": 1.64,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.8,
               "right": 2.2,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             },
             {
               "center": 3.0,
@@ -3029,7 +3045,9 @@
               "center": 1.04,
               "left": 0.95,
               "right": 1.14,
-              "type": "vibrational_overtone"
+              "type": "vibrational_overtone",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.25,
@@ -3041,13 +3059,17 @@
               "center": 1.52,
               "left": 1.38,
               "right": 1.64,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.8,
               "right": 2.2,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             },
             {
               "center": 3.1,
@@ -3777,7 +3799,9 @@
               "center": 1.67,
               "left": 1.6,
               "right": 1.73,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 40,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.32,
@@ -3820,7 +3844,9 @@
               "left": 2.1,
               "right": 2.2,
               "type": "vibrational_overtone",
-              "note": "Very weak; N-N stretch 2nd harmonic; detected in Tombaugh Regio"
+              "note": "Very weak; N-N stretch 2nd harmonic; detected in Tombaugh Regio",
+              "temp_ref_K": 36,
+              "temp_shift_um_per_K": 0.0035
             }
           ],
           "sensors": [
@@ -3847,13 +3873,17 @@
               "left": 1.54,
               "right": 1.62,
               "type": "vibrational_overtone",
-              "note": "2nd overtone C-O stretch"
+              "note": "2nd overtone C-O stretch",
+              "temp_ref_K": 40,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.35,
               "left": 2.3,
               "right": 2.4,
-              "type": "vibrational_combination"
+              "type": "vibrational_combination",
+              "temp_ref_K": 40,
+              "temp_shift_um_per_K": 0.0002
             }
           ],
           "sensors": [
@@ -3989,7 +4019,9 @@
               "center": 1.04,
               "left": 0.97,
               "right": 1.11,
-              "type": "overtone_combination"
+              "type": "overtone_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.25,
@@ -4001,13 +4033,17 @@
               "center": 1.52,
               "left": 1.44,
               "right": 1.6,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.93,
               "right": 2.12,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             },
             {
               "center": 3.0,
@@ -4045,13 +4081,17 @@
               "center": 1.966,
               "left": 1.9,
               "right": 2.02,
-              "type": "v1+v3_combination"
+              "type": "v1+v3_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.01,
               "left": 1.95,
               "right": 2.07,
-              "type": "2v3_overtone"
+              "type": "2v3_overtone",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.7,
@@ -4171,7 +4211,9 @@
               "center": 1.04,
               "left": 0.97,
               "right": 1.11,
-              "type": "overtone_combination"
+              "type": "overtone_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.25,
@@ -4183,13 +4225,17 @@
               "center": 1.52,
               "left": 1.44,
               "right": 1.6,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.93,
               "right": 2.12,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             },
             {
               "center": 3.0,
@@ -4224,13 +4270,17 @@
               "left": 1.9,
               "right": 2.02,
               "type": "v1+v3_combination",
-              "note": "Strongest CO2 band of any Galilean moon; trailing/pole enhanced"
+              "note": "Strongest CO2 band of any Galilean moon; trailing/pole enhanced",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.01,
               "left": 1.95,
               "right": 2.07,
-              "type": "2v3_overtone"
+              "type": "2v3_overtone",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 4.26,
@@ -4316,7 +4366,9 @@
               "left": 2.138,
               "right": 2.158,
               "type": "vibrational_quadrupole",
-              "note": "Very sharp; temperature-sensitive position (\u03b1\u2194\u03b2 phase 35.6 K); best volatile thermometer"
+              "note": "Very sharp; temperature-sensitive position (\u03b1\u2194\u03b2 phase 35.6 K); best volatile thermometer",
+              "temp_ref_K": 36,
+              "temp_shift_um_per_K": 0.0035
             },
             {
               "center": 4.3,
@@ -4367,13 +4419,17 @@
               "center": 0.89,
               "left": 0.86,
               "right": 0.92,
-              "type": "combination_overtone"
+              "type": "combination_overtone",
+              "temp_ref_K": 40,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.667,
               "left": 1.62,
               "right": 1.72,
-              "type": "v2+v3_combination"
+              "type": "v2+v3_combination",
+              "temp_ref_K": 40,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 1.798,
@@ -4418,13 +4474,17 @@
               "left": 1.56,
               "right": 1.6,
               "type": "vibrational_overtone",
-              "note": "Shifted from pure CO by N2 matrix; Triton and Pluto diagnostic"
+              "note": "Shifted from pure CO by N2 matrix; Triton and Pluto diagnostic",
+              "temp_ref_K": 40,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.352,
               "left": 2.33,
               "right": 2.37,
-              "type": "vibrational_fundamental"
+              "type": "vibrational_fundamental",
+              "temp_ref_K": 40,
+              "temp_shift_um_per_K": 0.0002
             }
           ],
           "sensors": [
@@ -4457,13 +4517,17 @@
               "center": 1.966,
               "left": 1.9,
               "right": 2.02,
-              "type": "v1+v3_combination"
+              "type": "v1+v3_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.01,
               "left": 1.95,
               "right": 2.07,
-              "type": "2v3"
+              "type": "2v3",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.7,
@@ -4496,13 +4560,17 @@
               "center": 1.52,
               "left": 1.44,
               "right": 1.6,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.93,
               "right": 2.12,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             }
           ],
           "sensors": [
@@ -4577,13 +4645,17 @@
               "left": 1.9,
               "right": 2.02,
               "type": "v1+v3_combination",
-              "note": "Strongest CO2 signature of Uranian moons; trailing hemisphere"
+              "note": "Strongest CO2 signature of Uranian moons; trailing hemisphere",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.01,
               "left": 1.95,
               "right": 2.07,
-              "type": "2v3_overtone"
+              "type": "2v3_overtone",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.7,
@@ -4628,7 +4700,9 @@
               "center": 1.04,
               "left": 0.97,
               "right": 1.11,
-              "type": "overtone_combination"
+              "type": "overtone_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.25,
@@ -4640,13 +4714,17 @@
               "center": 1.52,
               "left": 1.44,
               "right": 1.6,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.93,
               "right": 2.12,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             }
           ],
           "sensors": [
@@ -4754,19 +4832,25 @@
               "center": 1.04,
               "left": 0.97,
               "right": 1.11,
-              "type": "overtone_combination"
+              "type": "overtone_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 1.52,
               "left": 1.44,
               "right": 1.6,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0003
             },
             {
               "center": 2.02,
               "left": 1.93,
               "right": 2.12,
-              "type": "combination"
+              "type": "combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0005
             }
           ],
           "sensors": [
@@ -4794,13 +4878,17 @@
               "center": 1.966,
               "left": 1.9,
               "right": 2.02,
-              "type": "v1+v3_combination"
+              "type": "v1+v3_combination",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 2.01,
               "left": 1.95,
               "right": 2.07,
-              "type": "2v3"
+              "type": "2v3",
+              "temp_ref_K": 80,
+              "temp_shift_um_per_K": 0.0002
             },
             {
               "center": 4.26,
@@ -5490,5 +5578,27 @@
         "status": "recommended Decadal 2023 #1 priority"
       }
     ]
+  },
+  "body_meta": {
+    "moon": {
+      "sw_alpha": 0.4,
+      "sw_ref": "Clark et al. 2002 / Hapke 2001"
+    },
+    "mercury": {
+      "sw_alpha": 0.35,
+      "sw_ref": "Hapke et al. 2001 / Blewett et al. 2009"
+    },
+    "asteroid_s_type": {
+      "sw_alpha": 0.3,
+      "sw_ref": "Bus & Binzel 2002 / Clark et al. 2002"
+    },
+    "asteroid_c_type": {
+      "sw_alpha": 0.1,
+      "sw_ref": "Nesvorny et al. 2005 (weak effect)"
+    },
+    "asteroid_d_type": {
+      "sw_alpha": 0.05,
+      "sw_ref": "Emery et al. 2011 (very weak effect)"
+    }
   }
 }

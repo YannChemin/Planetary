@@ -339,7 +339,34 @@ with lower confidence.
 
 **Database totals after Phase 3:** 19 bodies, 123 species, wavelength range 0.18–200 µm
 
-### Phase 4 — Advanced detection modes
+### Phase 5 — Confidence and quality outputs ✓ COMPLETE
+
+**5.1 Per-species confidence raster (`-q`)**
+- Flag `-q`: writes `<prefix>_<species>_conf` alongside each BD map
+- Value in [0, 1] = n_diagnostic_bands_matched / n_diagnostic_bands_total
+- Grey colour table; NULLed where BD is NULL (< min_bd)
+- Tells users immediately which detections are single-band guesses vs. fully confirmed
+
+**5.2 Minimum confidence filter (`min_conf=`)**
+- `min_conf=` (default 0.0 = disabled): suppresses species whose confidence falls below threshold
+- Suppressed species are logged and appear in the JSON report's `skipped` list
+- Example: `min_conf=0.667` requires at least 2 of 3 diagnostic bands in sensor
+
+**5.3 JSON detection report (`report=`)**
+- `report=<path>`: writes a structured JSON summary after all species are processed
+- Top-level fields: `body`, `mode`, `sensor_min_um`, `sensor_max_um`, `n_bands`,
+  `in_range`, `out_of_range`, `n_detections`, `n_skipped`, `detections[]`, `skipped[]`
+- Per-detection fields: `name`, `mtype`, `n_diagnostic_bands`, `n_matched`,
+  `confidence`, `n_valid_pixels`, `mean_bd`, `max_bd`, `output_map`, `note`
+- Machine-readable for downstream pipelines and science workflows
+
+**5.4 Confidence-weighted composite (`-c`)**
+- Composite RGB channel selects the "best" species per type by `confidence × mean_BD`
+  rather than bare `mean_BD`
+- Prevents a low-confidence single-band detection from dominating the composite
+  over a fully confirmed multi-band detection with slightly lower BD
+
+### Phase 4 — Advanced detection modes ✓ COMPLETE
 
 **4.1 Spectral unmixing integration**
 - Linear spectral unmixing (NNLS) for intimate mixtures:
@@ -1035,7 +1062,7 @@ Yann Chemin
 
 ## STATUS
 
-Phases 1, 2, and 3 complete.
+Phases 1–5 complete.
 
 Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
@@ -1051,5 +1078,16 @@ asteroid_d_type) + expansion of Europa, Titan, Venus.  Database now holds
 123 species across 19 bodies, wavelength range 0.18–200 µm.  Testsuite
 has 46 tests across three test classes (Phase 1: 11, Phase 2: 15, Phase 3: 20).
 
-Phase 4 (advanced detection modes) is planned — see the Implementation Plan
-section above.
+Phase 4: advanced detection modes — NNLS spectral unmixing (`-u endmembers=`);
+temperature-dependent ice band-center correction (`temperature=`); space
+weathering correction (`space_weathering=`, body-specific α from `body_meta`
+in the database); Hapke atmospheric correction pre-step (`-a atcorr_*=`).
+Phase 4 adds 14 testsuite tests (class TestPmatterbandsPhase4; total: 60 tests).
+
+Phase 5: confidence & quality outputs — per-species band-concordance confidence
+raster (`-q`, value = n_bands_matched / n_diagnostic_bands); minimum confidence
+filter (`min_conf=`, default 0.0) to suppress under-constrained detections;
+structured JSON detection report (`report=`) listing per-species confidence,
+mean/max BD, n_matched/n_total, and skipped-species reasons; composite RGB
+channel selection upgraded from mean-BD to confidence × mean-BD weighting.
+Phase 5 adds 13 testsuite tests (class TestPmatterbandsPhase5; total: 73 tests).
