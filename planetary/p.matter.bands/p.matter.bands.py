@@ -91,8 +91,9 @@ LICENSE:   GNU GPL >=2
 # %option G_OPT_I_GROUP
 # % key: endmembers
 # % required: no
-# % label: Endmember library group for NNLS unmixing (-u)
-# % description: Image group containing one pure-spectrum band per endmember. Must have the same band count as the input group (same wavelength order). Output: one abundance map [0,1] per endmember band name.
+# % multiple: yes
+# % label: Comma-separated list of endmember spectral library groups for NNLS unmixing (-u)
+# % description: One image group per endmember. Each group must have the same band count as the input group, in the same wavelength order, with each band a constant raster equal to that endmember's reflectance at the corresponding wavelength. Output: one abundance map [0,1] per endmember group, named <output_prefix>_abund_<group_name>.
 # %end
 
 # %option
@@ -770,30 +771,35 @@ def main():
 
     # ── Phase 4.1 — NNLS spectral unmixing ───────────────────────────────────
     if flag_unmix:
-        em_band_names = _get_group_bands(em_group)
-        if len(em_band_names) != len(band_names):
-            gs.fatal(
-                "endmembers= group has {} bands but input group has {} bands — "
-                "must match.".format(len(em_band_names), len(band_names)))
+        em_group_names = [g.strip() for g in em_group.split(",") if g.strip()]
+        em_spectra = []
+        for g in em_group_names:
+            g_bands = _get_group_bands(g)
+            if len(g_bands) != len(band_names):
+                gs.fatal(
+                    "endmembers group '{}' has {} bands but input group has "
+                    "{} bands — must match.".format(
+                        g, len(g_bands), len(band_names)))
+            g_arrays = _read_all_bands(g_bands)
+            em_spectra.append(np.array([float(np.nanmean(a)) for a in g_arrays]))
+        em_matrix = np.stack(em_spectra, axis=0)  # (nEM, nBands)
         gs.message("NNLS unmixing: {} endmembers × {} bands".format(
-            len(em_band_names), len(band_names)))
-        em_spectra_list = _read_all_bands(em_band_names)
-        em_matrix = np.stack([s.flatten() for s in em_spectra_list], axis=0)
+            len(em_group_names), len(band_names)))
         band_stack = _read_all_bands(band_names)
         abund_maps = _unmix_nnls(em_matrix, band_stack, min_abund)
-        for i, em_name in enumerate(em_band_names):
-            out_name = "{}_abund_{}".format(out_prefix, em_name)
+        for i, g in enumerate(em_group_names):
+            out_name = "{}_abund_{}".format(out_prefix, g)
             _write_band(abund_maps[i], out_name, region)
             gs.run_command("r.support", map=out_name,
-                           title="NNLS abundance: {}".format(em_name),
-                           description="Endmember {} | NNLS unmixing | body={}".format(
-                               em_name, body),
+                           title="NNLS abundance: {}".format(g),
+                           description="Endmember group {} | NNLS unmixing | body={}".format(
+                               g, body),
                            overwrite=True, quiet=True)
             n_valid = int(np.sum(~np.isnan(abund_maps[i])))
-            gs.message("  {} → {} valid pixels".format(em_name, n_valid))
+            gs.message("  {} → {} valid pixels".format(g, n_valid))
             output_maps.setdefault("minerals", []).append((out_name, abund_maps[i], 1.0))
         _cleanup_ac_maps(ac_tmp_maps)
-        gs.message("NNLS done. {} abundance maps written.".format(len(em_band_names)))
+        gs.message("NNLS done. {} abundance maps written.".format(len(em_group_names)))
         return
 
     # ── Compute band depths ───────────────────────────────────────────────────

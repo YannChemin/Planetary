@@ -1533,9 +1533,9 @@ class TestPmatterbandsPhase4(TestCase):
             overwrite=True,
         )
         self.assertModule(module)
-        # Output map name = <prefix>_abund_<first_em_band_name>
-        first_em = self.em_mineral_names[0]
-        self.assertRasterExists("pmb_p4_out_abund_{}".format(first_em))
+        # Output map name = <prefix>_abund_<endmember_group_name>
+        self.assertRasterExists(
+            "pmb_p4_out_abund_{}".format(self.nnls_em_group_name))
 
     @unittest.skipUnless(shutil.which("p.matter.bands"),
                          "p.matter.bands not installed")
@@ -1553,8 +1553,7 @@ class TestPmatterbandsPhase4(TestCase):
             overwrite=True,
         )
         self.assertModule(module)
-        first_em = self.em_mineral_names[0]
-        map_name = "pmb_p4_out_abund_{}".format(first_em)
+        map_name = "pmb_p4_out_abund_{}".format(self.nnls_em_group_name)
         if gs.find_file(map_name, element="cell")["name"]:
             stats = gs.parse_command("r.univar", flags="g", map=map_name)
             self.assertGreaterEqual(float(stats["min"]), 0.0)
@@ -1714,7 +1713,9 @@ class TestPmatterbandsPhase5(TestCase):
         _write_wavelength_csv(cls.wl_full_csv, cls.wl_full)
 
         # Narrow sensor: 5 bands 1.0–1.5 µm — covers only 1 of 3 diagnostic bands
-        cls.wl_narrow = [1.0 + i * (0.5 / 4) for i in range(5)]
+        # Exact 1.10/1.30/1.50 µm matches (left/center/right of band 1) so
+        # nearest-band tolerance always resolves them.
+        cls.wl_narrow = [1.10, 1.20, 1.30, 1.40, 1.50]
         cls.wl_narrow_csv = tempfile.mktemp(suffix=".csv")
         _write_wavelength_csv(cls.wl_narrow_csv, cls.wl_narrow)
 
@@ -1798,13 +1799,13 @@ class TestPmatterbandsPhase5(TestCase):
             flags="q",
             group="pmb_p5_narrow_group",
             body="mars",
-            output_prefix="pmb_p5_out",
+            output_prefix="pmb_p5_narrow_out",
             wavelengths=self.wl_narrow_csv,
             db=self.db_p5,
             overwrite=True,
         )
         self.assertModule(module)
-        conf_map = "pmb_p5_out_pmb_p5_mineral_3band_conf"
+        conf_map = "pmb_p5_narrow_out_pmb_p5_mineral_3band_conf"
         if gs.find_file(conf_map, element="cell")["name"]:
             stats = gs.parse_command("r.univar", flags="g", map=conf_map)
             self.assertAlmostEqual(float(stats["mean"]), 1.0 / 3.0, places=2)
@@ -1836,7 +1837,7 @@ class TestPmatterbandsPhase5(TestCase):
             "p.matter.bands",
             group="pmb_p5_narrow_group",
             body="mars",
-            output_prefix="pmb_p5_out",
+            output_prefix="pmb_p5_narrow_out",
             wavelengths=self.wl_narrow_csv,
             db=self.db_p5,
             min_conf="0.9",
@@ -1844,7 +1845,7 @@ class TestPmatterbandsPhase5(TestCase):
         )
         self.assertModule(module)
         self.assertFalse(
-            gs.find_file("pmb_p5_out_pmb_p5_mineral_3band",
+            gs.find_file("pmb_p5_narrow_out_pmb_p5_mineral_3band",
                          element="cell")["name"],
             "3-band species with conf=0.33 should be suppressed at min_conf=0.9")
 
@@ -1984,7 +1985,7 @@ class TestPmatterbandsPhase5(TestCase):
                 "p.matter.bands",
                 group="pmb_p5_narrow_group",
                 body="mars",
-                output_prefix="pmb_p5_out",
+                output_prefix="pmb_p5_narrow_out",
                 wavelengths=self.wl_narrow_csv,
                 db=self.db_p5,
                 min_conf="0.9",
