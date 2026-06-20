@@ -411,6 +411,54 @@ with lower confidence.
 - JSON report gains `mean_diff`, `max_abs_diff`, `n_significant_change_pixels`
   (all `null`/`None` when `-d` is not used)
 
+### Phase 8 — Spectral Angle Mapper cross-validation ✓ COMPLETE
+
+**8.1 Per-pixel SAM angle maps (`-m`, `sam_library=`)**
+- `sam_library=`: comma-separated list of full-spectrum reference groups, same
+  convention as `endmembers=` (one group per reference, same band count and
+  wavelength order as the input group, each band a constant raster equal to
+  that reference's value at the corresponding wavelength)
+- Flag `-m`: standalone mode (like `-u`) — computes
+  `SAM = arccos(dot(s, r) / (|s| × |r|))` (Kruse et al. 1993) between each
+  pixel's observed spectrum and each reference, mirroring `p_spectra_sam()`
+  in the C library (`libs/p_spectra/`, not yet exposed via ctypes — this is a
+  pure-numpy reimplementation consistent with the rest of the module)
+- Output: `<output_prefix>_sam_<group_name>` in degrees [0, 90]
+  (0 = perfect match, 90 = orthogonal/no match), `color=byr`
+- Complements band-depth detection with a full-spectrum, feature-independent
+  similarity check — useful for cross-validating a BD-based detection or for
+  pure spectral-library matching when no diagnostic absorption band is defined
+
+**8.2 Best-match classification (`<prefix>_sam_classification`)**
+- When more than one `sam_library=` group is given, also writes
+  `<output_prefix>_sam_classification`: the category of the reference with
+  the smallest SAM angle at each pixel (reuses the same `r.category`-labelled
+  classification raster mechanism as Phase 6.1)
+
+### Phase 9 — Per-species spectral cross-check ✓ COMPLETE
+
+**9.1 Full-spectrum confirmation (`-s`, `sam_library_prefix=`, `sam_max_angle=`)**
+- Integrates Phase 8's SAM machinery directly into the core detection loop
+  (rather than only as a standalone `-m` mode)
+- `sam_library_prefix=`: for each detected species, looks for an image group
+  named `<sam_library_prefix>_<species_name>` (same convention as Phase 7's
+  `reference_prefix=`) — a full-spectrum pure reference, same band count and
+  wavelength order as the input group
+- Flag `-s`: when a matching reference group exists, computes the per-pixel
+  SAM angle between the full observed spectrum and the reference; pixels
+  whose angle exceeds `sam_max_angle=` (default 30°) are suppressed from the
+  band-depth map — even if the absorption-band depth alone passed `min_bd`
+- Species without a matching reference group, or with a reference group of
+  the wrong band count, are processed normally (graceful no-op, warning on
+  mismatch, never fatal) — the cross-check only tightens results when data
+  for it is actually available
+- JSON report gains `sam_angle_deg` (mean) and `sam_confirmed_fraction`
+  (fraction of BD-valid pixels that also passed the spectral cross-check),
+  both `null` when `-s` is not used or no reference group was found
+- Rationale: band-depth alone can be triggered by noise or a coincidental
+  local dip; requiring agreement with a full-spectrum reference reduces false
+  positives, particularly for single-band (low-confidence) detections
+
 ### Phase 4 — Advanced detection modes ✓ COMPLETE
 
 **4.1 Spectral unmixing integration**
@@ -1107,7 +1155,7 @@ Yann Chemin
 
 ## STATUS
 
-Phases 1–7 complete.
+Phases 1–9 complete.
 
 Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
@@ -1153,3 +1201,27 @@ default 2.0σ) using combined uncertainty from both epochs when available,
 written to `<prefix>_<species>_diff_sig`; JSON report gains `mean_diff`,
 `max_abs_diff`, `n_significant_change_pixels`. Phase 7 adds 10 testsuite
 tests (class TestPmatterbandsPhase7; total: 90 tests).
+
+Phase 8: Spectral Angle Mapper cross-validation — standalone full-spectrum
+matching mode (`-m`, `sam_library=`, one full-spectrum reference group per
+library entry, same convention as `endmembers=`); per-reference angle maps
+`<prefix>_sam_<group_name>` in degrees [0,90] (`color=byr`); best-match
+classification `<prefix>_sam_classification` when multiple libraries are
+given (reuses the Phase 6.1 classification mechanism). Mirrors `p_spectra_sam()`
+from the C library as a pure-numpy implementation. Phase 8 adds 8 testsuite
+tests (class TestPmatterbandsPhase8; total: 98 tests).
+
+Phase 9: per-species spectral cross-check — integrates Phase 8's SAM angle
+computation into the core detection loop (`-s`, `sam_library_prefix=`,
+`sam_max_angle=` default 30°), following the same `<prefix>_<species_name>`
+lookup convention as Phase 7's `reference_prefix=`; suppresses band-depth
+pixels whose full spectrum disagrees with the species' reference beyond the
+threshold; graceful no-op (warn, not fatal) when no reference group exists
+or its band count mismatches. JSON report gains `sam_angle_deg` and
+`sam_confirmed_fraction`. Verified the underlying `p_spectra_sam()` /
+`p_spectra_apply_row_sam()` C implementation (`libs/p_spectra/`) is complete,
+correct, and already OpenMP-parallel at the row level (6565/6565 C unit-test
+assertions pass); BLAS/LAPACK/GSL/OpenCL were evaluated and not adopted —
+vector lengths (tens to low hundreds of bands) are too small for them to
+offer a measurable gain over the existing per-pixel OpenMP parallelism.
+Phase 9 adds 7 testsuite tests (class TestPmatterbandsPhase9; total: 105 tests).

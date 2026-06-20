@@ -96,6 +96,31 @@ LICENSE:   GNU GPL >=2
 # % description: One image group per endmember. Each group must have the same band count as the input group, in the same wavelength order, with each band a constant raster equal to that endmember's reflectance at the corresponding wavelength. Output: one abundance map [0,1] per endmember group, named <output_prefix>_abund_<group_name>.
 # %end
 
+# %option G_OPT_I_GROUP
+# % key: sam_library
+# % required: no
+# % multiple: yes
+# % label: Comma-separated list of full-spectrum library groups for Spectral Angle Mapper (-m)
+# % description: One image group per reference spectrum, same convention as endmembers=: each group must have the same band count as the input group, in the same wavelength order, with each band a constant raster equal to that reference's value at the corresponding wavelength. Output: one angle map [0,90] degrees per library group, named <output_prefix>_sam_<group_name> (0 = perfect match). If more than one library group is given, also writes <output_prefix>_sam_classification (smallest-angle match per pixel).
+# %end
+
+# %option
+# % key: sam_library_prefix
+# % type: string
+# % required: no
+# % label: Prefix for per-species full-spectrum reference groups, for spectral cross-check (-s)
+# % description: For each detected species, looks for an image group named <sam_library_prefix>_<species_name> (same band count and wavelength order as the input group; one constant-value band per wavelength). If found, the per-pixel Spectral Angle Mapper distance between the full observed spectrum and this reference is computed; pixels above sam_max_angle= are suppressed from the band-depth map. Species without a matching reference group are processed normally (no cross-check applied). Requires -s.
+# %end
+
+# %option
+# % key: sam_max_angle
+# % type: double
+# % required: no
+# % answer: 30.0
+# % label: Maximum SAM angle in degrees for spectral cross-check confirmation (-s)
+# % description: Pixels whose full-spectrum SAM angle to the species' reference (sam_library_prefix=) exceeds this threshold are treated as spectrally inconsistent and suppressed from the band-depth output, even if the absorption-band depth alone exceeded min_bd.
+# %end
+
 # %option
 # % key: temperature
 # % type: double
@@ -218,6 +243,16 @@ LICENSE:   GNU GPL >=2
 # %flag
 # % key: u
 # % description: NNLS spectral unmixing mode — output endmember abundance maps instead of band-depth maps (requires endmembers=)
+# %end
+
+# %flag
+# % key: m
+# % description: Spectral Angle Mapper (SAM) cross-validation mode — output per-pixel spectral angle maps against sam_library= reference spectra instead of band-depth maps (requires sam_library=)
+# %end
+
+# %flag
+# % key: s
+# % description: Spectral cross-check — suppress band-depth pixels whose full spectrum disagrees with the species' reference spectrum (requires sam_library_prefix=)
 # %end
 
 # %flag
@@ -493,6 +528,34 @@ def _unmix_nnls(em_matrix, band_stack, min_abund=0.01):
     return abund
 
 
+# ── Phase 8 — Spectral Angle Mapper (SAM) cross-validation ──────────────────
+
+def _sam_angle_deg(band_stack, reference):
+    """
+    Per-pixel Spectral Angle Mapper: angle (degrees) between each pixel's
+    observed spectrum (across all input bands) and a single reference
+    spectrum (Kruse et al. 1993; mirrors p_spectra_sam()):
+
+        SAM = arccos( dot(s, r) / (|s| x |r|) )
+
+    band_stack : list of nBands 2-D (nRows, nCols) float64 arrays
+    reference  : 1-D array of length nBands (library spectrum)
+    Returns    : 2-D array of angles in degrees [0, 90], NaN where invalid.
+    """
+    import numpy as np
+    stack = np.stack(band_stack, axis=0)  # (nBands, nRows, nCols)
+    ref = reference.reshape(-1, 1, 1)
+    dot = np.nansum(stack * ref, axis=0)
+    norm_s = np.sqrt(np.nansum(stack ** 2, axis=0))
+    norm_r = np.sqrt(np.sum(reference ** 2))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cos_theta = dot / (norm_s * norm_r)
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)
+    angle_deg = np.degrees(np.arccos(cos_theta))
+    invalid = (norm_s <= 0.0) | np.all(np.isnan(stack), axis=0)
+    return np.where(invalid, float("nan"), angle_deg)
+
+
 # ── Raster I/O ────────────────────────────────────────────────────────────────
 
 def _read_band(band_name):
@@ -750,6 +813,8 @@ def main():
     flag_uncert  = flags["e"]       # Phase 6.2 uncertainty rasters
     flag_classify = flags["k"]      # Phase 6.1 classification map
     flag_diff    = flags["d"]       # Phase 7.1 multi-temporal change detection
+    flag_sam     = flags["m"]       # Phase 8.1 Spectral Angle Mapper
+    flag_speccheck = flags["s"]     # Phase 9.1 per-species spectral cross-check
 
     # Phase 5 options
     min_conf  = float(options["min_conf"])
@@ -771,6 +836,17 @@ def main():
     min_abund  = float(options["min_abund"])
     if flag_unmix and not em_group:
         gs.fatal("-u (NNLS unmixing) requires endmembers= group.")
+
+    # Phase 8.1 — Spectral Angle Mapper
+    sam_library = options["sam_library"] or None
+    if flag_sam and not sam_library:
+        gs.fatal("-m (SAM matching) requires sam_library= group(s).")
+
+    # Phase 9.1 — per-species spectral cross-check
+    sam_library_prefix = options["sam_library_prefix"] or None
+    sam_max_angle = float(options["sam_max_angle"])
+    if flag_speccheck and not sam_library_prefix:
+        gs.fatal("-s (spectral cross-check) requires sam_library_prefix=.")
 
     # Phase 4.2 — temperature correction
     temperature_K = float(options["temperature"]) if options["temperature"] else None
@@ -937,8 +1013,59 @@ def main():
         gs.message("NNLS done. {} abundance maps written.".format(len(em_group_names)))
         return
 
+    # ── Phase 8.1 — Spectral Angle Mapper cross-validation ───────────────────
+    if flag_sam:
+        sam_group_names = [g.strip() for g in sam_library.split(",") if g.strip()]
+        band_stack = _read_all_bands(band_names)
+        angle_maps = []
+        for g in sam_group_names:
+            g_bands = _get_group_bands(g)
+            if len(g_bands) != len(band_names):
+                gs.fatal(
+                    "sam_library group '{}' has {} bands but input group has "
+                    "{} bands — must match.".format(
+                        g, len(g_bands), len(band_names)))
+            g_arrays = _read_all_bands(g_bands)
+            ref_vec = np.array([float(np.nanmean(a)) for a in g_arrays])
+            angle_deg = _sam_angle_deg(band_stack, ref_vec)
+            out_name = "{}_sam_{}".format(out_prefix, g)
+            _write_band(angle_deg, out_name, region)
+            gs.run_command("r.colors", map=out_name, color="byr", quiet=True)
+            gs.run_command("r.support", map=out_name,
+                           title="SAM angle vs {}".format(g),
+                           description="Spectral Angle Mapper [degrees], "
+                                        "0=perfect match, 90=orthogonal",
+                           overwrite=True, quiet=True)
+            n_valid = int(np.sum(~np.isnan(angle_deg)))
+            mean_angle = float(np.nanmean(angle_deg)) if n_valid > 0 else float("nan")
+            gs.message("  SAM {} → {} valid pixels | mean angle={:.2f}°".format(
+                g, n_valid, mean_angle))
+            angle_maps.append((g, angle_deg))
+
+        if len(angle_maps) > 1:
+            stack_angles = np.stack([a for (_, a) in angle_maps], axis=0)
+            valid_mask = ~np.all(np.isnan(stack_angles), axis=0)
+            safe_stack = np.where(np.isnan(stack_angles), np.inf, stack_angles)
+            best_idx = np.argmin(safe_stack, axis=0).astype(float) + 1.0
+            best_idx[~valid_mask] = float("nan")
+            class_map = "{}_sam_classification".format(out_prefix)
+            names = [g for (g, _) in angle_maps]
+            _write_classification(best_idx, class_map, region, names)
+            gs.message("SAM classification map '{}' written ({} categories).".format(
+                class_map, len(names)))
+
+        _cleanup_ac_maps(ac_tmp_maps)
+        gs.message("SAM matching done. {} angle maps written.".format(len(angle_maps)))
+        return
+
     # ── Compute band depths ───────────────────────────────────────────────────
     classification_entries = []  # Phase 6.1: (sp_name, bd_arr, confidence)
+
+    # Phase 9.1 — full input spectrum, read once, reused for every species'
+    # spectral cross-check (avoids re-reading all bands per species).
+    full_spectrum_stack = None
+    if flag_speccheck:
+        full_spectrum_stack = _read_all_bands(band_names)
 
     for sp in in_range:
         sp_name  = sp["name"]
@@ -975,6 +1102,36 @@ def main():
             if unc_arr is not None and abs(denom) > 1e-6:
                 unc_arr = unc_arr / denom  # linear correction scales sigma identically
             note += " | SW-corr α={:.2f} Is/FeO={:.2f}".format(sw_alpha, sw_factor)
+
+        # Phase 9.1 — per-species spectral cross-check
+        sam_angle_deg, sam_confirmed_fraction = None, None
+        if flag_speccheck:
+            ref_group = "{}_{}".format(sam_library_prefix, sp_name)
+            ref_bands = _get_group_bands(ref_group) if gs.find_file(
+                ref_group, element="group")["name"] else []
+            if not ref_bands:
+                gs.message(
+                    "    No spectral reference group '{}' — cross-check skipped.".format(
+                        ref_group))
+            elif len(ref_bands) != len(band_names):
+                gs.warning(
+                    "sam_library_prefix group '{}' has {} bands but input group "
+                    "has {} bands — cross-check skipped for this species.".format(
+                        ref_group, len(ref_bands), len(band_names)))
+            else:
+                ref_arrays = _read_all_bands(ref_bands)
+                ref_vec = np.array([float(np.nanmean(a)) for a in ref_arrays])
+                angle_arr = _sam_angle_deg(full_spectrum_stack, ref_vec)
+                pre_valid = int(np.sum(~np.isnan(bd_arr)))
+                bd_arr = np.where(angle_arr > sam_max_angle, float("nan"), bd_arr)
+                post_valid = int(np.sum(~np.isnan(bd_arr)))
+                sam_angle_deg = float(np.nanmean(angle_arr)) if np.any(
+                    ~np.isnan(angle_arr)) else None
+                sam_confirmed_fraction = (
+                    post_valid / pre_valid if pre_valid > 0 else None)
+                note += " | SAM cross-check: mean angle={}° kept {}/{} px".format(
+                    "{:.2f}".format(sam_angle_deg) if sam_angle_deg is not None else "n/a",
+                    post_valid, pre_valid)
 
         n_valid = int(np.sum(~np.isnan(bd_arr)))
         if n_valid == 0:
@@ -1089,6 +1246,10 @@ def main():
             "mean_diff": round(mean_diff, 6) if mean_diff is not None else None,
             "max_abs_diff": round(max_abs_diff, 6) if max_abs_diff is not None else None,
             "n_significant_change_pixels": n_sig,
+            "sam_angle_deg": round(sam_angle_deg, 4) if sam_angle_deg is not None else None,
+            "sam_confirmed_fraction": (
+                round(sam_confirmed_fraction, 4)
+                if sam_confirmed_fraction is not None else None),
             "output_map": out_name,
             "note": note,
         })

@@ -2583,6 +2583,419 @@ class TestPmatterbandsPhase7(TestCase):
                 pass
 
 
+class TestPmatterbandsPhase8(TestCase):
+    """Phase 8 tests: Spectral Angle Mapper cross-validation (-m, sam_library=)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        import numpy as np
+
+        cls.wl = [1.0 + i * (1.5 / 19) for i in range(20)]
+        cls.wl_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_csv, cls.wl)
+        wl_arr = np.array(cls.wl)
+
+        # spectrum_a: deep feature at 1.30 µm. spectrum_b: deep feature at
+        # 1.80 µm — a clearly different spectral shape from spectrum_a.
+        spectrum_a = _gaussian_absorption(wl_arr, center_um=1.30, depth=0.5, fwhm_um=0.08)
+        spectrum_b = _gaussian_absorption(wl_arr, center_um=1.80, depth=0.5, fwhm_um=0.08)
+
+        def _make_group(group_name, spectrum):
+            names = []
+            for i in range(len(cls.wl)):
+                name = "{}_{:03d}".format(group_name, i)
+                _create_synthetic_band(name, float(spectrum[i]), cls.region)
+                names.append(name)
+            gs.run_command("i.group", group=group_name,
+                           input=",".join(names), overwrite=True, quiet=True)
+            return names
+
+        cls.input_bands = _make_group("pmb_p8_input_group", spectrum_a)
+        cls.lib_a_bands = _make_group("pmb_p8_lib_a", spectrum_a)  # identical to input
+        cls.lib_b_bands = _make_group("pmb_p8_lib_b", spectrum_b)  # different shape
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p8_*", quiet=True)
+        try:
+            os.unlink(cls.wl_csv)
+        except OSError:
+            pass
+
+    # ── 8.1 SAM angle maps ────────────────────────────────────────────────────
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_sam_angle_map_created(self):
+        """-m with a single sam_library= group writes <prefix>_sam_<group>."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+            sam_library="pmb_p8_lib_a",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p8_out_sam_pmb_p8_lib_a")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_sam_angle_near_zero_for_identical_spectrum(self):
+        """Input spectrum == library spectrum → SAM angle ≈ 0°."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+            sam_library="pmb_p8_lib_a",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        sam_map = "pmb_p8_out_sam_pmb_p8_lib_a"
+        if gs.find_file(sam_map, element="cell")["name"]:
+            stats = gs.parse_command("r.univar", flags="g", map=sam_map)
+            self.assertLess(float(stats["mean"]), 1.0)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_sam_angle_larger_for_mismatched_spectrum(self):
+        """A spectrally different library yields a much larger SAM angle
+        than the identical (zero-angle) library."""
+        mod_a = SimpleModule(
+            "p.matter.bands", flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+            sam_library="pmb_p8_lib_a", overwrite=True)
+        mod_b = SimpleModule(
+            "p.matter.bands", flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+            sam_library="pmb_p8_lib_b", overwrite=True)
+        self.assertModule(mod_a)
+        self.assertModule(mod_b)
+        map_a = "pmb_p8_out_sam_pmb_p8_lib_a"
+        map_b = "pmb_p8_out_sam_pmb_p8_lib_b"
+        if (gs.find_file(map_a, element="cell")["name"]
+                and gs.find_file(map_b, element="cell")["name"]):
+            mean_a = float(gs.parse_command("r.univar", flags="g", map=map_a)["mean"])
+            mean_b = float(gs.parse_command("r.univar", flags="g", map=map_b)["mean"])
+            self.assertGreater(mean_b, mean_a)
+
+    def test_sam_requires_library(self):
+        """-m without sam_library= fails with a clear error."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+        )
+        self.assertModuleFail(module)
+
+    def test_sam_band_count_mismatch_fails(self):
+        """sam_library= group with a different band count than the input fails."""
+        short_bands = []
+        for i, wl in enumerate([1.0, 1.5, 2.0]):
+            name = "pmb_p8_short_{}".format(i)
+            _create_synthetic_band(name, 0.25, self.region)
+            short_bands.append(name)
+        gs.run_command("i.group", group="pmb_p8_short_group",
+                       input=",".join(short_bands), overwrite=True, quiet=True)
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="m",
+                group="pmb_p8_input_group", body="mars",
+                output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+                sam_library="pmb_p8_short_group",
+            )
+            self.assertModuleFail(module)
+        finally:
+            for name in short_bands:
+                gs.run_command("g.remove", flags="f", type="raster",
+                               name=name, quiet=True)
+            gs.run_command("g.remove", flags="f", type="group",
+                           name="pmb_p8_short_group", quiet=True)
+
+    # ── 8.2 SAM best-match classification ─────────────────────────────────────
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_sam_classification_map_with_multiple_libraries(self):
+        """Two sam_library= groups → <prefix>_sam_classification is written."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+            sam_library="pmb_p8_lib_a,pmb_p8_lib_b",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p8_out_sam_classification")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_sam_classification_picks_best_match(self):
+        """The identical-spectrum library (lib_a) wins the classification
+        everywhere, since it has the smallest SAM angle to the input."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_out", wavelengths=self.wl_csv,
+            sam_library="pmb_p8_lib_a,pmb_p8_lib_b",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        class_map = "pmb_p8_out_sam_classification"
+        if gs.find_file(class_map, element="cell")["name"]:
+            stats = gs.parse_command("r.univar", flags="g", map=class_map)
+            # libraries are passed in order lib_a,lib_b → lib_a = category 1
+            self.assertAlmostEqual(float(stats["mean"]), 1.0, places=3)
+
+    def test_no_sam_classification_with_single_library(self):
+        """Only one sam_library= group → no classification map is written."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="m",
+            group="pmb_p8_input_group", body="mars",
+            output_prefix="pmb_p8_single", wavelengths=self.wl_csv,
+            sam_library="pmb_p8_lib_a",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p8_single_sam_classification",
+                         element="cell")["name"])
+
+
+class TestPmatterbandsPhase9(TestCase):
+    """Phase 9 tests: per-species spectral cross-check (-s, sam_library_prefix=)."""
+
+    _DB_P9 = {
+        "_schema": "matter_bands_v1",
+        "body_meta": {},
+        "bodies": {
+            "mars": {
+                "minerals": [
+                    {
+                        "name": "pmb_p9_mineral",
+                        "display_name": "P9 test mineral",
+                        "formula": "X",
+                        "detection_range_um": [1.0, 2.5],
+                        "absorption_bands": [
+                            {"center": 1.30, "left": 1.10, "right": 1.50, "type": "test"},
+                        ],
+                        "refs": [],
+                    },
+                ],
+                "ices": [], "gases": [], "organics": [], "liquids": [],
+            },
+        },
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        cls.db_p9 = tempfile.mktemp(suffix=".json")
+        with open(cls.db_p9, "w") as f:
+            json.dump(cls._DB_P9, f)
+
+        import numpy as np
+
+        cls.wl = [1.0 + i * (1.5 / 19) for i in range(20)]
+        cls.wl_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_csv, cls.wl)
+        wl_arr = np.array(cls.wl)
+
+        # Input scene: matches the species' own absorption feature.
+        spectrum_a = _gaussian_absorption(wl_arr, center_um=1.30, depth=0.5, fwhm_um=0.08)
+        # A clearly different spectral shape (feature at 1.80 µm instead).
+        spectrum_b = _gaussian_absorption(wl_arr, center_um=1.80, depth=0.5, fwhm_um=0.08)
+
+        def _make_group(group_name, spectrum):
+            names = []
+            for i in range(len(cls.wl)):
+                name = "{}_{:03d}".format(group_name, i)
+                _create_synthetic_band(name, float(spectrum[i]), cls.region)
+                names.append(name)
+            gs.run_command("i.group", group=group_name,
+                           input=",".join(names), overwrite=True, quiet=True)
+            return names
+
+        cls.input_bands = _make_group("pmb_p9_group", spectrum_a)
+        # Matching reference: <prefix>_<species_name> with prefix "pmb_p9_lib"
+        cls.lib_match_bands = _make_group("pmb_p9_lib_pmb_p9_mineral", spectrum_a)
+        # Mismatched reference under a different prefix.
+        cls.lib_mismatch_bands = _make_group(
+            "pmb_p9_libmismatch_pmb_p9_mineral", spectrum_b)
+        # Band-count-mismatched reference (3 bands instead of 20).
+        short_bands = []
+        for i, wl in enumerate([1.0, 1.5, 2.0]):
+            name = "pmb_p9_libshort_pmb_p9_mineral_{}".format(i)
+            _create_synthetic_band(name, 0.5, cls.region)
+            short_bands.append(name)
+        gs.run_command("i.group", group="pmb_p9_libshort_pmb_p9_mineral",
+                       input=",".join(short_bands), overwrite=True, quiet=True)
+        cls.short_bands = short_bands
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p9_*", quiet=True)
+        for tmp in [cls.db_p9, cls.wl_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    def test_speccheck_requires_prefix(self):
+        """-s without sam_library_prefix= fails with a clear error."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="s",
+            group="pmb_p9_group", body="mars",
+            output_prefix="pmb_p9_out", wavelengths=self.wl_csv,
+            db=self.db_p9,
+        )
+        self.assertModuleFail(module)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_speccheck_passes_with_matching_reference(self):
+        """A spectrally matching reference leaves the detection intact."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="s",
+            group="pmb_p9_group", body="mars",
+            output_prefix="pmb_p9_match_out", wavelengths=self.wl_csv,
+            db=self.db_p9, sam_library_prefix="pmb_p9_lib",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p9_match_out_pmb_p9_mineral")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_report_sam_fields_for_matching_reference(self):
+        """Report shows near-zero SAM angle and confirmed_fraction ≈ 1.0
+        for a spectrally matching reference."""
+        report = tempfile.mktemp(suffix=".json")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="s",
+                group="pmb_p9_group", body="mars",
+                output_prefix="pmb_p9_match_out", wavelengths=self.wl_csv,
+                db=self.db_p9, sam_library_prefix="pmb_p9_lib",
+                report=report, overwrite=True,
+            )
+            self.assertModule(module)
+            with open(report) as f:
+                data = json.load(f)
+            det = next(d for d in data["detections"]
+                      if d["name"] == "pmb_p9_mineral")
+            self.assertIsNotNone(det["sam_angle_deg"])
+            self.assertLess(det["sam_angle_deg"], 1.0)
+            self.assertAlmostEqual(det["sam_confirmed_fraction"], 1.0, places=3)
+        finally:
+            try:
+                os.unlink(report)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_speccheck_suppresses_mismatched_reference(self):
+        """A spectrally mismatched reference (strict sam_max_angle=) zeroes
+        out every pixel, so the species ends up skipped entirely."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="s",
+            group="pmb_p9_group", body="mars",
+            output_prefix="pmb_p9_mismatch_out", wavelengths=self.wl_csv,
+            db=self.db_p9, sam_library_prefix="pmb_p9_libmismatch",
+            sam_max_angle="5",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p9_mismatch_out_pmb_p9_mineral",
+                         element="cell")["name"],
+            "Mismatched reference with strict sam_max_angle should suppress "
+            "all pixels and skip the species entirely")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_speccheck_no_effect_without_matching_group(self):
+        """No reference group found under the given prefix → cross-check is
+        a silent no-op; the BD map is written normally."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="s",
+            group="pmb_p9_group", body="mars",
+            output_prefix="pmb_p9_noref_out", wavelengths=self.wl_csv,
+            db=self.db_p9, sam_library_prefix="pmb_p9_nonexistent",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p9_noref_out_pmb_p9_mineral")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_speccheck_band_count_mismatch_warns_not_fatal(self):
+        """A reference group with a different band count warns but does not
+        abort the run, and the species is still written uncorrected."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="s",
+            group="pmb_p9_group", body="mars",
+            output_prefix="pmb_p9_short_out", wavelengths=self.wl_csv,
+            db=self.db_p9, sam_library_prefix="pmb_p9_libshort",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p9_short_out_pmb_p9_mineral")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_report_sam_fields_null_without_s_flag(self):
+        """Report's sam_angle_deg/sam_confirmed_fraction are null when -s
+        is not given, even if sam_library_prefix= happens to be set."""
+        report = tempfile.mktemp(suffix=".json")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                group="pmb_p9_group", body="mars",
+                output_prefix="pmb_p9_nos_out", wavelengths=self.wl_csv,
+                db=self.db_p9, sam_library_prefix="pmb_p9_lib",
+                report=report, overwrite=True,
+            )
+            self.assertModule(module)
+            with open(report) as f:
+                data = json.load(f)
+            det = next(d for d in data["detections"]
+                      if d["name"] == "pmb_p9_mineral")
+            self.assertIsNone(det["sam_angle_deg"])
+            self.assertIsNone(det["sam_confirmed_fraction"])
+        finally:
+            try:
+                os.unlink(report)
+            except OSError:
+                pass
+
+
 if __name__ == "__main__":
     from grass.gunittest.main import test
     test()
