@@ -3311,7 +3311,7 @@ class TestPmatterbandsPhase11(TestCase):
                 flags="x",
                 group="pmb_p11_group", body="mars",
                 output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
-                extract_coords="5,5", extract_csv=out_csv,
+                extract_coords=(5, 5), extract_csv=out_csv,
                 overwrite=True,
             )
             self.assertModule(module)
@@ -3333,7 +3333,7 @@ class TestPmatterbandsPhase11(TestCase):
                 flags="x",
                 group="pmb_p11_group", body="mars",
                 output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
-                extract_coords="5,5", extract_csv=out_csv,
+                extract_coords=(5, 5), extract_csv=out_csv,
                 overwrite=True,
             )
             self.assertModule(module)
@@ -3360,7 +3360,7 @@ class TestPmatterbandsPhase11(TestCase):
                 flags="x",
                 group="pmb_p11_null_group", body="mars",
                 output_prefix="pmb_p11_out", wavelengths=self.wl_null_csv,
-                extract_coords="5,5", extract_csv=out_csv,
+                extract_coords=(5, 5), extract_csv=out_csv,
                 overwrite=True,
             )
             self.assertModule(module)
@@ -3376,14 +3376,15 @@ class TestPmatterbandsPhase11(TestCase):
     @unittest.skipUnless(shutil.which("p.matter.bands"),
                          "p.matter.bands not installed")
     def test_extract_invalid_coords_format_fails(self):
-        """extract_coords= without a comma fails gracefully (not a crash)."""
+        """extract_coords= with only one of the required (east,north) values
+        fails gracefully (not a crash)."""
         out_csv = tempfile.mktemp(suffix=".csv")
         module = SimpleModule(
             "p.matter.bands",
             flags="x",
             group="pmb_p11_group", body="mars",
             output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
-            extract_coords="not_a_coordinate", extract_csv=out_csv,
+            extract_coords=(5,), extract_csv=out_csv,
             overwrite=True,
         )
         self.assertModuleFail(module)
@@ -3401,7 +3402,7 @@ class TestPmatterbandsPhase11(TestCase):
                 group="pmb_p11_group", body="mars",
                 output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
                 db=self.db_empty,
-                extract_coords="5,5", extract_csv=out_csv,
+                extract_coords=(5, 5), extract_csv=out_csv,
                 overwrite=True,
             )
             self.assertModule(module)
@@ -3425,7 +3426,7 @@ class TestPmatterbandsPhase11(TestCase):
                 group="pmb_p11_group", body="mars",
                 output_prefix="pmb_p11_should_be_unused",
                 wavelengths=self.wl_csv,
-                extract_coords="5,5", extract_csv=out_csv,
+                extract_coords=(5, 5), extract_csv=out_csv,
                 overwrite=True,
             )
             self.assertModule(module)
@@ -3451,7 +3452,7 @@ class TestPmatterbandsPhase11(TestCase):
                 flags="x",
                 group="pmb_p11_group", body="mars",
                 output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
-                extract_coords="5,5", extract_csv=out_csv,
+                extract_coords=(5, 5), extract_csv=out_csv,
                 overwrite=True,
             )
             self.assertModule(mod_extract)
