@@ -6,6 +6,7 @@ Purpose: Detect planetary matter (minerals, ices, gases, organics, liquids)
 @author Yann Chemin
 """
 
+import importlib.util
 import json
 import os
 import shutil
@@ -16,6 +17,22 @@ import unittest
 from grass.gunittest.case import TestCase
 from grass.gunittest.gmodules import SimpleModule
 import grass.script as gs
+
+
+def _load_module_under_test():
+    """Load p.matter.bands.py as a plain Python module (white-box access).
+
+    The script's filename has dots in it, so it can't be `import`ed
+    normally; loading by path also avoids ever executing main() since
+    __name__ != "__main__" for an imported module.
+    """
+    script_path = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "p.matter.bands.py"))
+    spec = importlib.util.spec_from_file_location(
+        "pmb_module_under_test", script_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 # ── Synthetic absorption spectrum helpers ─────────────────────────────────────
@@ -3479,6 +3496,266 @@ class TestPmatterbandsPhase11(TestCase):
                 os.unlink(out_csv)
             except OSError:
                 pass
+
+
+class TestPmatterbandsPhase12Cache(TestCase):
+    """Phase 12.1 tests: band-read cache (white-box, via direct module import)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+        gs.run_command("r.mapcalc", expression="pmb_p12_cache_band = 0.42",
+                       overwrite=True, quiet=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p12_cache_*", quiet=True)
+
+    def test_read_band_caches_array_identity(self):
+        """A second _read_band() call on the same name returns the exact
+        same array object (no re-read from disk)."""
+        mod = _load_module_under_test()
+        mod._band_cache.clear()
+        arr1 = mod._read_band("pmb_p12_cache_band")
+        arr2 = mod._read_band("pmb_p12_cache_band")
+        self.assertIs(arr1, arr2)
+
+    def test_read_band_cache_populated(self):
+        """After a read, the band name is present in the cache dict."""
+        mod = _load_module_under_test()
+        mod._band_cache.clear()
+        mod._read_band("pmb_p12_cache_band")
+        self.assertIn("pmb_p12_cache_band", mod._band_cache)
+
+    def test_read_band_second_call_skips_r_out_bin(self):
+        """The second call does not invoke r.out.bin again."""
+        mod = _load_module_under_test()
+        mod._band_cache.clear()
+
+        calls = []
+        real_run_command = mod.gs.run_command
+
+        def counting_run_command(cmd, *args, **kwargs):
+            calls.append(cmd)
+            return real_run_command(cmd, *args, **kwargs)
+
+        mod.gs.run_command = counting_run_command
+        try:
+            mod._read_band("pmb_p12_cache_band")
+            n_after_first = calls.count("r.out.bin")
+            mod._read_band("pmb_p12_cache_band")
+            n_after_second = calls.count("r.out.bin")
+        finally:
+            mod.gs.run_command = real_run_command
+
+        self.assertEqual(n_after_first, 1)
+        self.assertEqual(n_after_second, 1,
+                         "second _read_band() call should not re-invoke r.out.bin")
+
+    def test_read_band_values_correct_despite_cache(self):
+        """Cached array still holds the correct pixel values."""
+        mod = _load_module_under_test()
+        mod._band_cache.clear()
+        import numpy as np
+        arr = mod._read_band("pmb_p12_cache_band")
+        self.assertTrue(np.allclose(arr, 0.42))
+
+    def test_different_band_names_cached_separately(self):
+        """Two different bands get two distinct cache entries with their
+        own correct values."""
+        gs.run_command("r.mapcalc", expression="pmb_p12_cache_band2 = 0.77",
+                       overwrite=True, quiet=True)
+        mod = _load_module_under_test()
+        mod._band_cache.clear()
+        import numpy as np
+        a = mod._read_band("pmb_p12_cache_band")
+        b = mod._read_band("pmb_p12_cache_band2")
+        self.assertFalse(a is b)
+        self.assertTrue(np.allclose(a, 0.42))
+        self.assertTrue(np.allclose(b, 0.77))
+        gs.run_command("g.remove", flags="f", type="raster",
+                       name="pmb_p12_cache_band2", quiet=True)
+
+
+class TestPmatterbandsPhase12Sites(TestCase):
+    """Phase 12.2 tests: site comparison as a GRASS vector (-z, sites=,
+    sites_output=)."""
+
+    _DB_P12 = {
+        "_schema": "matter_bands_v1",
+        "body_meta": {},
+        "bodies": {
+            "mars": {
+                "minerals": [
+                    {
+                        "name": "pmb_p12_mineral",
+                        "display_name": "P12 test mineral",
+                        "formula": "X",
+                        "detection_range_um": [1.0, 2.5],
+                        "absorption_bands": [
+                            {"center": 1.30, "left": 1.10, "right": 1.50, "type": "test"},
+                        ],
+                        "refs": [],
+                    },
+                ],
+                "ices": [], "gases": [], "organics": [], "liquids": [],
+            },
+        },
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        cls.db_p12 = tempfile.mktemp(suffix=".json")
+        with open(cls.db_p12, "w") as f:
+            json.dump(cls._DB_P12, f)
+
+        import numpy as np
+        cls.wl = [1.0 + i * (1.5 / 19) for i in range(20)]
+        cls.wl_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_csv, cls.wl)
+        wl_arr = np.array(cls.wl)
+        refl = _gaussian_absorption(wl_arr, center_um=1.30, depth=0.5, fwhm_um=0.08)
+        cls.bands = []
+        for i in range(len(cls.wl)):
+            name = "pmb_p12_band_{:03d}".format(i)
+            _create_synthetic_band(name, float(refl[i]), cls.region)
+            cls.bands.append(name)
+        gs.run_command("i.group", group="pmb_p12_group",
+                       input=",".join(cls.bands), overwrite=True, quiet=True)
+
+        # Points vector: two sites inside the region.
+        gs.write_command("v.in.ascii", input="-", output="pmb_p12_pts",
+                         separator="pipe", stdin="1|3|3\n2|7|7\n",
+                         overwrite=True, quiet=True)
+
+        # Areas vector: a 2x2 grid covering the region.
+        gs.run_command("v.mkgrid", map="pmb_p12_areas", grid="2,2",
+                       overwrite=True, quiet=True)
+
+        # Empty vector (no points, no areas) for the "invalid kind" test.
+        gs.run_command("v.edit", map="pmb_p12_empty", tool="create",
+                       overwrite=True, quiet=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p12_*", quiet=True)
+        gs.run_command("g.remove", flags="f", type="vector",
+                       pattern="pmb_p12_*", quiet=True)
+        for tmp in [cls.db_p12, cls.wl_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    def test_zonal_requires_sites_and_output(self):
+        """-z without sites= and sites_output= fails."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="z",
+            group="pmb_p12_group", body="mars",
+            output_prefix="pmb_p12_out", wavelengths=self.wl_csv,
+            db=self.db_p12,
+        )
+        self.assertModuleFail(module)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_zonal_points_adds_bd_column(self):
+        """Points get a '<species>_bd' column with the correct value."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="z",
+            group="pmb_p12_group", body="mars",
+            output_prefix="pmb_p12_pts_out", wavelengths=self.wl_csv,
+            db=self.db_p12,
+            sites="pmb_p12_pts", sites_output="pmb_p12_pts_result",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        col = "pmb_p12_mineral_bd"
+        cols = gs.vector_columns("pmb_p12_pts_result")
+        self.assertIn(col, cols)
+        values = gs.vector_db_select("pmb_p12_pts_result", columns=col)["values"]
+        for row in values.values():
+            self.assertGreater(float(row[0]), 0.0)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_zonal_areas_adds_stat_columns(self):
+        """Areas get '<species>_average/minimum/maximum' columns."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="z",
+            group="pmb_p12_group", body="mars",
+            output_prefix="pmb_p12_areas_out", wavelengths=self.wl_csv,
+            db=self.db_p12,
+            sites="pmb_p12_areas", sites_output="pmb_p12_areas_result",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        cols = gs.vector_columns("pmb_p12_areas_result")
+        for suffix in ["average", "minimum", "maximum"]:
+            self.assertIn("pmb_p12_mineral_{}".format(suffix), cols)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_zonal_no_detection_warns_not_fatal(self):
+        """No species detected (min_bd too strict) → module succeeds but
+        sites_output= is not written."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="z",
+            group="pmb_p12_group", body="mars",
+            output_prefix="pmb_p12_nodet_out", wavelengths=self.wl_csv,
+            db=self.db_p12, min_bd="0.999",
+            sites="pmb_p12_pts", sites_output="pmb_p12_nodet_result",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p12_nodet_result", element="vector")["name"])
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_zonal_invalid_vector_kind_fails(self):
+        """A vector with neither points nor areas fails with a clear error."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="z",
+            group="pmb_p12_group", body="mars",
+            output_prefix="pmb_p12_empty_out", wavelengths=self.wl_csv,
+            db=self.db_p12,
+            sites="pmb_p12_empty", sites_output="pmb_p12_empty_result",
+            overwrite=True,
+        )
+        self.assertModuleFail(module)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_zonal_rerun_with_overwrite_is_idempotent(self):
+        """Running -z twice with overwrite=True on the same sites_output=
+        succeeds both times (each run copies a fresh vector first)."""
+        common = dict(
+            flags="z",
+            group="pmb_p12_group", body="mars",
+            output_prefix="pmb_p12_idem_out", wavelengths=self.wl_csv,
+            db=self.db_p12,
+            sites="pmb_p12_pts", sites_output="pmb_p12_idem_result",
+            overwrite=True,
+        )
+        self.assertModule(SimpleModule("p.matter.bands", **common))
+        self.assertModule(SimpleModule("p.matter.bands", **common))
+        self.assertVectorExists("pmb_p12_idem_result")
 
 
 if __name__ == "__main__":

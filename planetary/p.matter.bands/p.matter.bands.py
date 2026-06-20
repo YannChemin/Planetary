@@ -150,6 +150,19 @@ LICENSE:   GNU GPL >=2
 # % description: Written in the same two-column "wavelength_um,value" format consumed by import_library= — one row per band of the input group, value = the pixel value at extract_coords=. NULL pixels are written as "nan". Requires -x and extract_coords=.
 # %end
 
+# %option G_OPT_V_INPUT
+# % key: sites
+# % required: no
+# % label: Vector map of candidate sites/zones (points or areas) for site comparison (-z)
+# %end
+
+# %option G_OPT_V_OUTPUT
+# % key: sites_output
+# % required: no
+# % label: Output vector — a copy of sites= with per-species band-depth statistics added as attribute columns (-z)
+# % description: Points get one "<species>_bd" column per detected species (v.what.rast); areas get "<species>_average", "<species>_minimum", "<species>_maximum" columns (v.rast.stats). Requires -z and sites=.
+# %end
+
 # %option
 # % key: temperature
 # % type: double
@@ -292,6 +305,11 @@ LICENSE:   GNU GPL >=2
 # %flag
 # % key: x
 # % description: Extract the full spectrum at extract_coords= and write it to extract_csv= (same format consumed by import_library=) — does not run detection
+# %end
+
+# %flag
+# % key: z
+# % description: Site comparison — add per-species band-depth statistics as attribute columns on a copy of sites= (requires sites= and sites_output=)
 # %end
 
 # %flag
@@ -651,8 +669,25 @@ def _sam_angle_deg(band_stack, reference):
 
 # ── Raster I/O ────────────────────────────────────────────────────────────────
 
+# Phase 12.1 — band-read cache. Many species share diagnostic/continuum
+# bands (e.g. several Mars phyllosilicates all use 1.41/1.91/2.2 µm), and the
+# full input spectrum is re-read for every species' SAM cross-check (Phase
+# 9.1). Caching avoids redundant r.out.bin disk round-trips within a single
+# module invocation. Safe because every caller treats the returned array as
+# read-only (all consumers compute new arrays via arithmetic; none mutate
+# the array in place) — verified across _detect_species, _unmix_nnls,
+# _sam_angle_deg, and the Phase 7/9 reference-comparison code paths.
+_band_cache = {}
+
+
 def _read_band(band_name):
-    """Read a GRASS raster into a float64 numpy array; NULL → NaN."""
+    """Read a GRASS raster into a float64 numpy array; NULL → NaN.
+
+    Cached per band name for the lifetime of the current process (one
+    module invocation). Callers must treat the returned array as read-only.
+    """
+    if band_name in _band_cache:
+        return _band_cache[band_name]
     import numpy as np
     reg = gs.region()
     nr, nc = int(reg["rows"]), int(reg["cols"])
@@ -662,6 +697,7 @@ def _read_band(band_name):
     arr = np.fromfile(tmp, dtype=np.float32).reshape(nr, nc).astype(np.float64)
     arr[arr == _NULL] = float("nan")
     os.unlink(tmp)
+    _band_cache[band_name] = arr
     return arr
 
 
@@ -715,6 +751,38 @@ def _write_classification(cat_arr, map_name, region, species_names):
     gs.write_command("r.category", map=map_name, rules="-",
                      separator=":", stdin=rules, quiet=True)
     gs.run_command("r.colors", map=map_name, color="random", quiet=True)
+
+
+# ── Phase 12.2 — site comparison ──────────────────────────────────────────────
+
+def _vector_feature_kind(vmap):
+    """Return 'area', 'point', or None (vmap has neither) via v.info -t."""
+    info = gs.parse_command("v.info", flags="t", map=vmap)
+    if int(info.get("areas", 0)) > 0:
+        return "area"
+    if int(info.get("points", 0)) > 0:
+        return "point"
+    return None
+
+
+def _zonal_stats_for_species(vmap, raster_map, col_prefix, kind):
+    """Add per-site/per-zone statistics for one species as attribute
+    column(s) on vmap (already a copy of the user's sites= vector).
+
+    Areas  → v.rast.stats (average/minimum/maximum columns, column_prefix=).
+    Points → v.what.rast (single "<col_prefix>_bd" column).
+    """
+    if kind == "area":
+        gs.run_command(
+            "v.rast.stats", flags="c", map=vmap, raster=raster_map,
+            column_prefix=col_prefix, method="average,minimum,maximum",
+            quiet=True)
+    else:
+        col = "{}_bd".format(col_prefix)
+        gs.run_command("v.db.addcolumn", map=vmap,
+                       columns="{} double precision".format(col), quiet=True)
+        gs.run_command("v.what.rast", map=vmap, raster=raster_map,
+                       column=col, quiet=True)
 
 
 # ── Spectral computation ──────────────────────────────────────────────────────
@@ -910,6 +978,7 @@ def main():
     flag_speccheck = flags["s"]     # Phase 9.1 per-species spectral cross-check
     flag_import  = flags["i"]       # Phase 10.1 spectral library import
     flag_extract = flags["x"]       # Phase 11.1 spectrum extraction
+    flag_zonal   = flags["z"]       # Phase 12.2 site comparison
 
     # Phase 5 options
     min_conf  = float(options["min_conf"])
@@ -954,6 +1023,12 @@ def main():
     extract_csv = options["extract_csv"] or None
     if flag_extract and not (extract_coords and extract_csv):
         gs.fatal("-x (spectrum extraction) requires extract_coords= and extract_csv=.")
+
+    # Phase 12.2 — site comparison
+    sites_in = options["sites"] or None
+    sites_out = options["sites_output"] or None
+    if flag_zonal and not (sites_in and sites_out):
+        gs.fatal("-z (site comparison) requires sites= and sites_output=.")
 
     # Phase 4.2 — temperature correction
     temperature_K = float(options["temperature"]) if options["temperature"] else None
@@ -1383,7 +1458,7 @@ def main():
 
         mean_bd = float(np.nanmean(bd_arr))
         max_bd  = float(np.nanmax(bd_arr))
-        output_maps[mtype].append((out_name, bd_arr, confidence))
+        output_maps[mtype].append((out_name, bd_arr, confidence, sp_name))
         classification_entries.append((sp_name, bd_arr, confidence))
 
         # Phase 5.2 — accumulate detection record
@@ -1433,6 +1508,28 @@ def main():
             gs.warning(
                 "-k given but no species were detected; "
                 "classification map not written.")
+
+    # ── Phase 12.2 — site comparison ──────────────────────────────────────────
+    if flag_zonal:
+        all_detections = [e for maps_list in output_maps.values()
+                          for e in maps_list]
+        if not all_detections:
+            gs.warning(
+                "-z given but no species were detected; "
+                "sites_output= not written.")
+        else:
+            gs.run_command("g.copy", vector="{},{}".format(sites_in, sites_out),
+                           overwrite=True, quiet=True)
+            kind = _vector_feature_kind(sites_out)
+            if kind is None:
+                gs.fatal(
+                    "sites= '{}' contains neither points nor areas.".format(
+                        sites_in))
+            for out_name, bd_arr, confidence, sp_name in all_detections:
+                _zonal_stats_for_species(sites_out, out_name, sp_name, kind)
+            gs.message(
+                "Site comparison: {} species written to vector '{}' ({}s).".format(
+                    len(all_detections), sites_out, kind))
 
     # ── Composite false-colour RGB ────────────────────────────────────────────
     if flag_comp:
