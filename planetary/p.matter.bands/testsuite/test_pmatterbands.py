@@ -37,6 +37,20 @@ def _write_wavelength_csv(path, wavelengths_um, fwhm_um=0.005):
             f.write(f"{wl:.6f},{fwhm_um:.6f}\n")
 
 
+def _read_wavelength_value_csv(path):
+    """Read a two-column 'wavelength_um,value' CSV (Phase 10/11 format)."""
+    wls, vals = [], []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(",")
+            wls.append(float(parts[0]))
+            vals.append(float(parts[1]))
+    return wls, vals
+
+
 def _create_synthetic_band(mapname, value_or_array, region, overwrite=True):
     """Create a GRASS FCELL raster from a scalar or 2-D numpy array."""
     import numpy as np
@@ -2992,6 +3006,476 @@ class TestPmatterbandsPhase9(TestCase):
         finally:
             try:
                 os.unlink(report)
+            except OSError:
+                pass
+
+
+class TestPmatterbandsPhase10(TestCase):
+    """Phase 10 tests: spectral library import (-i, import_library=,
+    import_library_name=)."""
+
+    _DB_P10_EMPTY = {
+        "_schema": "matter_bands_v1",
+        "body_meta": {},
+        "bodies": {
+            "mars": {
+                "minerals": [], "ices": [], "gases": [],
+                "organics": [], "liquids": [],
+            },
+        },
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        cls.db_empty = tempfile.mktemp(suffix=".json")
+        with open(cls.db_empty, "w") as f:
+            json.dump(cls._DB_P10_EMPTY, f)
+
+        # Input group: 5 bands at 1.0, 1.5, 2.0, 2.5, 3.0 µm. Pixel content
+        # is irrelevant to -i mode (only band count/wavelengths matter).
+        cls.wl = [1.0, 1.5, 2.0, 2.5, 3.0]
+        cls.wl_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_csv, cls.wl)
+        cls.input_bands = []
+        for i in range(len(cls.wl)):
+            name = "pmb_p10_band_{:03d}".format(i)
+            _create_synthetic_band(name, 0.0, cls.region)
+            cls.input_bands.append(name)
+        gs.run_command("i.group", group="pmb_p10_group",
+                       input=",".join(cls.input_bands), overwrite=True, quiet=True)
+
+        # A single band at 0.5 µm and one at 4.0 µm, for extrapolation tests
+        # (both outside the [1.0, 3.0] library range below).
+        _create_synthetic_band("pmb_p10_below_band", 0.0, cls.region)
+        gs.run_command("i.group", group="pmb_p10_below_group",
+                       input="pmb_p10_below_band", overwrite=True, quiet=True)
+        cls.wl_below_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_below_csv, [0.5])
+
+        _create_synthetic_band("pmb_p10_above_band", 0.0, cls.region)
+        gs.run_command("i.group", group="pmb_p10_above_group",
+                       input="pmb_p10_above_band", overwrite=True, quiet=True)
+        cls.wl_above_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_above_csv, [4.0])
+
+        # Library: linear ramp 10/20/30 at wavelengths 1.0/2.0/3.0 µm.
+        cls.lib_csv = tempfile.mktemp(suffix=".csv")
+        with open(cls.lib_csv, "w") as f:
+            f.write("# test spectral library\n")
+            f.write("\n")
+            f.write("1.0,10.0\n")
+            f.write("2.0,20.0\n")
+            f.write("3.0,30.0\n")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p10_*", quiet=True)
+        for tmp in [cls.db_empty, cls.wl_csv, cls.wl_below_csv,
+                    cls.wl_above_csv, cls.lib_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    def test_import_requires_library_and_name(self):
+        """-i without import_library= and import_library_name= fails."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_group", body="mars",
+            output_prefix="pmb_p10_out", wavelengths=self.wl_csv,
+        )
+        self.assertModuleFail(module)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_import_creates_group_with_correct_band_count(self):
+        """-i builds a new group with one band per input-group wavelength."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_group", body="mars",
+            output_prefix="pmb_p10_out", wavelengths=self.wl_csv,
+            import_library=self.lib_csv,
+            import_library_name="pmb_p10_imported",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        bands = gs.read_command("i.group", flags="g",
+                                group="pmb_p10_imported", quiet=True).strip().splitlines()
+        self.assertEqual(len(bands), len(self.wl))
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_import_exact_wavelength_match(self):
+        """Bands at library-exact wavelengths (1.0, 2.0, 3.0 µm) get the
+        library's own values (10, 20, 30) — no interpolation needed."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_group", body="mars",
+            output_prefix="pmb_p10_out", wavelengths=self.wl_csv,
+            import_library=self.lib_csv,
+            import_library_name="pmb_p10_imported",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        # wl = [1.0, 1.5, 2.0, 2.5, 3.0] → bands 0, 2, 4 are exact matches
+        for idx, expected in [(0, 10.0), (2, 20.0), (4, 30.0)]:
+            band = "pmb_p10_imported_{:03d}".format(idx)
+            if gs.find_file(band, element="cell")["name"]:
+                stats = gs.parse_command("r.univar", flags="g", map=band)
+                self.assertAlmostEqual(float(stats["mean"]), expected, places=3)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_import_midpoint_interpolation(self):
+        """Bands at 1.5 and 2.5 µm (midpoints) get linearly interpolated
+        values (15 and 25)."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_group", body="mars",
+            output_prefix="pmb_p10_out", wavelengths=self.wl_csv,
+            import_library=self.lib_csv,
+            import_library_name="pmb_p10_imported",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        for idx, expected in [(1, 15.0), (3, 25.0)]:
+            band = "pmb_p10_imported_{:03d}".format(idx)
+            if gs.find_file(band, element="cell")["name"]:
+                stats = gs.parse_command("r.univar", flags="g", map=band)
+                self.assertAlmostEqual(float(stats["mean"]), expected, places=3)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_import_extrapolation_clamps_below_range(self):
+        """A target wavelength below the library's range (0.5 µm < 1.0 µm)
+        clamps to the library's first value (10.0)."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_below_group", body="mars",
+            output_prefix="pmb_p10_out", wavelengths=self.wl_below_csv,
+            import_library=self.lib_csv,
+            import_library_name="pmb_p10_below_imported",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        band = "pmb_p10_below_imported_000"
+        if gs.find_file(band, element="cell")["name"]:
+            stats = gs.parse_command("r.univar", flags="g", map=band)
+            self.assertAlmostEqual(float(stats["mean"]), 10.0, places=3)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_import_extrapolation_clamps_above_range(self):
+        """A target wavelength above the library's range (4.0 µm > 3.0 µm)
+        clamps to the library's last value (30.0)."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_above_group", body="mars",
+            output_prefix="pmb_p10_out", wavelengths=self.wl_above_csv,
+            import_library=self.lib_csv,
+            import_library_name="pmb_p10_above_imported",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        band = "pmb_p10_above_imported_000"
+        if gs.find_file(band, element="cell")["name"]:
+            stats = gs.parse_command("r.univar", flags="g", map=band)
+            self.assertAlmostEqual(float(stats["mean"]), 30.0, places=3)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_import_works_for_species_less_body(self):
+        """-i succeeds even when the body/matter combination has zero
+        species in the database (regression test for the early-return that
+        used to abort before the import logic could run)."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_group", body="mars",
+            output_prefix="pmb_p10_out", wavelengths=self.wl_csv,
+            db=self.db_empty,
+            import_library=self.lib_csv,
+            import_library_name="pmb_p10_emptydb_imported",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p10_emptydb_imported_000")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_import_no_detection_output(self):
+        """-i is a standalone mode: no <output_prefix>_* species maps are
+        ever written."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="i",
+            group="pmb_p10_group", body="mars",
+            output_prefix="pmb_p10_should_be_unused", wavelengths=self.wl_csv,
+            import_library=self.lib_csv,
+            import_library_name="pmb_p10_imported",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        result = gs.list_grouped(
+            type="raster")[gs.gisenv()["MAPSET"]]
+        matches = [m for m in result if m.startswith("pmb_p10_should_be_unused")]
+        self.assertEqual(matches, [])
+
+
+class TestPmatterbandsPhase11(TestCase):
+    """Phase 11 tests: spectrum extraction (-x, extract_coords=, extract_csv=)."""
+
+    _DB_P11_EMPTY = {
+        "_schema": "matter_bands_v1",
+        "body_meta": {},
+        "bodies": {
+            "mars": {
+                "minerals": [], "ices": [], "gases": [],
+                "organics": [], "liquids": [],
+            },
+        },
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        cls.db_empty = tempfile.mktemp(suffix=".json")
+        with open(cls.db_empty, "w") as f:
+            json.dump(cls._DB_P11_EMPTY, f)
+
+        cls.wl = [1.0, 1.5, 2.0]
+        cls.wl_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_csv, cls.wl)
+
+        cls.values = [0.30, 0.55, 0.80]
+        cls.bands = []
+        for i, v in enumerate(cls.values):
+            name = "pmb_p11_band_{:03d}".format(i)
+            _create_synthetic_band(name, v, cls.region)
+            cls.bands.append(name)
+        gs.run_command("i.group", group="pmb_p11_group",
+                       input=",".join(cls.bands), overwrite=True, quiet=True)
+
+        # A group with one NULL band, for the null-pixel test.
+        gs.run_command("r.mapcalc", expression="pmb_p11_null_band = null()",
+                       overwrite=True, quiet=True)
+        gs.run_command("i.group", group="pmb_p11_null_group",
+                       input="pmb_p11_null_band", overwrite=True, quiet=True)
+        cls.wl_null_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_null_csv, [1.0])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p11_*", quiet=True)
+        for tmp in [cls.db_empty, cls.wl_csv, cls.wl_null_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    def test_extract_requires_coords_and_csv(self):
+        """-x without extract_coords= and extract_csv= fails."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="x",
+            group="pmb_p11_group", body="mars",
+            output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
+        )
+        self.assertModuleFail(module)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_extract_creates_csv_file(self):
+        """-x with valid coordinates writes the CSV file."""
+        out_csv = tempfile.mktemp(suffix=".csv")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="x",
+                group="pmb_p11_group", body="mars",
+                output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
+                extract_coords="5,5", extract_csv=out_csv,
+                overwrite=True,
+            )
+            self.assertModule(module)
+            self.assertTrue(os.path.isfile(out_csv))
+        finally:
+            try:
+                os.unlink(out_csv)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_extract_csv_content_matches_pixel_values(self):
+        """Extracted wavelength,value rows match the known pixel values."""
+        out_csv = tempfile.mktemp(suffix=".csv")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="x",
+                group="pmb_p11_group", body="mars",
+                output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
+                extract_coords="5,5", extract_csv=out_csv,
+                overwrite=True,
+            )
+            self.assertModule(module)
+            wls, vals = _read_wavelength_value_csv(out_csv)
+            self.assertEqual(len(wls), 3)
+            for wl, val, exp_wl, exp_val in zip(
+                    wls, vals, self.wl, self.values):
+                self.assertAlmostEqual(wl, exp_wl, places=3)
+                self.assertAlmostEqual(val, exp_val, places=3)
+        finally:
+            try:
+                os.unlink(out_csv)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_extract_null_pixel_writes_nan(self):
+        """A NULL pixel is written as 'nan' in the CSV."""
+        out_csv = tempfile.mktemp(suffix=".csv")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="x",
+                group="pmb_p11_null_group", body="mars",
+                output_prefix="pmb_p11_out", wavelengths=self.wl_null_csv,
+                extract_coords="5,5", extract_csv=out_csv,
+                overwrite=True,
+            )
+            self.assertModule(module)
+            with open(out_csv) as f:
+                content = f.read()
+            self.assertIn("nan", content)
+        finally:
+            try:
+                os.unlink(out_csv)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_extract_invalid_coords_format_fails(self):
+        """extract_coords= without a comma fails gracefully (not a crash)."""
+        out_csv = tempfile.mktemp(suffix=".csv")
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="x",
+            group="pmb_p11_group", body="mars",
+            output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
+            extract_coords="not_a_coordinate", extract_csv=out_csv,
+            overwrite=True,
+        )
+        self.assertModuleFail(module)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_extract_works_for_species_less_body(self):
+        """-x succeeds even when the body/matter combination has zero
+        species in the database (same regression class as Phase 10.1)."""
+        out_csv = tempfile.mktemp(suffix=".csv")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="x",
+                group="pmb_p11_group", body="mars",
+                output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
+                db=self.db_empty,
+                extract_coords="5,5", extract_csv=out_csv,
+                overwrite=True,
+            )
+            self.assertModule(module)
+            self.assertTrue(os.path.isfile(out_csv))
+        finally:
+            try:
+                os.unlink(out_csv)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_extract_no_detection_output(self):
+        """-x is a standalone mode: no <output_prefix>_* species maps are
+        ever written."""
+        out_csv = tempfile.mktemp(suffix=".csv")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="x",
+                group="pmb_p11_group", body="mars",
+                output_prefix="pmb_p11_should_be_unused",
+                wavelengths=self.wl_csv,
+                extract_coords="5,5", extract_csv=out_csv,
+                overwrite=True,
+            )
+            self.assertModule(module)
+            result = gs.list_grouped(type="raster")[gs.gisenv()["MAPSET"]]
+            matches = [m for m in result
+                      if m.startswith("pmb_p11_should_be_unused")]
+            self.assertEqual(matches, [])
+        finally:
+            try:
+                os.unlink(out_csv)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_extract_then_import_round_trip(self):
+        """A spectrum extracted with -x can be re-imported with -i and
+        reproduces the same values (closes the Phase 10 ↔ 11 loop)."""
+        out_csv = tempfile.mktemp(suffix=".csv")
+        try:
+            mod_extract = SimpleModule(
+                "p.matter.bands",
+                flags="x",
+                group="pmb_p11_group", body="mars",
+                output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
+                extract_coords="5,5", extract_csv=out_csv,
+                overwrite=True,
+            )
+            self.assertModule(mod_extract)
+
+            mod_import = SimpleModule(
+                "p.matter.bands",
+                flags="i",
+                group="pmb_p11_group", body="mars",
+                output_prefix="pmb_p11_out", wavelengths=self.wl_csv,
+                import_library=out_csv,
+                import_library_name="pmb_p11_roundtrip",
+                overwrite=True,
+            )
+            self.assertModule(mod_import)
+
+            for idx, expected in enumerate(self.values):
+                band = "pmb_p11_roundtrip_{:03d}".format(idx)
+                if gs.find_file(band, element="cell")["name"]:
+                    stats = gs.parse_command("r.univar", flags="g", map=band)
+                    self.assertAlmostEqual(
+                        float(stats["mean"]), expected, places=3)
+        finally:
+            try:
+                os.unlink(out_csv)
             except OSError:
                 pass
 

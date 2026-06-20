@@ -122,6 +122,35 @@ LICENSE:   GNU GPL >=2
 # %end
 
 # %option
+# % key: import_library
+# % type: string
+# % required: no
+# % label: Two-column CSV (wavelength_um,value) of a reference spectrum to import (-i)
+# % description: A plain spectral-library file — one row per sample, "wavelength_um,value" (comments with # and blank lines are ignored). Resampled by linear interpolation onto the current group's sensor wavelength grid (extrapolation clamps to the nearest library endpoint) and written as a new image group of constant-value bands, ready for use as endmembers=, sam_library=, or sam_library_prefix=. Requires -i and import_library_name=.
+# %end
+
+# %option
+# % key: import_library_name
+# % type: string
+# % required: no
+# % label: Name for the new reference image group created from import_library= (-i)
+# %end
+
+# %option G_OPT_M_COORDS
+# % key: extract_coords
+# % required: no
+# % label: Easting,northing of a pixel whose spectrum to extract (-x)
+# %end
+
+# %option
+# % key: extract_csv
+# % type: string
+# % required: no
+# % label: Output path for the extracted spectrum CSV (-x)
+# % description: Written in the same two-column "wavelength_um,value" format consumed by import_library= — one row per band of the input group, value = the pixel value at extract_coords=. NULL pixels are written as "nan". Requires -x and extract_coords=.
+# %end
+
+# %option
 # % key: temperature
 # % type: double
 # % required: no
@@ -256,6 +285,16 @@ LICENSE:   GNU GPL >=2
 # %end
 
 # %flag
+# % key: i
+# % description: Import a spectral library CSV (import_library=) as a new reference image group (import_library_name=), resampled onto the current sensor's wavelength grid — does not run detection
+# %end
+
+# %flag
+# % key: x
+# % description: Extract the full spectrum at extract_coords= and write it to extract_csv= (same format consumed by import_library=) — does not run detection
+# %end
+
+# %flag
 # % key: a
 # % description: Apply Hapke atmospheric correction via p.atcorr.hapke before detection (requires atcorr_incidence=, atcorr_emission=, atcorr_phase=, atcorr_tau=, atcorr_wha=)
 # %end
@@ -356,6 +395,60 @@ def _get_group_bands(group):
     """Return ordered list of band map names in the image group."""
     out = gs.read_command("i.group", flags="g", group=group).strip()
     return [b.strip() for b in out.splitlines() if b.strip()]
+
+
+# ── Phase 10 — Spectral library import ───────────────────────────────────────
+
+def _read_library_csv(csv_path):
+    """Return (wls_um, values) from a two-column "wavelength_um,value" CSV.
+
+    Lines are sorted by wavelength so numpy.interp() (which requires an
+    ascending x array) works regardless of input row order.
+    """
+    rows = []
+    with open(csv_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(",")
+            rows.append((float(parts[0]), float(parts[1])))
+    rows.sort(key=lambda r: r[0])
+    wls = [r[0] for r in rows]
+    vals = [r[1] for r in rows]
+    return wls, vals
+
+
+def _resample_spectrum(lib_wls, lib_vals, target_wls):
+    """Linearly interpolate a library spectrum onto target wavelengths.
+
+    Extrapolation clamps to the nearest library endpoint value
+    (numpy.interp's default out-of-range behaviour).
+    """
+    import numpy as np
+    return np.interp(target_wls, lib_wls, lib_vals).tolist()
+
+
+# ── Phase 11 — Spectrum extraction ────────────────────────────────────────────
+
+def _extract_spectrum_at_point(band_names, east, north):
+    """Return a list of band values at (east, north) via r.what.
+
+    NULL pixels become NaN.
+    """
+    out = gs.read_command(
+        "r.what", map=",".join(band_names),
+        coordinates="{},{}".format(east, north), quiet=True).strip()
+    parts = out.split("|")
+    # r.what emits "east|north|<extra>|val1|val2|...|valN" — the number of
+    # leading fields before the values is not guaranteed, so anchor from
+    # the right instead of assuming a fixed offset.
+    value_fields = parts[-len(band_names):]
+    vals = []
+    for v in value_fields:
+        v = v.strip()
+        vals.append(float("nan") if v in ("", "*") else float(v))
+    return vals
 
 
 def _get_sidecar_wavelengths(band_names):
@@ -815,6 +908,8 @@ def main():
     flag_diff    = flags["d"]       # Phase 7.1 multi-temporal change detection
     flag_sam     = flags["m"]       # Phase 8.1 Spectral Angle Mapper
     flag_speccheck = flags["s"]     # Phase 9.1 per-species spectral cross-check
+    flag_import  = flags["i"]       # Phase 10.1 spectral library import
+    flag_extract = flags["x"]       # Phase 11.1 spectrum extraction
 
     # Phase 5 options
     min_conf  = float(options["min_conf"])
@@ -847,6 +942,18 @@ def main():
     sam_max_angle = float(options["sam_max_angle"])
     if flag_speccheck and not sam_library_prefix:
         gs.fatal("-s (spectral cross-check) requires sam_library_prefix=.")
+
+    # Phase 10.1 — spectral library import
+    import_library = options["import_library"] or None
+    import_library_name = options["import_library_name"] or None
+    if flag_import and not (import_library and import_library_name):
+        gs.fatal("-i (library import) requires import_library= and import_library_name=.")
+
+    # Phase 11.1 — spectrum extraction
+    extract_coords = options["extract_coords"] or None
+    extract_csv = options["extract_csv"] or None
+    if flag_extract and not (extract_coords and extract_csv):
+        gs.fatal("-x (spectrum extraction) requires extract_coords= and extract_csv=.")
 
     # Phase 4.2 — temperature correction
     temperature_K = float(options["temperature"]) if options["temperature"] else None
@@ -897,7 +1004,7 @@ def main():
                 sp = dict(sp); sp["_mtype"] = mtype
                 all_species.append(sp)
 
-    if not all_species:
+    if not all_species and not (flag_import or flag_extract):
         gs.warning("No species found for body='{}', matter={}.".format(
             body, matter_types))
         return
@@ -936,6 +1043,51 @@ def main():
 
     sensor_min = min(wl_dict.values())
     sensor_max = max(wl_dict.values())
+
+    # ── Phase 10.1 — spectral library import ─────────────────────────────────
+    if flag_import:
+        lib_wls, lib_vals = _read_library_csv(import_library)
+        if len(lib_wls) < 2:
+            gs.fatal(
+                "import_library= '{}' must have at least 2 rows.".format(
+                    import_library))
+        target_wls = [wl_dict[bn] for bn in band_names]
+        resampled = _resample_spectrum(lib_wls, lib_vals, target_wls)
+        new_bands = []
+        for i, val in enumerate(resampled):
+            band_name = "{}_{:03d}".format(import_library_name, i)
+            gs.run_command("r.mapcalc",
+                           expression="{} = {}".format(band_name, val),
+                           overwrite=True, quiet=True)
+            new_bands.append(band_name)
+        gs.run_command("i.group", group=import_library_name,
+                       input=",".join(new_bands), overwrite=True, quiet=True)
+        gs.message(
+            "Imported '{}' ({} samples, {:.4f}-{:.4f} µm) → group '{}' "
+            "({} bands, resampled to {:.4f}-{:.4f} µm).".format(
+                import_library, len(lib_wls), lib_wls[0], lib_wls[-1],
+                import_library_name, len(new_bands), sensor_min, sensor_max))
+        return
+
+    # ── Phase 11.1 — spectrum extraction ──────────────────────────────────────
+    if flag_extract:
+        try:
+            east_str, north_str = extract_coords.split(",")
+        except ValueError:
+            gs.fatal("extract_coords= must be 'east,north'.")
+        vals = _extract_spectrum_at_point(band_names, east_str, north_str)
+        target_wls = [wl_dict[bn] for bn in band_names]
+        with open(extract_csv, "w") as f:
+            f.write("# spectrum extracted at {},{}\n".format(east_str, north_str))
+            f.write("# wavelength_um, value\n")
+            for wl, v in zip(target_wls, vals):
+                f.write("{:.6f}, {}\n".format(
+                    wl, "nan" if v != v else "{:.6f}".format(v)))
+        n_valid = sum(1 for v in vals if v == v)
+        gs.message(
+            "Extracted spectrum at ({}, {}): {}/{} valid bands → {}".format(
+                east_str, north_str, n_valid, len(vals), extract_csv))
+        return
 
     # Phase 4.4 — atmospheric correction pre-step (replaces band_names/wl_dict)
     ac_tmp_maps = []

@@ -459,6 +459,53 @@ with lower confidence.
   local dip; requiring agreement with a full-spectrum reference reduces false
   positives, particularly for single-band (low-confidence) detections
 
+### Phase 10 — Spectral library import ✓ COMPLETE
+
+**10.1 Build reference groups from plain spectral-library files (`-i`, `import_library=`, `import_library_name=`)**
+- Closes a real usability gap: `endmembers=` (Phase 4.1), `sam_library=`
+  (Phase 8.1), and `sam_library_prefix=` (Phase 9.1) all require a GRASS
+  image group with one constant-value band per wavelength — previously the
+  only way to build one was by hand, band by band
+- `import_library=`: a plain two-column CSV (`wavelength_um,value`, `#`
+  comments and blank lines ignored) — the natural format for a spectrum
+  exported from a USGS/ECOSTRESS/ENVI-style spectral library
+- Flag `-i`: standalone mode (like `-u`/`-m`) — linearly interpolates the
+  library spectrum onto the *current* group's sensor wavelength grid
+  (extrapolation clamps to the nearest library endpoint, i.e.
+  `numpy.interp` default behaviour) and writes one constant-value band per
+  input wavelength via `r.mapcalc`, then groups them under
+  `import_library_name=`
+- The resulting group can be fed straight back into `endmembers=`,
+  `sam_library=`, or `sam_library_prefix=_<species_name>` in a later run
+- Works even when the body/matter combination has zero species in the
+  database (a latent bug in the pre-Phase-10 "no species found → return"
+  early exit was fixed so it no longer blocks standalone modes)
+
+### Phase 11 — Spectrum extraction ✓ COMPLETE
+
+**11.1 Pull a real pixel's spectrum out of the scene (`-x`, `extract_coords=`, `extract_csv=`)**
+- Complements Phase 10 in the other direction: instead of importing an
+  *external* library spectrum, extract a *real* pixel's full spectrum from
+  the image currently being analysed
+- `extract_coords=` (`east,north`, `G_OPT_M_COORDS`): the map coordinates of
+  a pixel the user has identified (visually, or via `d.what.rast`) as a
+  representative "pure" example of some unusual material
+- Flag `-x`: standalone mode — reads every band's value at that location via
+  `r.what` and writes `extract_csv=` in the exact `wavelength_um,value`
+  format Phase 10's `import_library=` consumes; NULL pixels are written as
+  `nan`
+- Round-trips directly into `-i import_library=<extract_csv>` to build a
+  reference group from the extracted spectrum — closing the loop so
+  endmembers/SAM references can be "trained" entirely from the scene itself,
+  with no external spectral library required
+- Implementation note: `r.what`'s pipe-separated output has a variable
+  number of leading fields before the per-map values (observed as
+  `east|north|<empty>|val1|val2|...`); parsing anchors from the *right*
+  (`parts[-n_bands:]`) rather than assuming a fixed offset, to avoid
+  silently misaligning band values
+- Works even when the body/matter combination has zero species in the
+  database (same fix as Phase 10.1)
+
 ### Phase 4 — Advanced detection modes ✓ COMPLETE
 
 **4.1 Spectral unmixing integration**
@@ -1155,7 +1202,7 @@ Yann Chemin
 
 ## STATUS
 
-Phases 1–9 complete.
+Phases 1–11 complete.
 
 Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
@@ -1225,3 +1272,31 @@ assertions pass); BLAS/LAPACK/GSL/OpenCL were evaluated and not adopted —
 vector lengths (tens to low hundreds of bands) are too small for them to
 offer a measurable gain over the existing per-pixel OpenMP parallelism.
 Phase 9 adds 7 testsuite tests (class TestPmatterbandsPhase9; total: 105 tests).
+
+Phase 10: spectral library import — standalone mode (`-i`, `import_library=`,
+`import_library_name=`) that linearly interpolates a plain two-column
+spectral-library CSV onto the current group's sensor wavelength grid and
+writes a ready-to-use reference image group (one constant-value band per
+wavelength via `r.mapcalc`), for direct reuse as `endmembers=`,
+`sam_library=`, or `sam_library_prefix=`. Fixed a latent bug where the
+"no species found" early exit could abort standalone modes (`-u`, `-m`, `-i`)
+before they ever ran, for body/matter combinations with zero matching
+species. Phase 10 adds 8 testsuite tests (class TestPmatterbandsPhase10;
+total: 113 tests).
+
+Phase 11: spectrum extraction — standalone mode (`-x`, `extract_coords=`,
+`extract_csv=`) that reads every band's value at a map coordinate via
+`r.what` and writes it in the same `wavelength_um,value` CSV format Phase 10
+consumes, NULL pixels as `nan`; round-trips into `-i import_library=` to
+build endmember/SAM references directly from the scene under analysis.
+Found and fixed a parsing bug during implementation: `r.what`'s pipe-output
+has a variable number of leading fields before the per-map values, so
+parsing now anchors from the right instead of a fixed offset. Phase 11 adds
+8 testsuite tests (class TestPmatterbandsPhase11, including an extract→import
+round-trip check; total: 121 tests).
+
+Also fixed in this phase set: the `.deb` package never installed or linked
+`$GISBASE/etc/planetary/matter_bands.json` (`debian/rules`,
+`grass-planetary-addons.postinst`/`.prerm`), so any `p.matter.bands` run
+without `db=` explicitly set would fail on a packaged install — this affected
+real usage, not just tests.
