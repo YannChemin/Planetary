@@ -2304,6 +2304,285 @@ class TestPmatterbandsPhase6(TestCase):
                 pass
 
 
+@unittest.skipUnless(shutil.which("p.matter.bands"), "p.matter.bands not installed")
+class TestPmatterbandsPhase7(TestCase):
+    """Phase 7 tests: multi-temporal change detection (-d, reference_prefix=)."""
+
+    _DB_P7 = {
+        "_schema": "matter_bands_v1",
+        "body_meta": {},
+        "bodies": {
+            "mars": {
+                "minerals": [
+                    {
+                        "name": "pmb_p7_mineral",
+                        "display_name": "P7 test mineral",
+                        "formula": "X",
+                        "detection_range_um": [1.0, 2.5],
+                        "absorption_bands": [
+                            {"center": 1.30, "left": 1.10, "right": 1.50, "type": "test"},
+                        ],
+                        "refs": [],
+                    },
+                ],
+                "ices": [], "gases": [], "organics": [], "liquids": [],
+            },
+        },
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.use_temp_region()
+        cls.runModule("g.region", n=10, s=0, e=10, w=0, rows=10, cols=10)
+        cls.region = gs.region()
+
+        cls.db_p7 = tempfile.mktemp(suffix=".json")
+        with open(cls.db_p7, "w") as f:
+            json.dump(cls._DB_P7, f)
+
+        import numpy as np
+
+        cls.wl = [1.0 + i * (1.5 / 19) for i in range(20)]
+        cls.wl_csv = tempfile.mktemp(suffix=".csv")
+        _write_wavelength_csv(cls.wl_csv, cls.wl)
+        wl_arr = np.array(cls.wl)
+
+        # "Reference" epoch: shallow feature (depth=0.2)
+        refl_ref = _gaussian_absorption(wl_arr, center_um=1.30, depth=0.2, fwhm_um=0.08)
+        cls.ref_bands = []
+        for i in range(len(cls.wl)):
+            name = "pmb_p7_ref_band_{:03d}".format(i)
+            _create_synthetic_band(name, float(refl_ref[i]), cls.region)
+            cls.ref_bands.append(name)
+        gs.run_command("i.group", group="pmb_p7_group_ref",
+                       input=",".join(cls.ref_bands), overwrite=True, quiet=True)
+
+        # "Now" epoch: much deeper feature (depth=0.6)
+        refl_now = _gaussian_absorption(wl_arr, center_um=1.30, depth=0.6, fwhm_um=0.08)
+        cls.now_bands = []
+        for i in range(len(cls.wl)):
+            name = "pmb_p7_now_band_{:03d}".format(i)
+            _create_synthetic_band(name, float(refl_now[i]), cls.region)
+            cls.now_bands.append(name)
+        gs.run_command("i.group", group="pmb_p7_group_now",
+                       input=",".join(cls.now_bands), overwrite=True, quiet=True)
+
+        # Write the "reference" epoch's output maps (with uncertainty) once.
+        gs.run_command(
+            "p.matter.bands", flags="e",
+            group="pmb_p7_group_ref", body="mars",
+            output_prefix="pmb_p7_ref_out", wavelengths=cls.wl_csv,
+            db=cls.db_p7, radiometric_noise="0.02",
+            overwrite=True, quiet=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.del_temp_region()
+        gs.run_command("g.remove", flags="f", type="raster",
+                       pattern="pmb_p7_*", quiet=True)
+        for tmp in [cls.db_p7, cls.wl_csv]:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    # ── 7.1 Diff map ───────────────────────────────────────────────────────────
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_diff_map_created(self):
+        """-d with a valid reference_prefix= writes <prefix>_<species>_diff."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="d",
+            group="pmb_p7_group_now", body="mars",
+            output_prefix="pmb_p7_now_out", wavelengths=self.wl_csv,
+            db=self.db_p7, reference_prefix="pmb_p7_ref_out",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p7_now_out_pmb_p7_mineral_diff")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_diff_value_is_positive(self):
+        """now (depth=0.6) minus ref (depth=0.2) → positive mean diff."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="d",
+            group="pmb_p7_group_now", body="mars",
+            output_prefix="pmb_p7_now_out", wavelengths=self.wl_csv,
+            db=self.db_p7, reference_prefix="pmb_p7_ref_out",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        diff_map = "pmb_p7_now_out_pmb_p7_mineral_diff"
+        if gs.find_file(diff_map, element="cell")["name"]:
+            stats = gs.parse_command("r.univar", flags="g", map=diff_map)
+            self.assertGreater(float(stats["mean"]), 0.0)
+
+    def test_diff_requires_reference_prefix(self):
+        """-d without reference_prefix= fails with a clear error."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="d",
+            group="pmb_p7_group_now", body="mars",
+            output_prefix="pmb_p7_now_out", wavelengths=self.wl_csv,
+            db=self.db_p7,
+        )
+        self.assertModuleFail(module)
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_diff_skipped_when_reference_map_missing(self):
+        """Unrecognized reference_prefix= produces no diff map but the run
+        still succeeds and writes the normal BD map."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="d",
+            group="pmb_p7_group_now", body="mars",
+            output_prefix="pmb_p7_missing_out", wavelengths=self.wl_csv,
+            db=self.db_p7, reference_prefix="pmb_p7_nonexistent",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p7_missing_out_pmb_p7_mineral")
+        self.assertFalse(
+            gs.find_file("pmb_p7_missing_out_pmb_p7_mineral_diff",
+                         element="cell")["name"])
+
+    def test_no_diff_map_without_d_flag(self):
+        """Without -d, no diff map is written even if reference_prefix= is set."""
+        module = SimpleModule(
+            "p.matter.bands",
+            group="pmb_p7_group_now", body="mars",
+            output_prefix="pmb_p7_nod_out", wavelengths=self.wl_csv,
+            db=self.db_p7, reference_prefix="pmb_p7_ref_out",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p7_nod_out_pmb_p7_mineral_diff",
+                         element="cell")["name"])
+
+    # ── 7.2 Significance flagging ─────────────────────────────────────────────
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_diff_sig_map_created_when_both_unc_available(self):
+        """diff_sig map is written when both epochs have uncertainty rasters."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="de",
+            group="pmb_p7_group_now", body="mars",
+            output_prefix="pmb_p7_now_out", wavelengths=self.wl_csv,
+            db=self.db_p7, reference_prefix="pmb_p7_ref_out",
+            radiometric_noise="0.02",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertRasterExists("pmb_p7_now_out_pmb_p7_mineral_diff_sig")
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_diff_sig_no_pixels_flagged_with_huge_sigma_threshold(self):
+        """An extreme change_sigma threshold flags zero significant pixels."""
+        report = tempfile.mktemp(suffix=".json")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="de",
+                group="pmb_p7_group_now", body="mars",
+                output_prefix="pmb_p7_now_out", wavelengths=self.wl_csv,
+                db=self.db_p7, reference_prefix="pmb_p7_ref_out",
+                radiometric_noise="0.02", change_sigma="1000",
+                report=report, overwrite=True,
+            )
+            self.assertModule(module)
+            with open(report) as f:
+                data = json.load(f)
+            det = next(d for d in data["detections"]
+                      if d["name"] == "pmb_p7_mineral")
+            self.assertEqual(det["n_significant_change_pixels"], 0)
+        finally:
+            try:
+                os.unlink(report)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_diff_sig_absent_without_uncertainty(self):
+        """No diff_sig map when uncertainty rasters are unavailable (no -e/noise)."""
+        module = SimpleModule(
+            "p.matter.bands",
+            flags="d",
+            group="pmb_p7_group_now", body="mars",
+            output_prefix="pmb_p7_nosig_out", wavelengths=self.wl_csv,
+            db=self.db_p7, reference_prefix="pmb_p7_ref_out",
+            overwrite=True,
+        )
+        self.assertModule(module)
+        self.assertFalse(
+            gs.find_file("pmb_p7_nosig_out_pmb_p7_mineral_diff_sig",
+                         element="cell")["name"])
+
+    # ── 7.3 JSON report fields ────────────────────────────────────────────────
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_report_diff_fields_populated(self):
+        """JSON report's mean_diff/max_abs_diff are populated for a successful diff."""
+        report = tempfile.mktemp(suffix=".json")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                flags="d",
+                group="pmb_p7_group_now", body="mars",
+                output_prefix="pmb_p7_now_out", wavelengths=self.wl_csv,
+                db=self.db_p7, reference_prefix="pmb_p7_ref_out",
+                report=report, overwrite=True,
+            )
+            self.assertModule(module)
+            with open(report) as f:
+                data = json.load(f)
+            det = next(d for d in data["detections"]
+                      if d["name"] == "pmb_p7_mineral")
+            self.assertIsNotNone(det["mean_diff"])
+            self.assertIsNotNone(det["max_abs_diff"])
+            self.assertGreater(det["mean_diff"], 0.0)
+        finally:
+            try:
+                os.unlink(report)
+            except OSError:
+                pass
+
+    @unittest.skipUnless(shutil.which("p.matter.bands"),
+                         "p.matter.bands not installed")
+    def test_report_diff_fields_null_without_d_flag(self):
+        """JSON report's mean_diff is null when -d is not given."""
+        report = tempfile.mktemp(suffix=".json")
+        try:
+            module = SimpleModule(
+                "p.matter.bands",
+                group="pmb_p7_group_now", body="mars",
+                output_prefix="pmb_p7_now_out", wavelengths=self.wl_csv,
+                db=self.db_p7, report=report, overwrite=True,
+            )
+            self.assertModule(module)
+            with open(report) as f:
+                data = json.load(f)
+            det = next(d for d in data["detections"]
+                      if d["name"] == "pmb_p7_mineral")
+            self.assertIsNone(det["mean_diff"])
+            self.assertIsNone(det["n_significant_change_pixels"])
+        finally:
+            try:
+                os.unlink(report)
+            except OSError:
+                pass
+
+
 if __name__ == "__main__":
     from grass.gunittest.main import test
     test()

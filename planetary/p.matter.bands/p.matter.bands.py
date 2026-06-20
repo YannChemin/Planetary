@@ -188,6 +188,23 @@ LICENSE:   GNU GPL >=2
 # % description: Fractional 1-sigma uncertainty on each input reflectance/emissivity sample (e.g. 0.02 = two percent). Propagated analytically through the band-depth formula to produce per-species uncertainty. Use with -e to write uncertainty rasters.
 # %end
 
+# %option
+# % key: reference_prefix
+# % type: string
+# % required: no
+# % label: Output prefix from a previous run, for multi-temporal change detection (-d)
+# % description: For each detected species, looks for <reference_prefix>_<species_name> (and, if present, <reference_prefix>_<species_name>_unc) and computes <output_prefix>_<species_name>_diff = BD_now - BD_reference. Requires -d.
+# %end
+
+# %option
+# % key: change_sigma
+# % type: double
+# % required: no
+# % answer: 2.0
+# % label: Significance threshold (combined-sigma units) for change detection (-d)
+# % description: When uncertainty rasters are available for both epochs (radiometric_noise= used in both runs), pixels with |diff| / sqrt(sigma_now^2 + sigma_ref^2) >= change_sigma are written to <prefix>_<species>_diff_sig.
+# %end
+
 # %flag
 # % key: l
 # % description: List detectable species for this body/sensor combination (no raster output)
@@ -216,6 +233,11 @@ LICENSE:   GNU GPL >=2
 # %flag
 # % key: v
 # % description: Verbose: report band depth statistics for each species map
+# %end
+
+# %flag
+# % key: d
+# % description: Multi-temporal change detection — compute <prefix>_<species>_diff against reference_prefix= maps from a previous run
 # %end
 
 # %flag
@@ -727,6 +749,7 @@ def main():
     flag_quality = flags["q"]       # Phase 5.1 confidence rasters
     flag_uncert  = flags["e"]       # Phase 6.2 uncertainty rasters
     flag_classify = flags["k"]      # Phase 6.1 classification map
+    flag_diff    = flags["d"]       # Phase 7.1 multi-temporal change detection
 
     # Phase 5 options
     min_conf  = float(options["min_conf"])
@@ -736,6 +759,12 @@ def main():
     radiometric_noise = float(options["radiometric_noise"])
     if flag_uncert and radiometric_noise <= 0.0:
         gs.warning("-e given but radiometric_noise=0.0 (disabled) — no uncertainty computed.")
+
+    # Phase 7.1 — multi-temporal change detection
+    reference_prefix = options["reference_prefix"] or None
+    change_sigma = float(options["change_sigma"])
+    if flag_diff and not reference_prefix:
+        gs.fatal("-d (change detection) requires reference_prefix=.")
 
     # Phase 4.1 — NNLS
     em_group   = options["endmembers"] or None
@@ -985,6 +1014,52 @@ def main():
                                    radiometric_noise),
                                overwrite=True, quiet=True)
 
+        # Phase 7.1 — multi-temporal change detection
+        mean_diff, max_abs_diff, n_sig = None, None, None
+        if flag_diff:
+            ref_map = "{}_{}".format(reference_prefix, sp_name)
+            if not gs.find_file(ref_map, element="cell")["name"]:
+                gs.message("    No reference map '{}' — skipping change detection.".format(
+                    ref_map))
+            else:
+                ref_arr = _read_band(ref_map)
+                diff_arr = bd_arr - ref_arr
+                diff_map = "{}_diff".format(out_name)
+                _write_band(diff_arr, diff_map, region)
+                gs.run_command("r.colors", map=diff_map, color="differences", quiet=True)
+                gs.run_command(
+                    "r.support", map=diff_map,
+                    title="{} band-depth change vs reference".format(sp_name),
+                    description="diff = BD_now - BD_ref({})".format(reference_prefix),
+                    overwrite=True, quiet=True)
+                if np.any(~np.isnan(diff_arr)):
+                    mean_diff = float(np.nanmean(diff_arr))
+                    max_abs_diff = float(np.nanmax(np.abs(diff_arr[~np.isnan(diff_arr)])))
+
+                ref_unc_map = "{}_unc".format(ref_map)
+                if unc_arr is not None and gs.find_file(ref_unc_map, element="cell")["name"]:
+                    ref_unc_arr = _read_band(ref_unc_map)
+                    combined_sigma = np.sqrt(unc_arr ** 2 + ref_unc_arr ** 2)
+                    with np.errstate(invalid="ignore", divide="ignore"):
+                        z = diff_arr / combined_sigma
+                    sig_mask = np.abs(z) >= change_sigma
+                    n_sig = int(np.sum(sig_mask & ~np.isnan(diff_arr)))
+                    diff_sig_arr = np.where(sig_mask, diff_arr, float("nan"))
+                    sig_map = "{}_diff_sig".format(out_name)
+                    _write_band(diff_sig_arr, sig_map, region)
+                    gs.run_command("r.colors", map=sig_map, color="differences", quiet=True)
+                    gs.run_command(
+                        "r.support", map=sig_map,
+                        title="{} statistically significant change (|z|>={:.1f}σ)".format(
+                            sp_name, change_sigma),
+                        overwrite=True, quiet=True)
+
+                gs.message(
+                    "    Change vs reference '{}': mean diff={}{}".format(
+                        reference_prefix,
+                        "{:.4f}".format(mean_diff) if mean_diff is not None else "n/a",
+                        " | {} significant px".format(n_sig) if n_sig is not None else ""))
+
         sw_desc = " | SW-corr α={:.2f}".format(sw_alpha) if sw_factor > 0.0 else ""
         tc_desc = " | T={:.0f}K".format(temperature_K) if temperature_K else ""
         refs = "; ".join(
@@ -1011,6 +1086,9 @@ def main():
             "mean_bd": round(mean_bd, 6),
             "max_bd":  round(max_bd,  6),
             "mean_uncertainty": round(mean_unc, 6) if mean_unc is not None else None,
+            "mean_diff": round(mean_diff, 6) if mean_diff is not None else None,
+            "max_abs_diff": round(max_abs_diff, 6) if max_abs_diff is not None else None,
+            "n_significant_change_pixels": n_sig,
             "output_map": out_name,
             "note": note,
         })

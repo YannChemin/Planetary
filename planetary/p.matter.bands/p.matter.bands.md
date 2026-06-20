@@ -388,6 +388,29 @@ with lower confidence.
 - Scales with any space-weathering correction applied (same linear factor)
 - JSON report gains a `mean_uncertainty` field per detection (`null` when disabled)
 
+### Phase 7 — Multi-temporal change detection ✓ COMPLETE
+
+**7.1 Band-depth difference map (`-d`, `reference_prefix=`)**
+- `reference_prefix=`: the `output_prefix=` from a previous run over the same
+  species/body/sensor combination (e.g. an earlier observation epoch)
+- Flag `-d`: for each detected species, looks up `<reference_prefix>_<species>`
+  and writes `<output_prefix>_<species>_diff = BD_now − BD_reference`
+  (`r.colors color=differences`, diverging table)
+- Species without a matching reference map are silently skipped for the diff
+  step (the normal BD map is still written) and logged via `gs.message`
+- Designed for seasonal/repeat monitoring: Mars CO2 polar cap retreat, Europa
+  irradiation darkening, comet nucleus devolatilization between apparitions
+
+**7.2 Statistical significance flagging (`change_sigma=`)**
+- When both epochs were run with `radiometric_noise=`/`-e` (so both
+  `<prefix>_<species>_unc` and `<reference_prefix>_<species>_unc` exist),
+  pixels are tested at `|diff| / sqrt(σ_now² + σ_ref²) ≥ change_sigma`
+  (default 2.0)
+- Significant pixels are written to `<output_prefix>_<species>_diff_sig`
+  (same diverging colour table); absent if either epoch lacks an uncertainty map
+- JSON report gains `mean_diff`, `max_abs_diff`, `n_significant_change_pixels`
+  (all `null`/`None` when `-d` is not used)
+
 ### Phase 4 — Advanced detection modes ✓ COMPLETE
 
 **4.1 Spectral unmixing integration**
@@ -1084,7 +1107,7 @@ Yann Chemin
 
 ## STATUS
 
-Phases 1–6 complete.
+Phases 1–7 complete.
 
 Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
@@ -1122,3 +1145,11 @@ radiometric uncertainty propagation (`radiometric_noise=` + `-e`, analytic
 first-order error propagation through the band-depth formula, written as
 `<prefix>_<species>_unc`); JSON report gains a `mean_uncertainty` field.
 Phase 6 adds 10 testsuite tests (class TestPmatterbandsPhase6; total: 80 tests).
+
+Phase 7: multi-temporal change detection — band-depth difference map (`-d`,
+`reference_prefix=`, `<prefix>_<species>_diff = BD_now − BD_reference`,
+diverging colour table); statistical significance flagging (`change_sigma=`,
+default 2.0σ) using combined uncertainty from both epochs when available,
+written to `<prefix>_<species>_diff_sig`; JSON report gains `mean_diff`,
+`max_abs_diff`, `n_significant_change_pixels`. Phase 7 adds 10 testsuite
+tests (class TestPmatterbandsPhase7; total: 90 tests).
