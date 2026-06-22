@@ -1523,16 +1523,29 @@ def main():
         # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
         # groups them under <output>; align the region to band 1.
         _align_region_to_raster(f"{opt_output}.1", save_default=False)
-        p_meta.write_planetary_metadata(
-            f"{opt_output}.1",
-            module="p.in.archive",
-            command=" ".join(sys.argv),
-            data_type="image",
-            sensor="MEX_OMEGA",
-            mission="MARS EXPRESS",
-            body=body_slug.upper(),
-            source_file=img_url,
-        )
+        # p.in.pds3 -g already wrote planetary.json for <output>.1 (generic
+        # sensor="OMEGA" from the label's INSTRUMENT_ID); write_planetary_metadata()
+        # is create-only and would silently skip here, so update the existing
+        # record in place instead, same fix as the crism= path above.
+        if p_meta.PlanetaryMetadata.exists(f"{opt_output}.1"):
+            meta = p_meta.PlanetaryMetadata.load(f"{opt_output}.1")
+            meta.sensor = "MEX_OMEGA"
+            meta.mission = "MARS EXPRESS"
+            meta.body = body_slug.upper()
+            meta.source_file = img_url
+            meta.add_history_entry(" ".join(sys.argv))
+            meta.save(f"{opt_output}.1")
+        else:
+            p_meta.write_planetary_metadata(
+                f"{opt_output}.1",
+                module="p.in.archive",
+                command=" ".join(sys.argv),
+                data_type="image",
+                sensor="MEX_OMEGA",
+                mission="MARS EXPRESS",
+                body=body_slug.upper(),
+                source_file=img_url,
+            )
         gs.message(f"Imported OMEGA EDR cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
         return
@@ -1743,17 +1756,32 @@ def main():
             if tgt_key:
                 _body_val = str(rows[0].get(tgt_key, _body_val or "")).upper() or _body_val
 
-        p_meta.write_planetary_metadata(
-            f"{opt_output}.1" if ext == ".qub" else opt_output,
-            module="p.in.archive",
-            command=" ".join(sys.argv),
-            data_type="image",
-            sensor=_sensor,
-            mission="CASSINI",
-            body=_body_val,
-            pds_product_id=opus_id,
-            source_file=dl_url,
-        )
+        # p.in.pds3 already wrote planetary.json for this map (generic
+        # sensor/mission from the label itself); write_planetary_metadata()
+        # is create-only and would silently skip here, so update the
+        # existing record in place instead, same fix as crism=/m3=/omega=.
+        _meta_target = f"{opt_output}.1" if ext == ".qub" else opt_output
+        if p_meta.PlanetaryMetadata.exists(_meta_target):
+            meta = p_meta.PlanetaryMetadata.load(_meta_target)
+            if _sensor:    meta.sensor = _sensor
+            meta.mission = "CASSINI"
+            if _body_val: meta.body = _body_val
+            meta.pds_product_id = opus_id
+            meta.source_file = dl_url
+            meta.add_history_entry(" ".join(sys.argv))
+            meta.save(_meta_target)
+        else:
+            p_meta.write_planetary_metadata(
+                _meta_target,
+                module="p.in.archive",
+                command=" ".join(sys.argv),
+                data_type="image",
+                sensor=_sensor,
+                mission="CASSINI",
+                body=_body_val,
+                pds_product_id=opus_id,
+                source_file=dl_url,
+            )
         if ext == ".qub":
             gs.message(f"Imported {kind} as imagery group '{opt_output}' "
                        f"('{opt_output}.1' .. '{opt_output}.N').")
