@@ -125,19 +125,21 @@ documents.
 
 ## EXAMPLES
 
-Mars, thin regime — requires `p.phocube` geometry. **`p.phocube` currently
-computes a flat-field/ellipsoid-intercept geometry, not real per-pixel
-SPICE ephemeris**, despite what `p.phocube.md`'s own description implies —
-its actual installed interface is `input=`/`output=`/`target=` with
-`-iep` flags and `sun_x/y/z`, `obs_x/y/z` body-fixed vectors applied
-uniformly to the whole scene (`p.phocube --help` is authoritative; treat
-the `-s`/SPICE-history mode described in its `.md` as aspirational until
-that gap is closed). It also derives each pixel's lat/lon directly from
-the GRASS region's east/north, so **the active region must already be set
-to the scene's real geographic footprint** (not a pixel/line sample-line
-grid, e.g. as `p.in.pds3 -g` sets up for un-projected CRISM TRDR cubes) —
+Mars, thin regime — requires `p.phocube` geometry. `p.phocube` now has a
+real per-pixel SPICE ephemeris mode (`-s`, reading kernels/target/
+observer/time attached via `p.spiceinit`), but it only applies to
+**already-georeferenced** rasters (HiRISE/CTX RDR, MTRDR, `p.in.astropedia`
+COG products, etc.) — raw, un-projected pushbroom/framing sensor-grid
+cubes such as CRISM TRDR (imported pixel/line via `p.in.pds3 -g`) have no
+real per-pixel camera model anywhere in this suite and `-s` will refuse
+them with `G_fatal_error` rather than guess. For that case, flat-field
+mode (no `-s`) remains the only option, and it still derives each pixel's
+lat/lon directly from the GRASS region's east/north with no projection
+awareness, so **the active region must already be set to the scene's real
+geographic footprint** (not the sensor's native pixel/line grid) —
 otherwise sample/line indices get silently treated as degrees of
-longitude/latitude:
+longitude/latitude. See `p.phocube.md` for the full `-s` mode description
+and its requirements:
 
 ```sh
 # Region must be the real ground footprint (e.g. from the product's own
