@@ -638,12 +638,33 @@ def import_file(local_path, output_name, band=1, override_proj=False):
     gs.message(f"Importing via {method}: band {band}")
 
     if method == "gdal":
-        gs.run_command("r.in.gdal",
-                       flags=flags,
-                       input=local_path,
-                       output=output_name,
-                       band=band,
-                       overwrite=True)
+        try:
+            gs.run_command("r.in.gdal",
+                           flags=flags,
+                           input=local_path,
+                           output=output_name,
+                           band=band,
+                           overwrite=True)
+        except gs.CalledModuleError:
+            if override_proj:
+                raise
+            # USGS Astropedia STAC products (HiRISE, CTX, THEMIS, ...) each
+            # carry their own native Mars CRS variant (different central
+            # longitude / sphere realisation per mission), which essentially
+            # never matches whatever project the user happens to be working
+            # in. r.in.gdal requires an exact CRS match; r.import reprojects
+            # on the fly into the current project's CRS instead, so retry
+            # with it rather than forcing the user to pre-build a
+            # CRS-matching project (or pass -o, which would silently treat
+            # mismatched coordinates as if they were already in the current
+            # CRS — wrong by definition for a genuine CRS mismatch).
+            gs.warning("r.in.gdal CRS check failed; retrying with r.import "
+                       "(on-the-fly reprojection to the active project's CRS).")
+            gs.run_command("r.import",
+                           input=local_path,
+                           output=output_name,
+                           band=band,
+                           overwrite=True)
     elif method == "pds4":
         gs.run_command("p.in.pds4",
                        flags=flags,
