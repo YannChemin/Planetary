@@ -248,6 +248,9 @@
       <module-item name="p.atcorr.hapke">
         <label>Hapke atmospheric correction</label>
       </module-item>
+      <module-item name="p.atcorr">
+        <label>Body-aware atmospheric correction (per-pixel, none/thin/thick)</label>
+      </module-item>
       <module-item name="p.photrim">
         <label>Mask by incidence / emission / phase angle limits</label>
       </module-item>
