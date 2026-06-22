@@ -307,6 +307,68 @@ PPvlNode *p_pvl_parse(const char *path, void *fp)
     return root;
 }
 
+/* Merge in keywords from a referenced external "structure" file
+ * (^STRUCTURE = "filename.fmt"), a real PDS3 convention some QUBE
+ * archives use to factor CORE_ and SUFFIX_ descriptor keywords out of
+ * the main label and into one or more small shared format files (e.g.
+ * Cassini VIMS's core_description.fmt/suffix_description.fmt, each
+ * referenced via its own "^STRUCTURE = ..." line inside
+ * OBJECT = SPECTRAL_QUBE, rather than being inlined). Splices each
+ * referenced file's top-level keywords/groups directly as additional
+ * children of the object that points to them, so a plain
+ * p_pvl_value(img_obj, "...") lookup finds them exactly as if they had
+ * been inlined. Missing/unreadable structure files only warn (some
+ * keywords end up missing, handled by the existing per-keyword
+ * fallbacks/defaults already in p_pds_open_image_named()), they don't
+ * fail the whole import. */
+static void resolve_structure_pointers(PPvlNode *node, const char *label_path)
+{
+    if (!node) return;
+
+    for (PPvlNode *child = node->children; child; child = child->next) {
+        if (child->type != P_PVL_SCALAR || !str_ieq(child->key, "^STRUCTURE") ||
+            !child->value || !child->value[0])
+            continue;
+
+        char label_dir[2048];
+        strncpy(label_dir, label_path, sizeof(label_dir) - 2);
+        label_dir[sizeof(label_dir)-2] = '\0';
+        char *slash = strrchr(label_dir, '/');
+        if (slash) *(slash + 1) = '\0';
+        else { label_dir[0] = '.'; label_dir[1] = '/'; label_dir[2] = '\0'; }
+
+        char fmt_path[2048];
+        if (child->value[0] == '/')
+            snprintf(fmt_path, sizeof(fmt_path), "%s", child->value);
+        else
+            snprintf(fmt_path, sizeof(fmt_path), "%s%s", label_dir, child->value);
+
+        FILE *ffp = fopen(fmt_path, "r");
+        if (!ffp) {
+            G_warning(_("p_pds: ^STRUCTURE referenced '%s' not found "
+                        "(looked for '%s') -- some keywords may be "
+                        "missing."), child->value, fmt_path);
+            continue;
+        }
+        PPvlNode *extra = pvl_parse_block(ffp, fmt_path, NULL, NULL);
+        fclose(ffp);
+        if (!extra) continue;
+
+        PPvlNode *tail = node->children;
+        while (tail->next) tail = tail->next;
+        tail->next = extra;
+    }
+
+    /* Recurse into nested OBJECT/GROUP children (over the original
+     * structure; the new content spliced in above is flat scalars/
+     * groups, not further nested image objects, so no need to revisit
+     * it here). */
+    for (PPvlNode *child = node->children; child; child = child->next) {
+        if (child->type == P_PVL_OBJECT || child->type == P_PVL_GROUP)
+            resolve_structure_pointers(child, label_path);
+    }
+}
+
 /* ================================================================== */
 /* PVL query helpers                                                    */
 /* ================================================================== */
@@ -507,23 +569,25 @@ static int pvl_tuple_token(const char *v, int index, char *out, size_t outlen)
     return n > 0;
 }
 
-/* Read CORE_ITEMS (a tuple, ordered per AXIS_NAME -- the real PDS3 QUBE
- * object convention, e.g. OMEGA/VIMS *_QUBE objects: "AXIS_NAME =
- * (SAMPLE,BAND,LINE)", "CORE_ITEMS = (64,352,672)" means 64 samples, 352
- * bands, 672 lines -- NOT the fixed sample/band/line order some other
- * PDS3 IMAGE objects use). Falls back to the common (SAMPLE,BAND,LINE)
- * order if AXIS_NAME is absent. Returns 1 if all three were resolved. */
-static int pvl_core_items_by_axis(const PPvlNode *img_obj,
-                                    int *samples, int *bands, int *lines)
+/* Read a 3-tuple keyword (e.g. CORE_ITEMS or SUFFIX_ITEMS), ordered per
+ * AXIS_NAME -- the real PDS3 QUBE object convention, e.g. OMEGA/VIMS
+ * *_QUBE objects: "AXIS_NAME = (SAMPLE,BAND,LINE)", "CORE_ITEMS =
+ * (64,352,672)" means 64 samples, 352 bands, 672 lines -- NOT the fixed
+ * sample/band/line order some other PDS3 IMAGE objects use. Falls back
+ * to the common (SAMPLE,BAND,LINE) order if AXIS_NAME is absent.
+ * Returns 1 if the tuple keyword was present and fully parsed (zero
+ * values are valid, e.g. SUFFIX_ITEMS often has a zero line-suffix). */
+static int pvl_tuple_by_axis(const PPvlNode *img_obj, const char *keyword,
+                              int *samples, int *bands, int *lines)
 {
-    const char *core_v = p_pvl_value(img_obj, "CORE_ITEMS");
-    if (!core_v) return 0;
+    const char *tuple_v = p_pvl_value(img_obj, keyword);
+    if (!tuple_v) return 0;
     const char *axis_v = p_pvl_value(img_obj, "AXIS_NAME");
 
     int items[3];
-    if (!pvl_tuple_int(core_v, 0, &items[0]) ||
-        !pvl_tuple_int(core_v, 1, &items[1]) ||
-        !pvl_tuple_int(core_v, 2, &items[2]))
+    if (!pvl_tuple_int(tuple_v, 0, &items[0]) ||
+        !pvl_tuple_int(tuple_v, 1, &items[1]) ||
+        !pvl_tuple_int(tuple_v, 2, &items[2]))
         return 0;
 
     const char *names[3] = { "SAMPLE", "BAND", "LINE" }; /* default order */
@@ -544,6 +608,14 @@ static int pvl_core_items_by_axis(const PPvlNode *img_obj,
         else if (strcmp(names[i], "BAND") == 0) *bands = items[i];
         else if (strcmp(names[i], "LINE") == 0) *lines = items[i];
     }
+    return 1;
+}
+
+static int pvl_core_items_by_axis(const PPvlNode *img_obj,
+                                    int *samples, int *bands, int *lines)
+{
+    if (!pvl_tuple_by_axis(img_obj, "CORE_ITEMS", samples, bands, lines))
+        return 0;
     return (*samples > 0 && *lines > 0);
 }
 
@@ -923,6 +995,7 @@ PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
         fclose(fp);
         return NULL;
     }
+    resolve_structure_pointers(root, path);
 
     PPvlNode   *img_obj  = NULL;
     const char *obj_name = NULL;
@@ -1034,6 +1107,26 @@ PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
         img->organization = P_PDS_ORG_BIL;
     else if (str_ieq(bst, "SAMPLE_INTERLEAVED") || str_ieq(bst, "BIP"))
         img->organization = P_PDS_ORG_BIP;
+    else if (bst[0] == '\0' && p_pvl_value(img_obj, "AXIS_NAME")) {
+        /* Real PDS3 QUBE objects (AXES/AXIS_NAME present) often omit
+         * BAND_STORAGE_TYPE entirely -- the AXIS_NAME order itself *is*
+         * the storage order (fastest-varying axis listed first): e.g.
+         * Cassini VIMS's "AXIS_NAME = (SAMPLE,BAND,LINE)" with no
+         * BAND_STORAGE_TYPE keyword at all is still BIL, confirmed
+         * against NASA's own ISIS3 vims2isis importer (ReadVimsBIL(),
+         * which hardcodes BIL for exactly this axis order without ever
+         * consulting BAND_STORAGE_TYPE). */
+        char ax0[16] = "", ax1[16] = "";
+        const char *axis_v = p_pvl_value(img_obj, "AXIS_NAME");
+        pvl_tuple_token(axis_v, 0, ax0, sizeof(ax0));
+        pvl_tuple_token(axis_v, 1, ax1, sizeof(ax1));
+        if (str_ieq(ax0, "SAMPLE") && str_ieq(ax1, "BAND"))
+            img->organization = P_PDS_ORG_BIL;
+        else if (str_ieq(ax0, "BAND") && str_ieq(ax1, "SAMPLE"))
+            img->organization = P_PDS_ORG_BIP;
+        else
+            img->organization = P_PDS_ORG_BSQ; /* (SAMPLE,LINE,BAND) or similar */
+    }
     else
         img->organization = P_PDS_ORG_BSQ; /* default */
 
@@ -1044,35 +1137,69 @@ PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
     /* --- Refuse QUBE sideplanes (SUFFIX_ITEMS) rather than silently
      * misreading. Real PDS3 QUBE products (e.g. ESA Mars Express OMEGA,
      * Cassini VIMS raw .qub) append extra sample-/band-direction
-     * "sideplane" bytes per record that this reader does not yet know how
-     * to skip; reading on as if SUFFIX_ITEMS were (0,0,0) silently shifts
-     * every subsequent record, producing wrong-but-plausible-looking
-     * pixel values instead of an obvious failure. Confirmed by trial: even
-     * NASA's own ISIS3 needs a hand-written, format-specific importer for
-     * VIMS's suffixed .qub (ReadVimsBIL() in vims2isis), not a generic
-     * reader -- so this is a real format gap, not a quick parsing fix. */
+     * "sideplane" bytes per record. Supported case (matching NASA's own
+     * ISIS3 ReadVimsBIL() importer, the authoritative reference for this
+     * exact layout): BAND_STORAGE_TYPE = LINE_INTERLEAVED (BIL) with a
+     * zero line-suffix -- a sample-suffix block of
+     * (sample-suffix-items * SUFFIX_ITEM_BYTES) bytes is appended after
+     * each band's core samples within a line, and a band-suffix backplane
+     * of (band-suffix-items rows, each (samples + sample-suffix-items)
+     * items wide) is appended once per line after all bands. Any other
+     * organisation, or a nonzero line-suffix, has no verified byte layout
+     * here and is refused rather than guessed -- reading on as if
+     * SUFFIX_ITEMS were (0,0,0) would silently shift every subsequent
+     * record, producing wrong-but-plausible-looking pixel values instead
+     * of an obvious failure. */
+    img->suffix_sample_items = img->suffix_band_items = img->suffix_line_items = 0;
+    img->suffix_item_bytes = 4; /* matches every real archive seen so far */
     {
-        const char *sfx_v = p_pvl_value(img_obj, "SUFFIX_ITEMS");
-        int s0, s1, s2;
-        if (sfx_v && pvl_tuple_int(sfx_v, 0, &s0) &&
-            pvl_tuple_int(sfx_v, 1, &s1) && pvl_tuple_int(sfx_v, 2, &s2) &&
-            (s0 != 0 || s1 != 0 || s2 != 0)) {
-            G_warning(_("p_pds: '%s' has SUFFIX_ITEMS = (%d,%d,%d) (QUBE "
-                        "sideplane/backplane bytes per record) -- this "
-                        "reader does not yet support skipping them and "
-                        "refuses to silently misread the cube. Not "
-                        "supported yet."), path, s0, s1, s2);
-            p_pvl_free(root);
-            fclose(fp);
-            G_free(img);
-            return NULL;
+        int sfx_s, sfx_b, sfx_l;
+        if (pvl_tuple_by_axis(img_obj, "SUFFIX_ITEMS", &sfx_s, &sfx_b, &sfx_l) &&
+            (sfx_s != 0 || sfx_b != 0 || sfx_l != 0)) {
+            if (sfx_l != 0 || img->organization != P_PDS_ORG_BIL) {
+                G_warning(_("p_pds: '%s' has SUFFIX_ITEMS (sample=%d band=%d "
+                            "line=%d) -- this reader only supports skipping "
+                            "sample/band suffix bytes for BAND_STORAGE_TYPE = "
+                            "LINE_INTERLEAVED (BIL) cubes with a zero "
+                            "line-suffix. Refusing to silently misread the "
+                            "cube. Not supported yet."),
+                          path, sfx_s, sfx_b, sfx_l);
+                p_pvl_free(root);
+                fclose(fp);
+                G_free(img);
+                return NULL;
+            }
+            int ok2;
+            int item_bytes = p_pvl_value_int(img_obj, "SUFFIX_ITEM_BYTES", &ok2);
+            img->suffix_sample_items = sfx_s;
+            img->suffix_band_items   = sfx_b;
+            if (ok2 && item_bytes > 0) img->suffix_item_bytes = item_bytes;
+            G_message(_("p_pds: '%s' has QUBE suffix bytes (sample=%d, "
+                        "band=%d, %d bytes/item) -- skipped on read, not "
+                        "exposed as extra bands."),
+                      path, sfx_s, sfx_b, img->suffix_item_bytes);
         }
     }
 
     /* --- Data file pointer. */
     char *data_path = NULL;
     long  data_off  = 0;
-    if (resolve_data_pointer(root, path, obj_name, &data_path, &data_off) != 0) {
+    int   ptr_found = (resolve_data_pointer(root, path, obj_name,
+                                             &data_path, &data_off) == 0);
+    if (!ptr_found) {
+        /* The pointer keyword doesn't always match the OBJECT's own type
+         * name (e.g. real Cassini VIMS labels: "OBJECT = SPECTRAL_QUBE"
+         * but "^QUBE = (...)", not "^SPECTRAL_QUBE") -- retry the other
+         * standard pointer names before giving up. */
+        static const char *alt_names[] = { "IMAGE", "QUBE", "SPECTRAL_QUBE" };
+        for (size_t i = 0; i < 3 && !ptr_found; i++) {
+            if (str_ieq(alt_names[i], obj_name ? obj_name : ""))
+                continue;
+            ptr_found = (resolve_data_pointer(root, path, alt_names[i],
+                                               &data_path, &data_off) == 0);
+        }
+    }
+    if (!ptr_found) {
         /* Fall back: open file unbuffered to get exact post-END position. */
         data_path = heap_str(path);
         data_off  = 0; /* will be corrected by scan below */
@@ -1202,12 +1329,26 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
                    + (long)row  * record_stride
                    + pfx;
         break;
-    case P_PDS_ORG_BIL:
+    case P_PDS_ORG_BIL: {
+        /* QUBE sample-/band-suffix bytes (e.g. Cassini VIMS): a
+         * sample-suffix block is appended after each band's core
+         * samples within a line, and a band-suffix backplane is
+         * appended once per line after all bands -- both zero for
+         * cubes without suffix items, reducing to the plain BIL stride
+         * below. See p_pds_open_image_named()'s SUFFIX_ITEMS handling. */
+        long samp_sfx_bytes = (long)img->suffix_sample_items * img->suffix_item_bytes;
+        long band_record_stride = record_stride + samp_sfx_bytes;
+        long line_backplane_bytes = (long)img->suffix_band_items *
+                                     ((long)ns + img->suffix_sample_items) *
+                                     img->suffix_item_bytes;
+        long full_line_stride = band_record_stride * (long)img->bands +
+                                 line_backplane_bytes;
         seek_pos = img->data_offset
-                   + (long)row  * (record_stride * (long)img->bands)
-                   + (long)band * record_stride
+                   + (long)row  * full_line_stride
+                   + (long)band * band_record_stride
                    + pfx;
         break;
+    }
     case P_PDS_ORG_BIP:
         seek_pos = img->data_offset
                    + (long)row * (long)ns * (long)img->bands * bpp

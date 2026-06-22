@@ -97,7 +97,7 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # % required: no
 # % multiple: no
 # % label: Cassini VIMS observation: a catalog key (see -l) or a direct OPUS id
-# % description: Fetches a Cassini VIMS hyperspectral cube via the OPUS API -- a dedicated shortcut into the same opus_id= path below, without needing to hand-build an opus= search query. Use -l to list catalog keys. NOTE: raw VIMS .qub import currently fails (by design, not silently) -- see p.in.archive.md NOTES.
+# % description: Fetches a Cassini VIMS hyperspectral cube via the OPUS API -- a dedicated shortcut into the same opus_id= path below, without needing to hand-build an opus= search query. Use -l to list catalog keys.
 # %end
 
 # %option
@@ -1583,6 +1583,22 @@ def main():
             gs.message(f"Fetching label: {lbl_url}")
             _wget_resumable(lbl_url, lbl_fname)
 
+        # VIMS .qub labels reference shared "structure" files by relative
+        # filename (^STRUCTURE = "core_description.fmt", etc.) for the
+        # CORE_ITEM_BYTES/CORE_ITEM_TYPE/CORE_NULL/... keywords that
+        # describe how to actually read the pixel data -- without them
+        # p.in.pds3 silently falls back to a wrong default (8-bit
+        # unsigned) instead of the real 16-bit signed DN. OPUS already
+        # enumerates these alongside the .qub/.lbl; fetch any of them too,
+        # into the same local directory so p.in.pds3 finds them via the
+        # label's own relative path.
+        if dl_fname.lower().endswith(".qub"):
+            for url, fname, _pt in file_list:
+                if fname.lower().endswith(".fmt"):
+                    fmt_dest = os.path.join(os.path.dirname(dest), fname)
+                    gs.message(f"Fetching structure file: {url}")
+                    _wget_resumable(url, fmt_dest)
+
         gs.message(f"Fetching cube ({opt_vims_channel.upper()}): {dl_url}")
         _wget_resumable(dl_url, dest)
 
@@ -1603,8 +1619,12 @@ def main():
                 gs.run_command("g.region", n=nl, s=0, e=ns, w=0,
                                nsres=1, ewres=1, quiet=True)
         gs.message(f"Importing {kind} via p.in.pds3 …")
+        # VIMS .qub cubes are multi-band (352 IR / 96 VIS); register them in
+        # an imagery group, same convention as crism=/m3=. Single-band ISS
+        # .img products don't need one.
+        pds3_flags = ("g" if ext == ".qub" else "") + ("o" if flag_override else "")
         gs.run_command("p.in.pds3",
-                       flags="o" if flag_override else "",
+                       flags=pds3_flags,
                        input=import_path, output=opt_output, overwrite=True)
         # CISSCAL calibrated images use -1.91e+38 as an invalid-pixel sentinel.
         # p.in.pds3 imports those as real floats; convert to GRASS NULL so
@@ -1614,7 +1634,8 @@ def main():
             gs.run_command("r.mapcalc",
                            expression=f"{opt_output} = if({opt_output} < -1, null(), {opt_output})",
                            overwrite=True, quiet=True)
-        _align_region_to_raster(opt_output, save_default=False)
+        _align_region_to_raster(f"{opt_output}.1" if ext == ".qub" else opt_output,
+                                 save_default=False)
 
         # Infer sensor from OPUS ID prefix (co-iss-n* / co-iss-w* / co-vims-*).
         oid_lower = opus_id.lower()
@@ -1635,7 +1656,7 @@ def main():
                 _body_val = str(rows[0].get(tgt_key, _body_val or "")).upper() or _body_val
 
         p_meta.write_planetary_metadata(
-            opt_output,
+            f"{opt_output}.1" if ext == ".qub" else opt_output,
             module="p.in.archive",
             command=" ".join(sys.argv),
             data_type="image",
@@ -1645,7 +1666,11 @@ def main():
             pds_product_id=opus_id,
             source_file=dl_url,
         )
-        gs.message(f"Imported {kind} as '{opt_output}'.")
+        if ext == ".qub":
+            gs.message(f"Imported {kind} as imagery group '{opt_output}' "
+                       f"('{opt_output}.1' .. '{opt_output}.N').")
+        else:
+            gs.message(f"Imported {kind} as '{opt_output}'.")
         return
 
     # Validate: exactly one of doi/lid/search

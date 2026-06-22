@@ -122,6 +122,18 @@ typedef struct PPdsImage {
     long             data_offset;    /*!< byte offset from start of data file to first pixel */
     int              line_prefix_bytes; /*!< LINE_PREFIX_BYTES per row (e.g. ISS dark pixels) */
 
+    /* --- QUBE sideplane/backplane suffix bytes (BIL only) ------------ */
+    /* SUFFIX_ITEMS, ordered (sample,band,line) regardless of the
+     * label's own AXIS_NAME order. Real archives observed so far (e.g.
+     * Cassini VIMS) only ever use nonzero sample+band suffix items with
+     * BAND_STORAGE_TYPE = LINE_INTERLEAVED (BIL); suffix_line_items != 0
+     * or any other organisation is refused by p_pds_open_image() rather
+     * than guessing an unverified byte layout. */
+    int suffix_sample_items;  /*!< extra items appended after each band's core samples within a line */
+    int suffix_band_items;    /*!< extra backplane "rows" appended once per line, after all bands  */
+    int suffix_line_items;    /*!< not yet supported; nonzero refuses to open                       */
+    int suffix_item_bytes;    /*!< bytes per suffix item (4, matching all real archives seen so far) */
+
     /* --- file handle ------------------------------------------------ */
     char *data_path;    /*!< heap-owned path to binary data file           */
     void *_fp;          /*!< opaque FILE* (do not access directly)         */

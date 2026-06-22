@@ -41,12 +41,21 @@ listing, and a dedicated `<name>=` option:
 - **Cassini ISS/VIMS** (`opus=`/`opus_id=`, and now `vims=`) -- via the
   PDS Ring-Moon Systems Node's OPUS API, sensor inferred from the OPUS
   product ID prefix (`co-iss-n*`/`co-iss-w*`/`co-vims-*`). `vims=` added
-  this session as the formalized shortcut the priority list below asked
-  for, but raw VIMS `.qub` import itself remains blocked (see below) --
-  `vims=` correctly fetches the right file (and fixed a real OPUS-API
-  bug along the way: the files API requires the `_vis`/`_ir`-suffixed
-  observation id, not the bare one) but `p.in.pds3` now explicitly
-  refuses to read the cube rather than silently misread it.
+  as the formalized shortcut the priority list below asked for; the OPUS
+  API fix from that session still applies (the files API requires the
+  `_vis`/`_ir`-suffixed observation id, not the bare one).
+  **Raw VIMS `.qub` import unblocked in a later session** -- see the
+  `libs/p_pds` QUBE suffix-bytes fix below. `vims=` now also fetches the
+  `.fmt` "structure" files (`core_description.fmt`,
+  `suffix_description.fmt`, `band_bin_center.fmt`) that real VIMS labels
+  reference via `^STRUCTURE` instead of inlining (a second real gap found
+  alongside the suffix-bytes one: without these, `p.in.pds3` silently
+  fell back to a wrong 8-bit-unsigned default instead of the real
+  16-bit-signed DN). Verified live end-to-end against
+  `opus.pds-rings.seti.org`: real 352-band Titan flyby cube
+  (`v1799424623_1.qub`), sane non-uniform per-band DN ranges (e.g. band 1:
+  67-240, band 50: 67-1520), registered as an imagery group like
+  crism=/m3=.
 - **OMEGA** -- **investigated, not added.** Real, live ESA Planetary
   Science Archive source confirmed
   (`archives.esac.esa.int/psa/ftp/MARS-EXPRESS/OMEGA/MEX-M-OMEGA-2-EDR-FLIGHT-V1.0/DATA/ORB<NN>/ORB<NNNN>_<N>.QUB`,

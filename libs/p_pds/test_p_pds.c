@@ -315,6 +315,107 @@ static void test_named_object_selection(void)
     printf("PASS: test_named_object_selection\n");
 }
 
+static void test_vims_style_suffix_and_structure(void)
+{
+    /* Mirrors the real Cassini VIMS QUBE convention: AXIS_NAME =
+     * (SAMPLE,BAND,LINE) with no BAND_STORAGE_TYPE keyword at all (BIL
+     * must be inferred from axis order alone), CORE_ITEM_BYTES/TYPE
+     * factored into an external "structure" file referenced via
+     * ^STRUCTURE rather than inlined, and nonzero SUFFIX_ITEMS on both
+     * the sample and band axes (sideplane/backplane bytes that must be
+     * skipped, not exposed). 3 samples x 2 bands x 2 lines, INT16 MSB. */
+    char structpath[] = "/tmp/test_p_pds_struct_XXXXXX";
+    int sfd = mkstemp(structpath);
+    assert(sfd >= 0);
+    FILE *sfp = fdopen(sfd, "w");
+    assert(sfp);
+    fputs("CORE_ITEM_BYTES = 2\r\n"
+          "CORE_ITEM_TYPE = SUN_INTEGER\r\n", sfp);
+    fclose(sfp);
+    const char *struct_basename = strrchr(structpath, '/') + 1;
+
+    char tmppath[] = "/tmp/test_p_pds_vims_XXXXXX";
+    int fd = mkstemp(tmppath);
+    assert(fd >= 0);
+    FILE *fp = fdopen(fd, "w+b");
+    assert(fp);
+
+    const char *label_tmpl =
+        "PDS_VERSION_ID = PDS3\r\n"
+        "RECORD_TYPE    = UNDEFINED\r\n"
+        "OBJECT = QUBE\r\n"
+        "  AXES         = 3\r\n"
+        "  AXIS_NAME    = (SAMPLE,BAND,LINE)\r\n"
+        "  ^STRUCTURE   = \"%s\"\r\n"
+        "  CORE_ITEMS   = (3,2,2)\r\n"
+        "  SUFFIX_ITEMS = (1,1,0)\r\n"
+        "  ^QUBE        = %06ld <BYTES>\r\n"
+        "END_OBJECT = QUBE\r\n"
+        "END\r\n";
+
+    char label_buf[2048];
+    int label_len = snprintf(label_buf, sizeof(label_buf), label_tmpl,
+                              struct_basename, 0L);
+    assert(label_len > 0 && (size_t)label_len < sizeof(label_buf));
+    long data_off = label_len;
+    int label_len2 = snprintf(label_buf, sizeof(label_buf), label_tmpl,
+                               struct_basename, data_off);
+    assert(label_len2 == label_len); /* offset must format to the same width */
+
+    fwrite(label_buf, 1, (size_t)label_len, fp);
+
+    /* Data block: per line, per band, 3 INT16-MSB core samples + a
+     * 1-item (4 byte) sample-suffix; after both bands, a 1-row
+     * (3+1 items, 4 bytes each) band-suffix backplane. Suffix/backplane
+     * bytes are arbitrary filler -- only the core samples are checked,
+     * but a wrong skip-stride would misalign every later read. */
+    int16_t lines_bands_samples[2][2][3] = {
+        { {10,11,12}, {20,21,22} },
+        { {30,31,32}, {40,41,42} },
+    };
+    uint8_t filler4[4]  = {0xAA,0xAA,0xAA,0xAA};
+    uint8_t filler16[16] = {0xBB,0xBB,0xBB,0xBB,0xBB,0xBB,0xBB,0xBB,
+                             0xBB,0xBB,0xBB,0xBB,0xBB,0xBB,0xBB,0xBB};
+    for (int line = 0; line < 2; line++) {
+        for (int band = 0; band < 2; band++) {
+            for (int s = 0; s < 3; s++) {
+                int16_t v = lines_bands_samples[line][band][s];
+                uint8_t b[2] = { (uint8_t)((v >> 8) & 0xFF), (uint8_t)(v & 0xFF) };
+                fwrite(b, 1, 2, fp);
+            }
+            fwrite(filler4, 1, 4, fp);
+        }
+        fwrite(filler16, 1, 16, fp);
+    }
+    fflush(fp);
+    fclose(fp);
+
+    PPdsImage *img = p_pds_open_image(tmppath);
+    assert(img);
+    assert(img->samples == 3 && img->bands == 2 && img->lines == 2);
+    assert(img->organization == P_PDS_ORG_BIL);
+    assert(img->dtype == P_PDS_DTYPE_INT16);
+    assert(img->suffix_sample_items == 1 && img->suffix_band_items == 1);
+
+    double row_buf[3];
+    static const double expected[2][2][3] = {
+        { {10,11,12}, {20,21,22} },
+        { {30,31,32}, {40,41,42} },
+    };
+    for (int line = 0; line < 2; line++) {
+        for (int band = 0; band < 2; band++) {
+            assert(p_pds_read_row(img, band, line, row_buf, 0) == 0);
+            for (int s = 0; s < 3; s++)
+                assert(fabs(row_buf[s] - expected[line][band][s]) < 1e-9);
+        }
+    }
+
+    p_pds_close(img);
+    remove(tmppath);
+    remove(structpath);
+    printf("PASS: test_vims_style_suffix_and_structure\n");
+}
+
 /* ------------------------------------------------------------------ */
 /* ISIS3 test-data label (detached, no .img needed — label parse only) */
 /* ------------------------------------------------------------------ */
@@ -392,6 +493,7 @@ int main(void)
     test_byte_swap();
     test_synthetic_image();
     test_named_object_selection();
+    test_vims_style_suffix_and_structure();
     test_hirise_label_parse();
     printf("=== ALL PASSED ===\n");
     return 0;
