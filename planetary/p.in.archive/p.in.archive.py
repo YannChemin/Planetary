@@ -1300,16 +1300,30 @@ def main():
         if m:
             sensor = "MRO_CRISM_VNIR" if m.group(1).upper() == "S" else "MRO_CRISM_IR"
 
-        p_meta.write_planetary_metadata(
-            f"{opt_output}.1",
-            module="p.in.archive",
-            command=" ".join(sys.argv),
-            data_type="image",
-            sensor=sensor,
-            mission="MRO",
-            body=body_slug.upper(),
-            source_file=img_url,
-        )
+        # p.in.pds3 -g already wrote planetary.json for <output>.1 (generic
+        # sensor metadata); write_planetary_metadata() is create-only and
+        # would silently skip here, so update the existing record in place
+        # instead -- this is what actually makes the detector-specific
+        # sensor= reach p.phocube's auto-detection.
+        if p_meta.PlanetaryMetadata.exists(f"{opt_output}.1"):
+            meta = p_meta.PlanetaryMetadata.load(f"{opt_output}.1")
+            meta.sensor = sensor
+            meta.mission = "MRO"
+            meta.body = body_slug.upper()
+            meta.source_file = img_url
+            meta.add_history_entry(" ".join(sys.argv))
+            meta.save(f"{opt_output}.1")
+        else:
+            p_meta.write_planetary_metadata(
+                f"{opt_output}.1",
+                module="p.in.archive",
+                command=" ".join(sys.argv),
+                data_type="image",
+                sensor=sensor,
+                mission="MRO",
+                body=body_slug.upper(),
+                source_file=img_url,
+            )
         gs.message(f"Imported CRISM TRDR cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
 
