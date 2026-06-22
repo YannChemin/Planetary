@@ -72,8 +72,8 @@ LICENSE:   GNU GPL >=2
 # % key: model
 # % type: string
 # % required: no
-# % options: Isotropic1,Isotropic2,Anisotropic1,Anisotropic2
-# % answer: Isotropic2
+# % options: isotropic1,isotropic2,anisotropic1,anisotropic2
+# % answer: isotropic2
 # % label: Hapke/Chandrasekhar model passed to p.atcorr.hapke (thin regime only)
 # %end
 
@@ -224,8 +224,13 @@ def _retrieve_tau_proxy(db, body, atm_meta, wl_dict, smooth_sigma):
     tau = bd * k_ref
     out_of_range = np.isnan(bd) | (bd < bd_lo) | (bd > bd_hi)
     n_fallback = int(np.sum(out_of_range))
+    # tau_clear is the *fallback* for invalid retrievals only; a genuinely
+    # retrieved value below tau_clear is a real (clear-ish) pixel and must
+    # not be floored back up to tau_clear, or the per-pixel signal is
+    # silently discarded whenever k_ref * band_depth happens to undershoot
+    # tau_clear -- exactly the failure mode this comment exists to prevent.
     tau = np.where(out_of_range, tau_clear, tau)
-    tau = np.clip(tau, tau_clear, tau_dusty)
+    tau = np.clip(tau, 0.0, tau_dusty)
 
     if n_fallback:
         gs.verbose(
@@ -291,6 +296,19 @@ def _run_thin(db, body, band_names, wl_dict, output_prefix, opts, write_param):
     bins = np.linspace(atm_meta["tau_clear"], atm_meta["tau_dusty"], n_bins)
     wha = atm_meta["wha"]
 
+    # The retrieval can genuinely read below tau_clear or above tau_dusty
+    # for individual pixels (real noise, or a genuinely clearer/dustier
+    # pixel than the body's nominal bracket) -- the tau-bin table only
+    # spans [tau_clear, tau_dusty], so clamp a *correction-only* copy to
+    # that domain before bracketing. The diagnostic tau_proxy map written
+    # above keeps the true, unclamped per-pixel retrieval; only the value
+    # used to pick/interpolate Hapke bins is clamped here. (Regression:
+    # an earlier version had no separate clamp and left every pixel
+    # outside [tau_clear, tau_dusty] as NULL in the corrected output --
+    # caught by running this on real CRISM data, where most retrieved
+    # values fell below tau_clear.)
+    tau_for_bins = np.clip(tau_proxy, bins[0], bins[-1])
+
     gs.message(
         "Regime 'thin': {} tau bins x {} bands = {} p.atcorr.hapke calls."
         .format(n_bins, len(band_names), n_bins * len(band_names)))
@@ -301,14 +319,14 @@ def _run_thin(db, body, band_names, wl_dict, output_prefix, opts, write_param):
             corr_name = _hapke_correct_band(bn, float(tau_value), wha, opts)
             bin_arrays.append(pmb._read_band(corr_name))
 
-        out_arr = np.empty_like(tau_proxy)
+        out_arr = np.empty_like(tau_for_bins)
         out_arr[:] = float("nan")
         for i in range(n_bins - 1):
             lo, hi = bins[i], bins[i + 1]
-            mask = (tau_proxy >= lo) & (tau_proxy <= hi)
+            mask = (tau_for_bins >= lo) & (tau_for_bins <= hi)
             if not np.any(mask):
                 continue
-            t = (tau_proxy[mask] - lo) / (hi - lo)
+            t = (tau_for_bins[mask] - lo) / (hi - lo)
             out_arr[mask] = (bin_arrays[i][mask] * (1.0 - t)
                              + bin_arrays[i + 1][mask] * t)
 

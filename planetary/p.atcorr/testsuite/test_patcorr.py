@@ -156,7 +156,13 @@ class TestPatcorrUnit(TestCase):
 
     def test_retrieve_tau_proxy_in_range(self):
         """A band depth inside the valid range maps to band_depth * k_ref,
-        clipped to [tau_clear, tau_dusty]."""
+        ceiling-clipped to tau_dusty but NOT floored to tau_clear -- a
+        genuinely retrieved value smaller than tau_clear is a real signal
+        (a clearer-than-default pixel), not an invalid retrieval, and must
+        survive. (Regression: an earlier version floored every retrieval
+        to tau_clear, which silently zeroed the per-pixel signal whenever
+        k_ref * band_depth undershot tau_clear -- caught by running this
+        retrieval on real CRISM data, where it did exactly that.)"""
         import numpy as np
 
         db = self._load_db()
@@ -179,8 +185,52 @@ class TestPatcorrUnit(TestCase):
 
         tau = self.mod._retrieve_tau_proxy(db, "mars", atm, wl_dict, None)
         # bd = 0.10 is within [0.02, 0.6]; k_ref = 1.0 => tau_proxy = 0.10,
-        # then clipped up to tau_clear = 0.3 (the floor of the body's range).
-        self.assertTrue(np.allclose(tau, 0.3))
+        # below tau_clear (0.3) but that is a real retrieved value, not a
+        # fallback condition, so it must pass through unfloored.
+        self.assertTrue(np.allclose(tau, 0.10))
+
+    def test_run_thin_handles_retrieved_tau_below_tau_clear(self):
+        """Regression test for the real-CRISM-data bug: a retrieved tau
+        below tau_clear must still produce a non-NULL corrected pixel
+        (clamped into the tau-bin table's range for bin selection), not
+        silently NULL the output."""
+        import shutil
+        if not shutil.which("p.atcorr.hapke"):
+            self.skipTest("p.atcorr.hapke not on PATH")
+        import numpy as np
+
+        db = self._load_db()
+        db["body_meta"]["mars"]["atmosphere"]["tau_clear"] = 0.3
+        db["body_meta"]["mars"]["atmosphere"]["tau_dusty"] = 1.5
+
+        # Retrieval triplet: bd = 0.10 (in-range) * k_ref=1.0 -> tau_proxy
+        # = 0.10, well below tau_clear = 0.3.
+        _create_synthetic_band("patcorr_test_thin_left", 1.0, self.region)
+        _create_synthetic_band("patcorr_test_thin_center", 0.90, self.region)
+        _create_synthetic_band("patcorr_test_thin_right", 1.0, self.region)
+        # The band actually being corrected (arbitrary reflectance).
+        _create_synthetic_band("patcorr_test_thin_real", 0.20, self.region)
+        _create_synthetic_band("patcorr_test_inc", 30.0, self.region)
+        _create_synthetic_band("patcorr_test_emi", 5.0, self.region)
+        _create_synthetic_band("patcorr_test_pha", 25.0, self.region)
+
+        wl_dict = {
+            "patcorr_test_thin_left": 1.0, "patcorr_test_thin_center": 1.3,
+            "patcorr_test_thin_right": 1.6, "patcorr_test_thin_real": 1.3,
+        }
+        opts = {
+            "incidence": "patcorr_test_inc", "emission": "patcorr_test_emi",
+            "phase": "patcorr_test_pha", "model": "isotropic2",
+            "tau_bins": 2, "smooth": None,
+        }
+        self.mod._run_thin(db, "mars",
+                           ["patcorr_test_thin_left", "patcorr_test_thin_center",
+                            "patcorr_test_thin_right", "patcorr_test_thin_real"],
+                           wl_dict, "patcorr_test_thin_out", opts, False)
+
+        out = self.mod.pmb._read_band("patcorr_test_thin_out.patcorr_test_thin_real")
+        self.assertFalse(np.any(np.isnan(out)),
+                         "retrieved tau below tau_clear must not NULL the output")
 
     def test_retrieve_tau_proxy_out_of_range_falls_back_to_tau_clear(self):
         import numpy as np

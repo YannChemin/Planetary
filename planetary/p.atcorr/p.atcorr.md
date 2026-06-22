@@ -85,6 +85,33 @@ against a known-clear reference scene; treat `tau_proxy` as
 relative/qualitative until calibrated, and inspect it directly with the
 **-m** flag before trusting the corrected output quantitatively.
 
+### Validated against real data
+
+The Mars `thin`-regime path was run end-to-end on the real CRISM
+FRT00003BFB cube used throughout this repo's Mars Mineralogy chapter
+(438 bands, 5 τ bins, 2190 `p.atcorr.hapke` calls). Two real defects only
+surfaced this way, on real retrieved values, not on synthetic test data:
+
+- **Retrieved τ silently floored to `tau_clear`.** An earlier version
+  clipped every retrieved value to a lower bound of `tau_clear`, which is
+  correct for the out-of-range *fallback* case but wrong for in-range
+  retrievals: with this scene's real CO₂ band depths (0–0.29) and the
+  placeholder `k_ref=0.42`, every single retrieved value was below
+  `tau_clear=0.3` and the entire per-pixel signal collapsed to one flat
+  scalar — exactly the failure mode `p.atcorr` exists to avoid. Fixed by
+  floor-clamping only to 0 (physical non-negativity), reserving
+  `tau_clear` strictly for the invalid/out-of-range fallback.
+- **Retrieved τ below `tau_clear` nulled the output.** Once the above fix
+  let real sub-`tau_clear` values through, they fell outside the
+  `[tau_clear, tau_dusty]` span the τ-bin table is built over, and every
+  such pixel came out NULL in the corrected bands (282/960 pixels on this
+  scene, versus 60 genuinely-null input pixels). Fixed by clamping a
+  *correction-only* copy of the retrieved τ into the bin table's domain
+  for bracket selection, while the **-m** diagnostic map still reports the
+  true, unclamped per-pixel retrieval.
+
+Both are covered by regression tests in `testsuite/test_patcorr.py`.
+
 ### Not implemented (out of scope for this version)
 
 Wavelength-dependent τ(λ) via an Ångström exponent, joint AOD+H₂O optimal
@@ -98,12 +125,37 @@ documents.
 
 ## EXAMPLES
 
-Mars, thin regime — requires `p.phocube` geometry:
+Mars, thin regime — requires `p.phocube` geometry. **`p.phocube` currently
+computes a flat-field/ellipsoid-intercept geometry, not real per-pixel
+SPICE ephemeris**, despite what `p.phocube.md`'s own description implies —
+its actual installed interface is `input=`/`output=`/`target=` with
+`-iep` flags and `sun_x/y/z`, `obs_x/y/z` body-fixed vectors applied
+uniformly to the whole scene (`p.phocube --help` is authoritative; treat
+the `-s`/SPICE-history mode described in its `.md` as aspirational until
+that gap is closed). It also derives each pixel's lat/lon directly from
+the GRASS region's east/north, so **the active region must already be set
+to the scene's real geographic footprint** (not a pixel/line sample-line
+grid, e.g. as `p.in.pds3 -g` sets up for un-projected CRISM TRDR cubes) —
+otherwise sample/line indices get silently treated as degrees of
+longitude/latitude:
 
 ```sh
-p.phocube body=mars output=geom
-p.atcorr input=crism_mawrth_ir body=mars \
-    incidence=geom_incidence emission=geom_emission phase=geom_phase \
+# Region must be the real ground footprint (e.g. from the product's own
+# corner coordinates), not the sensor's native pixel/line grid:
+g.region n=22.406 s=22.272 e=-17.946 w=-18.433 rows=15 cols=64
+p.phocube input=crism_mawrth_ir.1 target=mars \
+    sun_x=0.55 sun_y=-0.10 sun_z=0.82 \
+    obs_x=3254.8 obs_y=-1057.5 obs_z=1406.4 \
+    -iep output=mawrth_geom_geo
+# Copy the resulting backplanes onto the cube's actual (pixel/line) region
+# before calling p.atcorr -- a row/col-shaped numpy round-trip via
+# r.out.bin/r.in.bin, not a reprojection, since both regions share the
+# same row/col count. See 00_download_and_import.sh in the Mars Mineralogy
+# chapter for the full worked version of this step.
+g.region raster=crism_mawrth_ir.1
+p.atcorr input=crism_mawrth_ir body=mars wavelengths=wavelengths_L.csv \
+    incidence=mawrth_geom_incidence emission=mawrth_geom_emission \
+    phase=mawrth_geom_phase \
     tau_bins=5 -m output=mawrth_corrected
 ```
 

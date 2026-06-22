@@ -3,13 +3,16 @@
  * MODULE:       p.spiceinit
  * AUTHOR(S):    Yann Chemin - dr.yann.chemin@gmail.com
  * PURPOSE:      Attach SPICE kernel assignments to a GRASS raster map so
- *               that subsequent p.* geometry modules (p.phocube, p.cam2map)
- *               can load the correct kernels automatically.
+ *               that subsequent p.* geometry modules (p.phocube -s) can
+ *               load the correct kernels automatically.
  *
- *               Kernel paths are stored as GRASS map metadata in a
- *               dedicated column table (SPICE_KERNELS) attached to the
- *               raster map.  The module also validates that every specified
- *               kernel file is readable and loads correctly via p_spice.
+ *               Kernel paths, target body, observer/spacecraft name, and
+ *               observation UTC time are each stored as one
+ *               "SPICE_<KEY>=<value>" line appended to the raster's
+ *               history free-text lines (Rast_append_history) -- not a
+ *               separate database table. The module also validates that
+ *               every specified kernel file is readable and loads
+ *               correctly via p_spice.
  *
  * LICENSE:      The Unlicense - public domain dedication.
  *               SPDX-License-Identifier: Unlicense
@@ -40,6 +43,15 @@
 /* ------------------------------------------------------------------ */
 /* Store a semicolon-separated list of paths in raster misc data.     */
 /* Uses GRASS's native key=value metadata (stored in cell_misc/).     */
+/*                                                                     */
+/* Each call APPENDS one "SPICE_<KEY>=<value>" line to the history's  */
+/* free-text lines section (Rast_append_history). HIST_KEYWRD is a    */
+/* single fixed field -- Rast_set_history(hist, HIST_KEYWRD, ...)     */
+/* would silently overwrite whatever a *previous* call to this        */
+/* function had just written, so that every kernel type but the last */
+/* processed (and TARGET/OBSERVER/TIME, depending on call order)      */
+/* would be lost on disk. Rast_append_history accumulates one line    */
+/* per call instead, which is what repeated SPICE_* entries need.     */
 /* ------------------------------------------------------------------ */
 static void store_kernel_list(const char *mapname, const char *mapset,
                                const char *key, char **paths, int n)
@@ -51,21 +63,17 @@ static void store_kernel_list(const char *mapname, const char *mapset,
         strncat(combined, paths[i], sizeof(combined)-strlen(combined)-1);
     }
 
-    /* Write to GRASS raster history extra data section. */
     struct History hist;
     int have_hist = (Rast_read_history(mapname, mapset, &hist) >= 0);
     if (!have_hist)
         Rast_short_history(mapname, "raster", &hist);
 
-    /* Use the command-line comment field to store the SPICE key=value pair.
-     * GRASS doesn't have a generic key-value store for rasters outside the
-     * database; we embed it in the history ECOM (extra commands) section. */
     char entry[8300];
     snprintf(entry, sizeof(entry), "%s%s=%s", SPICE_META_PREFIX, key, combined);
 
-    /* Rast_set_history stores strings in the HIST structure. */
-    Rast_set_history(&hist, HIST_KEYWRD, entry);
+    Rast_append_history(&hist, entry);
     Rast_write_history(mapname, &hist);
+    Rast_free_history(&hist);
 }
 
 /* ================================================================== */
@@ -74,6 +82,7 @@ int main(int argc, char *argv[])
     struct GModule *module;
     struct Option  *opt_map, *opt_lsk, *opt_sclk, *opt_ck;
     struct Option  *opt_spk, *opt_ik, *opt_fk, *opt_pck, *opt_target;
+    struct Option  *opt_observer, *opt_time;
     struct Flag    *flag_test;
 
     G_gisinit(argv[0]);
@@ -86,10 +95,11 @@ int main(int argc, char *argv[])
     G_add_keyword(_("geometry"));
     module->label       = _("Attach SPICE kernel assignments to a GRASS raster map.");
     module->description = _("Validates and stores paths to NAIF SPICE kernels (LSK, SCLK, "
-                             "CK, SPK, IK, FK, PCK) in the raster map's metadata. "
-                             "Subsequent modules p.phocube, p.cam2map, p.caminfo read these "
-                             "paths automatically so kernels need not be specified repeatedly. "
-                             "Multiple paths per kernel type are separated by commas.");
+                             "CK, SPK, IK, FK, PCK), target body, observer, and observation "
+                             "time in the raster map's history metadata. p.phocube's SPICE "
+                             "mode (-s) reads these back automatically so kernels need not "
+                             "be specified repeatedly. Multiple paths per kernel type are "
+                             "separated by commas.");
 
     opt_map = G_define_standard_option(G_OPT_R_INPUT);
     opt_map->key         = "map";
@@ -100,6 +110,22 @@ int main(int argc, char *argv[])
     opt_target->type        = TYPE_STRING;
     opt_target->required    = NO;
     opt_target->description = _("Target body name (e.g. MARS, MOON) — stored for downstream modules");
+
+    opt_observer = G_define_option();
+    opt_observer->key         = "observer";
+    opt_observer->type        = TYPE_STRING;
+    opt_observer->required    = NO;
+    opt_observer->description = _("Observer/spacecraft name as known to the loaded kernels "
+                                   "(e.g. MRO) — stored for downstream modules such as "
+                                   "p.phocube's SPICE mode (-s)");
+
+    opt_time = G_define_option();
+    opt_time->key         = "time";
+    opt_time->type        = TYPE_STRING;
+    opt_time->required    = NO;
+    opt_time->description = _("Observation UTC time (single mid-scene epoch, ISO 8601), "
+                              "e.g. 2007-01-05T01:26:56 — stored for downstream modules "
+                              "such as p.phocube's SPICE mode (-s)");
 
     opt_lsk = G_define_option();
     opt_lsk->key         = "lsk";
@@ -239,6 +265,24 @@ int main(int argc, char *argv[])
         G_message(_("Target body: %s"), opt_target->answer);
     }
 
+    /* Store observer/spacecraft name if given. */
+    if (opt_observer->answer) {
+        char paths_arr[1][256];
+        strncpy(paths_arr[0], opt_observer->answer, 255);
+        char *pp[1] = { paths_arr[0] };
+        store_kernel_list(mapname, mapset, "OBSERVER", pp, 1);
+        G_message(_("Observer: %s"), opt_observer->answer);
+    }
+
+    /* Store observation UTC time if given. */
+    if (opt_time->answer) {
+        char paths_arr[1][256];
+        strncpy(paths_arr[0], opt_time->answer, 255);
+        char *pp[1] = { paths_arr[0] };
+        store_kernel_list(mapname, mapset, "TIME", pp, 1);
+        G_message(_("Observation time: %s"), opt_time->answer);
+    }
+
     /* Clean up CSPICE state after test (do not leave kernels loaded
      * between runs — each module loads its own session). */
     if (do_test) {
@@ -246,7 +290,8 @@ int main(int argc, char *argv[])
         G_message(_("CSPICE test-load complete. All kernels unloaded."));
     }
 
-    if (total_loaded == 0 && !opt_target->answer)
+    if (total_loaded == 0 && !opt_target->answer && !opt_observer->answer &&
+        !opt_time->answer)
         G_warning(_("No kernel files were registered. "
                     "Specify at least one kernel type option."));
 
