@@ -360,6 +360,28 @@ const char *p_pvl_value(const PPvlNode *parent, const char *key)
     return n ? n->value : NULL;
 }
 
+/* Recursive depth-first search for a scalar key (e.g. a ^POINTER keyword)
+ * anywhere under parent, including inside nested OBJECT/GROUP blocks.
+ * Needed because some PDS3 archives (e.g. MRO/CRISM TRDR) wrap multiple
+ * data objects in an enclosing "OBJECT = FILE" block, placing pointer
+ * keywords like ^IMAGE one level below the label root rather than at the
+ * top level that p_pvl_find() alone would see. */
+static PPvlNode *pvl_find_scalar_deep(const PPvlNode *parent, const char *key)
+{
+    if (!parent) return NULL;
+    PPvlNode *hit = p_pvl_find(parent, key);
+    if (hit) return hit;
+    PPvlNode *n = parent->children;
+    while (n) {
+        if (n->type == P_PVL_OBJECT || n->type == P_PVL_GROUP) {
+            hit = pvl_find_scalar_deep(n, key);
+            if (hit) return hit;
+        }
+        n = n->next;
+    }
+    return NULL;
+}
+
 double p_pvl_value_double(const PPvlNode *parent, const char *key, int *ok)
 {
     const char *v = p_pvl_value(parent, key);
@@ -544,6 +566,20 @@ static int has_label_extension(const char *path)
  *   42                          → attached, byte offset
  *   ("filename.img", 42)        → detached, record offset (needs RECORD_BYTES)
  */
+/* RECORD_BYTES may live at label root or, in FILE-wrapped labels (e.g.
+ * MRO/CRISM TRDR), one level down inside the enclosing OBJECT = FILE
+ * block — use the recursive scalar search so both layouts resolve. */
+static int record_bytes_deep(const PPvlNode *root, int *ok)
+{
+    PPvlNode *n = pvl_find_scalar_deep(root, "RECORD_BYTES");
+    if (!n || !n->value) { *ok = 0; return 0; }
+    char *end;
+    long v = strtol(n->value, &end, 0);
+    if (end == n->value) { *ok = 0; return 0; }
+    *ok = 1;
+    return (int)v;
+}
+
 static int resolve_data_pointer(PPvlNode *root, const char *label_path,
                                  const char *object_name,
                                  char **data_path_out, long *offset_out)
@@ -552,7 +588,7 @@ static int resolve_data_pointer(PPvlNode *root, const char *label_path,
     char ptr_key[64];
     snprintf(ptr_key, sizeof(ptr_key), "^%s", object_name);
 
-    PPvlNode *ptr_node = p_pvl_find(root, ptr_key);
+    PPvlNode *ptr_node = pvl_find_scalar_deep(root, ptr_key);
     if (!ptr_node || !ptr_node->value) {
         G_warning(_("p_pds: could not find pointer keyword '%s'"), ptr_key);
         return -1;
@@ -597,7 +633,7 @@ static int resolve_data_pointer(PPvlNode *root, const char *label_path,
         if (has_bytes_unit) {
             *offset_out = val;
         } else {
-            int rec_bytes = p_pvl_value_int(root, "RECORD_BYTES", &ok);
+            int rec_bytes = record_bytes_deep(root, &ok);
             *offset_out = ok ? (val - 1) * (long)rec_bytes : 0;
         }
         *data_path_out = heap_str(label_path);
@@ -630,7 +666,7 @@ static int resolve_data_pointer(PPvlNode *root, const char *label_path,
             }
             else {
                 /* No unit: treat as record index (1-based). */
-                int rec_bytes = p_pvl_value_int(root, "RECORD_BYTES", &ok);
+                int rec_bytes = record_bytes_deep(root, &ok);
                 long rec_idx  = strtol(off_str, NULL, 10);
                 byte_off = ok ? (rec_idx - 1) * (long)rec_bytes : 0;
             }
@@ -797,6 +833,13 @@ PPdsImage *p_pds_open_image(const char *path)
     /* --- Special pixel DN values. */
     img->dn_null = p_pvl_value_double(img_obj, "CORE_NULL",                   &ok);
     if (!ok) img->dn_null = p_pvl_value_double(img_obj, "MISSING_CONSTANT",   &ok);
+    /* When neither keyword is present (e.g. MRO/CRISM TRDR labels), do NOT
+     * default to 0.0: is_special_dn()'s epsilon=0.5 window would then null
+     * every real sample within [-0.5, 0.5] — silently destroying almost all
+     * legitimate reflectance/I-F data, which lives in exactly that range.
+     * NaN never matches the epsilon comparison, so no value is treated as
+     * special when the product defines no null constant. */
+    if (!ok) img->dn_null = NAN;
     img->dn_lrs  = p_pvl_value_double(img_obj, "CORE_LOW_REPR_SATURATION",    &ok);
     img->dn_lis  = p_pvl_value_double(img_obj, "CORE_LOW_INSTR_SATURATION",   &ok);
     img->dn_hrs  = p_pvl_value_double(img_obj, "CORE_HIGH_REPR_SATURATION",   &ok);
