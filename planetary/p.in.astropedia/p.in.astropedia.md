@@ -30,6 +30,18 @@ three public registries:
   `.qub` product file (resumable), and imports via `p.in.pds3`.
   Endpoint: `https://opus.pds-rings.seti.org/api`
 
+- **MRO/CRISM TRDR products** (`crism=`) — the PDS Geosciences Node static
+  archive (`pds-geosciences.wustl.edu`) is the *only* working source for
+  CRISM Targeted RDR hyperspectral cubes: CRISM is absent from OPUS's
+  instrument catalog (outer-planet/ring-science only — no MRO instruments
+  at all) and CRISM TRDR products are **not indexed** in the NASA PDS
+  Federated Search even by exact LID (confirmed empty `hits:0` against a
+  real, verified LID). `crism=` fetches the `.IMG` + companion `.LBL`
+  directly from this archive's `trdr/<year>/<doy>/<OBSID>/` tree (resumable,
+  via `wget -c`) and imports the multi-band cube as a GRASS imagery group
+  via `p.in.pds3 -g`. Pass a catalog key (see `-l`) or a direct `https` URL
+  to a `.IMG`.
+
 On download, the file format is detected by extension and dispatched
 to the appropriate GRASS importer:
 
@@ -97,6 +109,42 @@ p.in.astropedia opus_id=co-vims-v1590123456 vims_channel=ir output=vims_ir
 VIMS cubes are PDS3 format; both `.qub` channels (VIS: 96 bands,
 0.35–1.05 µm; IR: 256 bands, 0.88–5.1 µm) are imported via `p.in.pds3`.
 The companion `.lbl` label file is fetched automatically.
+
+### MRO/CRISM TRDR products (`crism=`)
+
+```sh
+# List the built-in CRISM catalog
+p.in.astropedia -l
+
+# Import the Mawrth Vallis FRT00003BFB VNIR cube (S detector, 107 bands)
+p.in.astropedia crism=mawrth_vallis_frt00003bfb_vnir output=crism_mawrth_vnir
+
+# Import the IR cube (L detector, 438 bands, 1.00-3.92 um)
+p.in.astropedia crism=mawrth_vallis_frt00003bfb_ir output=crism_mawrth_ir
+
+# Or pass a direct https URL to any other TRDR .IMG on the archive
+p.in.astropedia \
+    crism="https://pds-geosciences.wustl.edu/mro/mro-m-crism-3-rdr-targeted-v1/mrocr_2101/trdr/2007/2007_005/FRT00003BFB/FRT00003BFB_01_IF156L_TRR3.IMG" \
+    output=crism_mawrth_ir
+```
+
+Both catalog entries were verified live end-to-end (HTTP 200 on `.IMG`
+and `.LBL`, successful `p.in.pds3 -g` import). `output=` becomes a GRASS
+imagery group (`output.1` .. `output.N`, one raster per spectral band),
+mirroring `p.in.pds3 -g`'s own convention; the region is aligned to
+`output.1` after import. Downloads land in `~/RSDATA/Mars/` and are
+resumable via `wget -c`, same as the OPUS path.
+
+CRISM detector naming: **L** = long-wavelength/IR detector (1.00–3.92 µm,
+438 bands); **S** = short-wavelength/VNIR detector (0.36–1.05 µm,
+typically 107–184 bands depending on the segment's spectral binning).
+A given FRT (Full Resolution Targeted) observation ID can have multiple
+repeat segments (`_01_`, `_02_`, `_03_`, ...) acquired during the same
+multi-pass campaign; the wavelength-filter code (e.g. `156`, `166`)
+varies per segment and cannot be derived from the observation ID alone —
+it was resolved here by greping the volume's
+`collection_data_trdr_inventory.csv` and the monthly `index/trdrMMYY_index.tab`
+table (column `FILE_SPECIFICATION_NAME`) on the real archive.
 
 Downloads land in `~/RSDATA/<Body>/` and are resumable via `wget -c`.
 
@@ -290,6 +338,7 @@ d.mon start=wx0 && d.rast "${POLMAP}"
 - USGS Astropedia STAC API: <https://stac.astrogeology.usgs.gov/api/>
 - NASA PDS Federated Search API: <https://pds.nasa.gov/api/search/1/>
 - OPUS Ring-Moon Systems Node API: <https://opus.pds-rings.seti.org/api/>
+- PDS Geosciences Node, MRO/CRISM TRDR archive: <https://pds-geosciences.wustl.edu/mro/mro-m-crism-3-rdr-targeted-v1/>
 - STAC specification: <https://stacspec.org/>
 - PDS4 Information Model: <https://pds.nasa.gov/datastandards/documents/>
 

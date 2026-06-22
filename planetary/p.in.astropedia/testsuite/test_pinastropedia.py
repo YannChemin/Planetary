@@ -9,6 +9,8 @@ are skipped gracefully when the host has no internet access.
 @license Unlicense (https://unlicense.org)
 """
 
+import importlib.util
+import os
 import shutil
 import subprocess
 import unittest
@@ -20,6 +22,7 @@ from grass.gunittest.gmodules import SimpleModule
 
 
 STAC_BASE = "https://stac.astrogeology.usgs.gov/api"
+CRISM_ARCHIVE_BASE = "https://pds-geosciences.wustl.edu"
 
 
 def _network_available():
@@ -31,7 +34,27 @@ def _network_available():
         return False
 
 
+def _crism_archive_available():
+    try:
+        urllib.request.urlopen(CRISM_ARCHIVE_BASE, timeout=5)
+        return True
+    except Exception:
+        return False
+
+
 NETWORK = _network_available()
+CRISM_NETWORK = _crism_archive_available()
+
+
+def _load_module_under_test():
+    """Load p.in.astropedia.py by file path (filename has dots, so it can't
+    be imported as a regular module name)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(here, "..", "p.in.astropedia.py")
+    spec = importlib.util.spec_from_file_location("p_in_astropedia_mut", script_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 class TestPinAstropedia(TestCase):
@@ -94,6 +117,79 @@ class TestPinAstropedia(TestCase):
             lid="urn:nasa:pds:mgs-mola-dem-mars:data:megt90n000cb",
             limit=1)
         self.assertModule(module)
+
+
+class TestPinAstropediaCrismCatalog(unittest.TestCase):
+    """White-box tests for the crism= catalog resolver (no network)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_module_under_test()
+
+    def test_catalog_has_mawrth_vallis_entries(self):
+        self.assertIn("mawrth_vallis_frt00003bfb_ir", self.mod.CRISM_CATALOG)
+        self.assertIn("mawrth_vallis_frt00003bfb_vnir", self.mod.CRISM_CATALOG)
+
+    def test_resolve_crism_catalog_key(self):
+        img_url, lbl_url, body = self.mod.resolve_crism(
+            "mawrth_vallis_frt00003bfb_vnir")
+        self.assertTrue(img_url.endswith(".IMG"))
+        self.assertTrue(lbl_url.endswith(".LBL"))
+        self.assertEqual(body, "Mars")
+        self.assertIn("pds-geosciences.wustl.edu", img_url)
+
+    def test_resolve_crism_direct_url(self):
+        url = (f"{CRISM_ARCHIVE_BASE}/mro/mro-m-crism-3-rdr-targeted-v1/"
+               "mrocr_2101/trdr/2007/2007_005/FRT00003BFB/"
+               "FRT00003BFB_01_IF156L_TRR3.IMG")
+        img_url, lbl_url, body = self.mod.resolve_crism(url)
+        self.assertEqual(img_url, url)
+        self.assertTrue(lbl_url.endswith("FRT00003BFB_01_IF156L_TRR3.LBL"))
+        self.assertIsNone(body)
+
+    def test_resolve_crism_rejects_non_img_url(self):
+        with self.assertRaises(SystemExit):
+            self.mod.resolve_crism(f"{CRISM_ARCHIVE_BASE}/some/file.tif")
+
+    def test_resolve_crism_unknown_key_fails(self):
+        with self.assertRaises(SystemExit):
+            self.mod.resolve_crism("not_a_real_catalog_key")
+
+
+class TestPinAstropediaCrismCli(TestCase):
+    """Black-box CLI tests for crism= (mutual exclusion, listing)."""
+
+    def test_crism_conflicts_with_cog(self):
+        module = SimpleModule("p.in.astropedia",
+                               crism="mawrth_vallis_frt00003bfb_vnir",
+                               cog="mars_mola_dem_463m",
+                               output="dummy")
+        self.assertModuleFail(module)
+
+    def test_crism_conflicts_with_doi(self):
+        module = SimpleModule("p.in.astropedia",
+                               crism="mawrth_vallis_frt00003bfb_vnir",
+                               doi="10.17189/1519101",
+                               output="dummy")
+        self.assertModuleFail(module)
+
+    def test_crism_requires_output(self):
+        module = SimpleModule("p.in.astropedia",
+                               crism="mawrth_vallis_frt00003bfb_vnir")
+        self.assertModuleFail(module)
+
+    def test_crism_unknown_key_fails(self):
+        module = SimpleModule("p.in.astropedia",
+                               crism="not_a_real_catalog_key",
+                               output="dummy")
+        self.assertModuleFail(module)
+
+    def test_list_includes_crism_catalog(self):
+        """-l (no other source) must list both the COG and CRISM catalogs."""
+        module = SimpleModule("p.in.astropedia", flags="l")
+        self.assertModule(module)
+        combined = (module.outputs.stdout or "") + (module.outputs.stderr or "")
+        self.assertIn("mawrth_vallis_frt00003bfb_ir", combined)
 
 
 if __name__ == "__main__":
