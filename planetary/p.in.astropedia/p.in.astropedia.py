@@ -172,6 +172,7 @@ import urllib.error
 import urllib.parse
 
 import grass.script as gs
+import grass.exceptions
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import p_meta
@@ -645,7 +646,7 @@ def import_file(local_path, output_name, band=1, override_proj=False):
                            output=output_name,
                            band=band,
                            overwrite=True)
-        except gs.CalledModuleError:
+        except grass.exceptions.CalledModuleError:
             if override_proj:
                 raise
             # USGS Astropedia STAC products (HiRISE, CTX, THEMIS, ...) each
