@@ -208,6 +208,23 @@ void p_pvl_free(PPvlNode *root);
 PPdsImage *p_pds_open_image(const char *path);
 
 /*!
+ * \brief Open a PDS3 product, selecting a specific named image OBJECT.
+ *
+ * For labels that describe more than one image object (e.g. JPL PDS
+ * Imaging Node M3 L1B products, whose single attached label carries
+ * RDN_IMAGE, LOC_IMAGE and OBS_IMAGE side by side), p_pds_open_image()
+ * always picks the first match. Use this to target a specific one by
+ * its PDS3 object name (the same name used in its "^NAME" pointer
+ * keyword, e.g. "LOC_IMAGE" or "OBS_IMAGE").
+ *
+ * \param path         path to the PDS3 label file
+ * \param object_name  exact OBJECT name to open (e.g. "LOC_IMAGE"); if
+ *                      NULL, behaves exactly like p_pds_open_image()
+ * \return heap-allocated PPdsImage, or NULL on error (calls G_warning)
+ */
+PPdsImage *p_pds_open_image_named(const char *path, const char *object_name);
+
+/*!
  * \brief Read one row of one band into a caller-provided DCELL buffer.
  *
  * Applies OFFSET + SCALING_FACTOR so the returned values are physical DN

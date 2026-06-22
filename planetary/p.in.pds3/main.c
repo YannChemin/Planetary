@@ -41,7 +41,7 @@ static void write_band(PPdsImage *img, int band,
 int main(int argc, char *argv[])
 {
     struct GModule *module;
-    struct Option  *opt_input, *opt_output;
+    struct Option  *opt_input, *opt_output, *opt_object;
     struct Flag    *flag_group, *flag_null;
 
 
@@ -70,6 +70,17 @@ int main(int argc, char *argv[])
     opt_output = G_define_standard_option(G_OPT_R_OUTPUT);
     opt_output->description = _("Name for output raster map (band suffix added for multi-band)");
 
+    opt_object = G_define_option();
+    opt_object->key         = "object";
+    opt_object->type        = TYPE_STRING;
+    opt_object->required    = NO;
+    opt_object->description = _("Exact PDS3 OBJECT name to import, for labels "
+                                 "describing more than one image object side "
+                                 "by side (e.g. M3 L1B's LOC_IMAGE or "
+                                 "OBS_IMAGE, alongside the default RDN_IMAGE). "
+                                 "Default: the first IMAGE/QUBE/SPECTRAL_QUBE "
+                                 "(or *_IMAGE/*_QUBE) object found.");
+
     flag_group = G_define_flag();
     flag_group->key         = 'g';
     flag_group->description = _("Register output maps in a GRASS imagery group");
@@ -90,7 +101,7 @@ int main(int argc, char *argv[])
     /* Open the PDS3 product                                              */
     /* ---------------------------------------------------------------- */
     G_message(_("Opening PDS3 product: %s"), input);
-    PPdsImage *img = p_pds_open_image(input);
+    PPdsImage *img = p_pds_open_image_named(input, opt_object->answer);
     if (!img)
         G_fatal_error(_("Cannot open PDS3 product '%s'"), input);
 

@@ -182,6 +182,11 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # % description: Fetch and attach real SPICE kernels for camera-mode geometry after import (crism= only). Calls p.spice.find then p.spiceinit using the real observation time/body already known from the label. Opt-in: kernel downloads are large (often 100s of MB) and not needed unless you intend to run p.phocube -c on the result.
 # %end
 
+# %flag
+# % key: g
+# % description: Also fetch and import the M3 L1B geometry companion cubes (m3= only): LOC_IMAGE (per-pixel longitude/latitude/radius, 3 bands) and OBS_IMAGE (per-pixel illumination/viewing geometry -- to-sun/to-instrument azimuth and zenith, phase angle, path lengths, facet slope/aspect/cos-i, 10 bands). Unlike CRISM, M3's L1B product ships this geometry precomputed -- no SPICE/camera-model step needed, just importing the extra cubes that are already in the same archive directory as the radiance cube.
+# %end
+
 # %option
 # % key: project
 # % type: string
@@ -730,6 +735,56 @@ def _attach_crism_spice(local_lbl, map_band1, body_slug):
                f"({sum(len(v) for v in found.values())} kernel file(s)).")
 
 
+def _attach_m3_geometry(local_lbl, img_url, output, body_slug):
+    """Fetch and import M3 L1B's LOC/OBS geometry companion cubes.
+
+    Unlike CRISM, M3's L1B product ships per-pixel geometry precomputed
+    (no SPICE/camera-model step needed): the same attached label that
+    describes RDN_IMAGE also describes LOC_IMAGE (longitude/latitude/
+    radius, 3 bands) and OBS_IMAGE (illumination/viewing angles, 10
+    bands) -- both pointing at companion *_LOC.IMG/*_OBS.IMG files that
+    live alongside the radiance cube in the same archive directory.
+    p.in.pds3's object= option (added for this) selects each one out of
+    the shared label in turn.
+    """
+    for suffix in ("_LOC.IMG", "_OBS.IMG"):
+        url = re.sub(r"_RDN\.IMG$", suffix, img_url, flags=re.IGNORECASE)
+        if url == img_url:
+            gs.warning(f"-g: could not derive {suffix} URL from '{img_url}'; "
+                       "skipping M3 geometry import.")
+            return
+        local_path = os.path.join(os.path.dirname(local_lbl),
+                                  os.path.basename(url))
+        gs.message(f"-g: fetching M3 geometry companion: {url}")
+        _wget_resumable(url, local_path)
+
+    band_names = {
+        "loc": ("Longitude", "Latitude", "Radius"),
+        "obs": ("To-Sun azimuth", "To-Sun zenith", "To-Instrument azimuth",
+                "To-Instrument zenith", "Phase angle", "To-Sun path length",
+                "To-Instrument path length", "Facet slope", "Facet aspect",
+                "Facet cos(i)"),
+    }
+    for kind, obj_name in (("loc", "LOC_IMAGE"), ("obs", "OBS_IMAGE")):
+        out = f"{output}_{kind}"
+        gs.message(f"-g: importing M3 {obj_name} via p.in.pds3 …")
+        gs.run_command("p.in.pds3", flags="g", input=local_lbl,
+                       object=obj_name, output=out, overwrite=True)
+        for i, bname in enumerate(band_names[kind], start=1):
+            mapname = f"{out}.{i}"
+            if p_meta.PlanetaryMetadata.exists(mapname):
+                meta = p_meta.PlanetaryMetadata.load(mapname)
+                meta.sensor = "CH1_M3"
+                meta.mission = "CHANDRAYAAN-1"
+                meta.body = body_slug.upper()
+                meta.data_type = "ancillary"
+                meta.radiometric_quantity = bname
+                meta.derived = True
+                meta.save(mapname)
+        gs.message(f"-g: imported M3 {obj_name} as '{out}.1'..'{out}.{len(band_names[kind])}' "
+                   f"({', '.join(band_names[kind])}).")
+
+
 def _opus_id_from_row(row, labels):
     """Extract the OPUS ID string from a search result row dict."""
     id_key = next(
@@ -1249,6 +1304,7 @@ def main():
     flag_override    = flags["o"]
     flag_noregion    = flags["r"]
     flag_spice       = flags["s"]
+    flag_geom        = flags["g"]
 
     # ── COG / CRISM / M3 / VIMS catalog listing / import (independent of
     # STAC/PDS/OPUS) ──
@@ -1373,6 +1429,9 @@ def main():
         )
         gs.message(f"Imported M3 L1B cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+
+        if flag_geom:
+            _attach_m3_geometry(local_lbl, img_url, opt_output, body_slug)
         return
 
     if opt_vims:

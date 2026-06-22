@@ -906,6 +906,11 @@ static long scan_past_ascii(FILE *fp, long nominal_offset, long file_size)
 
 PPdsImage *p_pds_open_image(const char *path)
 {
+    return p_pds_open_image_named(path, NULL);
+}
+
+PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
+{
     FILE *fp = fopen(path, "rb");
     if (!fp) {
         G_warning(_("p_pds: cannot open '%s': %s"), path, strerror(errno));
@@ -919,24 +924,37 @@ PPdsImage *p_pds_open_image(const char *path)
         return NULL;
     }
 
-    /* Determine which object carries the image: IMAGE, QUBE, or SPECTRAL_QUBE. */
-    const char *obj_names[] = { "IMAGE", "QUBE", "SPECTRAL_QUBE", NULL };
-    PPvlNode   *img_obj     = NULL;
-    const char *obj_name    = NULL;
-    for (int i = 0; obj_names[i]; i++) {
-        img_obj = pvl_find_object_deep(root, obj_names[i]);
-        if (img_obj) { obj_name = obj_names[i]; break; }
+    PPvlNode   *img_obj  = NULL;
+    const char *obj_name = NULL;
+
+    if (object_name) {
+        /* Caller asked for a specific OBJECT by name (e.g. labels with
+         * several image objects side by side, such as M3 L1B's
+         * RDN_IMAGE/LOC_IMAGE/OBS_IMAGE) -- look for exactly that one. */
+        img_obj = pvl_find_object_deep(root, object_name);
+        if (img_obj) obj_name = object_name;
+    } else {
+        /* Determine which object carries the image: IMAGE, QUBE, or SPECTRAL_QUBE. */
+        const char *obj_names[] = { "IMAGE", "QUBE", "SPECTRAL_QUBE", NULL };
+        for (int i = 0; obj_names[i]; i++) {
+            img_obj = pvl_find_object_deep(root, obj_names[i]);
+            if (img_obj) { obj_name = obj_names[i]; break; }
+        }
+        if (!img_obj) {
+            /* None of the three standard names matched -- some archives use
+             * their own custom object name (e.g. JPL PDS Imaging Node M3 L1B
+             * products: "OBJECT = RDN_IMAGE", pointer "^RDN_IMAGE"). Fall back
+             * to any *_IMAGE/*_QUBE object that has a matching pointer. */
+            img_obj = pvl_find_image_object_by_suffix(root, root, &obj_name);
+        }
     }
     if (!img_obj) {
-        /* None of the three standard names matched -- some archives use
-         * their own custom object name (e.g. JPL PDS Imaging Node M3 L1B
-         * products: "OBJECT = RDN_IMAGE", pointer "^RDN_IMAGE"). Fall back
-         * to any *_IMAGE/*_QUBE object that has a matching pointer. */
-        img_obj = pvl_find_image_object_by_suffix(root, root, &obj_name);
-    }
-    if (!img_obj) {
-        G_warning(_("p_pds: no IMAGE, QUBE, SPECTRAL_QUBE, or *_IMAGE/*_QUBE "
-                    "object in '%s'"), path);
+        if (object_name)
+            G_warning(_("p_pds: no OBJECT named '%s' in '%s'"),
+                      object_name, path);
+        else
+            G_warning(_("p_pds: no IMAGE, QUBE, SPECTRAL_QUBE, or *_IMAGE/*_QUBE "
+                        "object in '%s'"), path);
         p_pvl_free(root);
         fclose(fp);
         return NULL;
