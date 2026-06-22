@@ -1139,7 +1139,23 @@
               "doi": "10.1029/2003JE002084"
             }
           ],
-          "mode": "emissivity"
+          "mode": "emissivity",
+          "retrieval": {
+            "target": "tau_dust_proxy_550nm",
+            "feature_index": 0,
+            "k_ref": 0.42,
+            "valid_band_depth_range": [
+              0.02,
+              0.6
+            ],
+            "notes": "Empirical CO2 2.01um band-depth-to-dust-opacity proxy for p.atcorr's per-pixel retrieval step. k_ref is an order-of-magnitude placeholder pending calibration against a known-clear reference scene; treat tau_proxy as relative/qualitative, not absolute, until calibrated.",
+            "refs": [
+              {
+                "cite": "Smith 2004",
+                "doi": "10.1029/2003JE002084"
+              }
+            ]
+          }
         },
         {
           "name": "water_vapor_atm",
@@ -5582,11 +5598,19 @@
   "body_meta": {
     "moon": {
       "sw_alpha": 0.4,
-      "sw_ref": "Clark et al. 2002 / Hapke 2001"
+      "sw_ref": "Clark et al. 2002 / Hapke 2001",
+      "atmosphere": {
+        "regime": "none",
+        "note": "Surface-bound exosphere only; p.atcorr passes data through unchanged for this body."
+      }
     },
     "mercury": {
       "sw_alpha": 0.35,
-      "sw_ref": "Hapke et al. 2001 / Blewett et al. 2009"
+      "sw_ref": "Hapke et al. 2001 / Blewett et al. 2009",
+      "atmosphere": {
+        "regime": "none",
+        "note": "Surface-bound exosphere only (no scattering/absorbing column); p.atcorr passes data through unchanged for this body."
+      }
     },
     "asteroid_s_type": {
       "sw_alpha": 0.3,
@@ -5599,6 +5623,97 @@
     "asteroid_d_type": {
       "sw_alpha": 0.05,
       "sw_ref": "Emery et al. 2011 (very weak effect)"
+    },
+    "mars": {
+      "atmosphere": {
+        "regime": "thin",
+        "tau_clear": 0.3,
+        "tau_dusty": 1.5,
+        "wha": 0.9,
+        "retrieval_gas": "co2_atm",
+        "note": "tau_clear/tau_dusty bracket p.atcorr's per-pixel tau-bin interpolation table (see p.atcorr.hapke NOTES); wha is the single-scatter albedo default when not retrieved per-pixel."
+      }
+    },
+    "venus": {
+      "atmosphere": {
+        "regime": "thick",
+        "note": "Visible/NIR surface imaging is not physically possible outside the narrow atmospheric windows below (cloud-top tau ~25-40); no global Hapke/Chandrasekhar correction applies here.",
+        "atmosphere_windows": [
+          {
+            "center_um": 1.02,
+            "reference_um": 0.95,
+            "instrument": "Akatsuki IR2 / Venus Express VIRTIS-M",
+            "method": "ratio_to_opaque_reference",
+            "note": "Near-IR surface window; per-pixel normalisation against an adjacent always-opaque band removes local cloud-top opacity variation rather than assuming one fixed scalar transmission for the whole scene.",
+            "refs": [
+              {
+                "cite": "Mueller et al. 2008",
+                "doi": "10.1016/j.pss.2008.04.010"
+              }
+            ]
+          },
+          {
+            "center_um": 1.1,
+            "reference_um": 0.95,
+            "instrument": "Akatsuki IR2 / VIRTIS-M",
+            "method": "ratio_to_opaque_reference",
+            "refs": [
+              {
+                "cite": "Mueller et al. 2008",
+                "doi": "10.1016/j.pss.2008.04.010"
+              }
+            ]
+          },
+          {
+            "center_um": 1.18,
+            "reference_um": 0.95,
+            "instrument": "VIRTIS-M",
+            "method": "ratio_to_opaque_reference",
+            "refs": [
+              {
+                "cite": "Mueller et al. 2008",
+                "doi": "10.1016/j.pss.2008.04.010"
+              }
+            ]
+          },
+          {
+            "center_um": 1.31,
+            "reference_um": 1.2,
+            "instrument": "Akatsuki IR2",
+            "method": "ratio_to_opaque_reference",
+            "refs": [
+              {
+                "cite": "Mueller et al. 2008",
+                "doi": "10.1016/j.pss.2008.04.010"
+              }
+            ]
+          },
+          {
+            "center_um": 1.51,
+            "reference_um": 1.45,
+            "instrument": "Akatsuki IR2 / VIRTIS-M",
+            "method": "ratio_to_opaque_reference",
+            "refs": [
+              {
+                "cite": "Mueller et al. 2008",
+                "doi": "10.1016/j.pss.2008.04.010"
+              }
+            ]
+          },
+          {
+            "center_um": 2.3,
+            "reference_um": 2.2,
+            "instrument": "VIRTIS-M",
+            "method": "ratio_to_opaque_reference",
+            "refs": [
+              {
+                "cite": "Mueller et al. 2008",
+                "doi": "10.1016/j.pss.2008.04.010"
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }
