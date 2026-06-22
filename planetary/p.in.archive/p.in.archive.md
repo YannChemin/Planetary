@@ -185,6 +185,10 @@ p.in.archive -l
 
 # Import the seed L1B radiance cube (orbit 141, 85 bands)
 p.in.archive m3=m3g20081118t222604_v03_rdn output=m3_radiance
+
+# Also fetch and import M3's precomputed per-pixel geometry
+# (longitude/latitude/radius + illumination/viewing angles)
+p.in.archive m3=m3g20081118t222604_v03_rdn -g output=m3_radiance
 ```
 
 Verified live end-to-end: real HTTP 200 on `*_RDN.IMG`/`*_L1B.LBL`,
@@ -199,6 +203,28 @@ M3's L1B label uses a non-standard data-object name
 `IMAGE`/`QUBE`/`SPECTRAL_QUBE` — `libs/p_pds` gained a generic fallback
 (any `*_IMAGE`/`*_QUBE` object with a matching `^<name>` pointer
 anywhere in the label) to read these, found and fixed this session.
+
+**Geometry companions (`-g`).** Unlike CRISM, whose TRDR product
+carries no per-pixel geometry (hence `p.phocube -c`'s SPICE/camera-model
+pipeline), M3's L1B label *also* describes two more image objects
+side by side with `RDN_IMAGE`, each pointing at its own companion file
+in the same archive directory:
+
+- `LOC_IMAGE` (`*_LOC.IMG`, 3 bands) — per-pixel longitude, latitude,
+  radius (selenocentric).
+- `OBS_IMAGE` (`*_OBS.IMG`, 10 bands) — to-Sun/to-instrument azimuth and
+  zenith angle, phase angle, to-Sun/to-instrument path length, facet
+  slope, facet aspect, facet cos(i).
+
+The `-g` flag fetches both companion files and imports each as its own
+GRASS imagery group, `<output>_loc.1..3` and `<output>_obs.1..10`,
+tagged in `planetary.json` as derived/ancillary data (`derived=true`,
+`data_type=ancillary`) rather than raw radiance. This needed a new
+`p.in.pds3 object=` option (selects a named image object out of a label
+that describes more than one, since the default behaviour picks the
+first match) — verified live: real longitude/latitude/radius/phase-angle
+values for this same orbit, sane (radius 1734-1738 km, matching the
+Moon; phase angle 82-98°).
 
 ### VIMS and OMEGA: real format gaps found, not yet fixed
 

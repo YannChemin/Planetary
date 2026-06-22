@@ -25,6 +25,19 @@ listing, and a dedicated `<name>=` option:
   (`planetarydata.jpl.nasa.gov`). Verified end-to-end: real product
   imported as an 85-band imagery group, non-degenerate per-band radiance
   confirmed via `r.univar`. Required a real `libs/p_pds` fix (below).
+  **Geometry companions added in a later session** (`-g` flag): M3's
+  L1B label also describes LOC_IMAGE (per-pixel longitude/latitude/
+  radius, 3 bands) and OBS_IMAGE (illumination/viewing geometry, 10
+  bands) side by side with RDN_IMAGE, all pointing at separate
+  `*_LOC.IMG`/`*_OBS.IMG` files living next to the radiance cube in the
+  same archive directory. Unlike CRISM, M3 ships this geometry
+  precomputed -- no SPICE/camera-model step needed, just fetching and
+  importing the extra cubes. This needed a real `libs/p_pds` API
+  addition (`p_pds_open_image_named()`, exposed as `p.in.pds3 object=`)
+  since a label describing several image objects side by side previously
+  always returned the first one found. Verified live: real longitude/
+  latitude/radius/phase-angle values for the same FRT-adjacent M3 orbit,
+  sane (radius ~1736-1738 km, matching the Moon).
 - **Cassini ISS/VIMS** (`opus=`/`opus_id=`, and now `vims=`) -- via the
   PDS Ring-Moon Systems Node's OPUS API, sensor inferred from the OPUS
   product ID prefix (`co-iss-n*`/`co-iss-w*`/`co-vims-*`). `vims=` added

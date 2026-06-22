@@ -20,6 +20,19 @@ multi-band products the maps are named **output.1**, **output.2**, etc.
 The optional **-g** flag registers all output maps in a GRASS imagery
 group of the same name.
 
+### Labels describing more than one image object
+
+Some archives' attached labels describe several image objects side by
+side rather than just one — e.g. JPL PDS Imaging Node M3 L1B products,
+whose single label carries `RDN_IMAGE` (radiance), `LOC_IMAGE`
+(longitude/latitude/radius), and `OBS_IMAGE` (illumination/viewing
+geometry), each pointing at its own companion `.IMG` file. By default
+*p.in.pds3* imports the first matching object found (`IMAGE`, `QUBE`,
+`SPECTRAL_QUBE`, or the first `*_IMAGE`/`*_QUBE` fallback match). Use
+**object=** to select a specific one by its exact PDS3 object name
+(the name used in its `^NAME` pointer keyword), e.g.
+`object=LOC_IMAGE`.
+
 If no computational region has been set (default 1 × 1 XY region),
 *p.in.pds3* sets the region to match the image dimensions with 1:1
 pixel coordinates before writing.
@@ -99,6 +112,14 @@ Import a multi-band CRISM cube and register in an imagery group:
 ```sh
 p.in.pds3 -g input=frt00003e12_07_if166l_trr3.img output=crism_trdr
 i.group -l group=crism_trdr
+```
+
+Import M3's precomputed geometry companion cubes (the same label that
+describes the RDN radiance cube also describes these):
+
+```sh
+p.in.pds3 -g object=LOC_IMAGE input=M3G20081118T222604_V03_L1B.LBL output=m3_loc
+p.in.pds3 -g object=OBS_IMAGE input=M3G20081118T222604_V03_L1B.LBL output=m3_obs
 ```
 
 ## REFERENCES

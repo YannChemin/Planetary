@@ -213,6 +213,108 @@ static void test_synthetic_image(void)
     printf("PASS: test_synthetic_image\n");
 }
 
+static void test_named_object_selection(void)
+{
+    /* Two sibling image objects in one attached label (mirrors the real
+     * M3 L1B convention: RDN_FILE/RDN_IMAGE and LOC_FILE/LOC_IMAGE side
+     * by side, each with its own ^xxx_IMAGE pointer). Default selection
+     * (p_pds_open_image) must pick the first (RDN_IMAGE, values 0..15);
+     * explicit selection (p_pds_open_image_named) must pick LOC_IMAGE
+     * (values 100..115) instead. */
+    /* Pixel byte values are kept above 0x7E so scan_past_ascii's
+     * stale-pointer heuristic (which treats printable ASCII as still
+     * being inside label text) never mistakes real pixel data for
+     * label text and shifts the read offset. */
+    static const uint8_t rdn_pixels[16] = {
+        200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215
+    };
+    static const uint8_t loc_pixels[16] = {
+        220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235
+    };
+
+    char tmppath[] = "/tmp/test_p_pds_named_XXXXXX";
+    int fd = mkstemp(tmppath);
+    assert(fd >= 0);
+    FILE *fp = fdopen(fd, "w+b");
+    assert(fp);
+
+    /* Use explicit <BYTES> pointers computed from the real label length,
+     * rather than RECORD_BYTES-based record numbers -- this label is
+     * longer than any one fixed record size would conveniently be, and
+     * <BYTES> offsets sidestep that arithmetic entirely. */
+    const char *label_tmpl =
+        "PDS_VERSION_ID = PDS3\r\n"
+        "RECORD_TYPE    = UNDEFINED\r\n"
+        "OBJECT = RDN_FILE\r\n"
+        "  ^RDN_IMAGE   = %06ld <BYTES>\r\n"
+        "  OBJECT = RDN_IMAGE\r\n"
+        "    LINES        = 4\r\n"
+        "    LINE_SAMPLES = 4\r\n"
+        "    BANDS        = 1\r\n"
+        "    SAMPLE_BITS  = 8\r\n"
+        "    SAMPLE_TYPE  = MSB_UNSIGNED_INTEGER\r\n"
+        "    OFFSET       = 0.0\r\n"
+        "    SCALING_FACTOR = 1.0\r\n"
+        "    CORE_NULL    = 0\r\n"
+        "  END_OBJECT = RDN_IMAGE\r\n"
+        "END_OBJECT = RDN_FILE\r\n"
+        "OBJECT = LOC_FILE\r\n"
+        "  ^LOC_IMAGE   = %06ld <BYTES>\r\n"
+        "  OBJECT = LOC_IMAGE\r\n"
+        "    LINES        = 4\r\n"
+        "    LINE_SAMPLES = 4\r\n"
+        "    BANDS        = 1\r\n"
+        "    SAMPLE_BITS  = 8\r\n"
+        "    SAMPLE_TYPE  = MSB_UNSIGNED_INTEGER\r\n"
+        "    OFFSET       = 0.0\r\n"
+        "    SCALING_FACTOR = 1.0\r\n"
+        "    CORE_NULL    = 0\r\n"
+        "  END_OBJECT = LOC_IMAGE\r\n"
+        "END_OBJECT = LOC_FILE\r\n"
+        "END\r\n";
+
+    /* %06ld keeps a fixed 6-digit field width regardless of the offset's
+     * actual value, so a first pass with dummy offsets already tells us
+     * the real serialized length -- no manual length arithmetic needed. */
+    char label_buf[2048];
+    int label_len = snprintf(label_buf, sizeof(label_buf), label_tmpl, 0L, 0L);
+    assert(label_len > 0 && (size_t)label_len < sizeof(label_buf));
+
+    long rdn_off = label_len;
+    long loc_off = label_len + 16;
+    int label_len2 = snprintf(label_buf, sizeof(label_buf), label_tmpl,
+                               rdn_off, loc_off);
+    assert(label_len2 == label_len); /* offsets must format to the same width */
+
+    fwrite(label_buf, 1, (size_t)label_len, fp);
+    fwrite(rdn_pixels, 1, 16, fp);
+    fwrite(loc_pixels, 1, 16, fp);
+    fflush(fp);
+    fclose(fp);
+
+    double row_buf[4];
+
+    PPdsImage *img_default = p_pds_open_image(tmppath);
+    assert(img_default);
+    assert(p_pds_read_row(img_default, 0, 0, row_buf, 0) == 0);
+    for (int s = 0; s < 4; s++)
+        assert(fabs(row_buf[s] - (200 + s)) < 1e-9);
+    p_pds_close(img_default);
+
+    PPdsImage *img_loc = p_pds_open_image_named(tmppath, "LOC_IMAGE");
+    assert(img_loc);
+    assert(p_pds_read_row(img_loc, 0, 0, row_buf, 0) == 0);
+    for (int s = 0; s < 4; s++)
+        assert(fabs(row_buf[s] - (220 + s)) < 1e-9);
+    p_pds_close(img_loc);
+
+    PPdsImage *img_missing = p_pds_open_image_named(tmppath, "OBS_IMAGE");
+    assert(img_missing == NULL);
+
+    remove(tmppath);
+    printf("PASS: test_named_object_selection\n");
+}
+
 /* ------------------------------------------------------------------ */
 /* ISIS3 test-data label (detached, no .img needed — label parse only) */
 /* ------------------------------------------------------------------ */
@@ -289,6 +391,7 @@ int main(void)
     test_pvl_nested();
     test_byte_swap();
     test_synthetic_image();
+    test_named_object_selection();
     test_hirise_label_parse();
     printf("=== ALL PASSED ===\n");
     return 0;
