@@ -1,9 +1,12 @@
 ## DESCRIPTION
 
 *p.spiceinit* attaches SPICE (Spacecraft Planet Instrument C-matrix
-Events) kernel paths to a GRASS raster map by storing them in the
-raster's metadata history. Once attached, these kernel paths are
-available to geometry-aware modules such as *p.phocube* and *p.cam2map*.
+Events) kernel paths, target body, observer/spacecraft name, and
+observation time to a GRASS raster map by appending them to the
+raster's history metadata (one `SPICE_<KEY>=<value>` line per item).
+Once attached, this is read back automatically by *p.phocube*'s SPICE
+mode (`-s`) so kernels and geometry parameters need not be specified
+repeatedly.
 
 SPICE kernels are binary or text files maintained by NASA's Navigation
 and Ancillary Information Facility (NAIF). The kernel types are:
@@ -17,27 +20,33 @@ and Ancillary Information Facility (NAIF). The kernel types are:
 | IK | Instrument kernel |
 | FK | Frames kernel |
 | PCK | Planetary constants kernel |
-| DSK | Digital shape kernel |
 
-Kernels are specified individually or via a meta-kernel (`.tm`) file
-that lists multiple kernels. The module validates that each kernel file
-exists before attaching it.
+In addition to kernel paths, `target=` stores the target body name,
+`observer=` stores the observer/spacecraft name as known to the loaded
+kernels (e.g. `MRO`), and `time=` stores a single mid-scene UTC
+observation epoch (ISO 8601, e.g. `2007-01-05T01:26:56`) — all three are
+required for *p.phocube -s* to work. The module validates that each
+kernel file is readable before attaching it; pass `-t` to additionally
+test-load every kernel with CSPICE itself.
 
 ## NOTES
 
 *p.spiceinit* uses the `p_spice` library which wraps NAIF CSPICE N0067.
-CSPICE is not thread-safe; calls to `sincpt` and `ilumin` are
-serialised even when OpenMP is active.
+CSPICE is not thread-safe; calls are serialised even when OpenMP is
+active elsewhere in the suite.
 
-Kernel files can also be set via the `PLANETSPICE_PATH` environment
-variable (colon-separated directory list).
+Each kernel-type/target/observer/time entry is appended as its own
+history line (`Rast_append_history`); registering kernels in multiple
+separate `p.spiceinit` invocations on the same map accumulates entries
+rather than overwriting them.
 
 ## EXAMPLES
 
-Attach kernels to a HiRISE EDR cube imported with p.in.isis:
+Attach kernels and observation metadata to a HiRISE RDR/COG product:
 
 ```sh
-p.spiceinit input=hirise_red \
+p.spiceinit map=hirise_red target=MARS observer=MRO \
+    time=2007-01-05T01:26:56 \
     lsk=/kernels/naif/generic/lsk/naif0012.tls \
     sclk=/kernels/mro/sclk/MRO_SCLKSCET.00094.65536.tsc \
     spk=/kernels/mro/spk/mro_cruise.bsp \
@@ -45,7 +54,7 @@ p.spiceinit input=hirise_red \
     ik=/kernels/mro/ik/mro_hirise_v12.ti \
     pck=/kernels/naif/generic/pck/pck00010.tpc
 
-p.phocube input=hirise_red output=hirise_geom
+p.phocube -s -iep input=hirise_red output=hirise_geom
 ```
 
 ## REFERENCES
