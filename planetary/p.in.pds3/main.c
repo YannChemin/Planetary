@@ -162,19 +162,28 @@ int main(int argc, char *argv[])
     /* Optionally create imagery group                                    */
     /* ---------------------------------------------------------------- */
     if (use_group && nbands > 1) {
-        /* Call i.group via G_spawn (simplest portable approach). */
-        char group_cmd[1024];
-        snprintf(group_cmd, sizeof(group_cmd),
+        /* Call i.group via system(). The band list can run into the
+         * thousands of characters for hyperspectral cubes (e.g. 438 CRISM
+         * bands), so the command buffer is sized dynamically rather than
+         * fixed — a fixed 1024-byte buffer silently truncated the input=
+         * list (via strncat's bound) past ~50 bands, registering only a
+         * partial group with no error. */
+        size_t cmd_cap = strlen(outbase) * 2 + 64;
+        for (int b = 0; b < nbands; b++)
+            cmd_cap += strlen(mapnames[b]) + 1; /* +1 for comma/terminator */
+        char *group_cmd = G_malloc(cmd_cap);
+        snprintf(group_cmd, cmd_cap,
                  "i.group group=%s subgroup=%s input=", outbase, outbase);
         for (int b = 0; b < nbands; b++) {
-            strncat(group_cmd, mapnames[b], sizeof(group_cmd) - strlen(group_cmd) - 2);
+            strcat(group_cmd, mapnames[b]);
             if (b < nbands - 1)
-                strncat(group_cmd, ",", sizeof(group_cmd) - strlen(group_cmd) - 2);
+                strcat(group_cmd, ",");
         }
         if (system(group_cmd) != 0)
             G_warning(_("i.group call failed — group '%s' not created"), outbase);
         else
             G_message(_("Imagery group '%s' created."), outbase);
+        G_free(group_cmd);
     }
 
     /* ---------------------------------------------------------------- */
