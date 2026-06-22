@@ -68,6 +68,15 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: crism
+# % type: string
+# % required: no
+# % multiple: no
+# % label: MRO/CRISM TRDR product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a CRISM Targeted RDR product (.IMG + companion .LBL) from the PDS Geosciences Node static archive (pds-geosciences.wustl.edu). CRISM is not searchable via OPUS (outer-planet/ring-science only) or the NASA PDS Federated Search (TRDR products are not indexed there); this option talks to the real, working archive tree directly. Use -l to list catalog keys.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
@@ -189,6 +198,32 @@ USGS_COG = {
     "mars_mola_dem_463m": (
         f"{USGS_COG_BASE}/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif",
         "Mars", "MGS MOLA global DEM, 463 m/px"),
+}
+
+# Curated catalog of MRO/CRISM Targeted RDR (TRR3) hyperspectral products on
+# the PDS Geosciences Node static archive. CRISM is absent from both OPUS
+# (outer-planet/ring-science instruments only) and the NASA PDS Federated
+# Search (TRDR products are not indexed there even by exact LID) — the only
+# proven-working retrieval path is this archive's volume/year/DOY tree,
+# discovered via the per-volume collection inventory CSV. Each entry:
+# key -> (img_url, lbl_url, body, description). All URLs below were verified
+# live (HTTP 200, Content-Length present) against pds-geosciences.wustl.edu.
+CRISM_BASE = ("https://pds-geosciences.wustl.edu/mro/"
+              "mro-m-crism-3-rdr-targeted-v1/mrocr_2101/trdr/2007/2007_005/"
+              "FRT00003BFB")
+CRISM_CATALOG = {
+    "mawrth_vallis_frt00003bfb_ir": (
+        f"{CRISM_BASE}/FRT00003BFB_01_IF156L_TRR3.IMG",
+        f"{CRISM_BASE}/FRT00003BFB_01_IF156L_TRR3.LBL",
+        "Mars",
+        "CRISM FRT00003BFB, Mawrth Vallis (22.3N, 342.1E), L detector "
+        "(IR, 1.00-3.92 um, 438 bands) - Bishop et al. 2008"),
+    "mawrth_vallis_frt00003bfb_vnir": (
+        f"{CRISM_BASE}/FRT00003BFB_01_IF156S_TRR3.IMG",
+        f"{CRISM_BASE}/FRT00003BFB_01_IF156S_TRR3.LBL",
+        "Mars",
+        "CRISM FRT00003BFB, Mawrth Vallis (22.3N, 342.1E), S detector "
+        "(VNIR, 0.36-1.05 um, 107 bands) - Bishop et al. 2008"),
 }
 
 # Prefer these formats (checked in order against the STAC asset media-types
@@ -641,6 +676,34 @@ def resolve_cog(cog_arg):
              "or pass a direct https URL.")
 
 
+def resolve_crism(crism_arg):
+    """Resolve a crism= argument to (img_url, lbl_url, body_hint).
+
+    Accepts a catalog key (see CRISM_CATALOG) or a direct https URL to a
+    CRISM TRDR .IMG on pds-geosciences.wustl.edu; the companion .LBL is
+    derived by replacing the extension."""
+    a = crism_arg.strip()
+    if a in CRISM_CATALOG:
+        img_url, lbl_url, body, _desc = CRISM_CATALOG[a]
+        return img_url, lbl_url, body
+    if a.lower().startswith(("http://", "https://")):
+        if not a.lower().endswith(".img"):
+            gs.fatal("Direct crism= URLs must point at a CRISM TRDR .IMG file.")
+        lbl_url = a[: -len(".img")] + (".LBL" if a.endswith(".IMG") else ".lbl")
+        return a, lbl_url, None
+    gs.fatal(f"Unknown CRISM key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a TRDR .IMG file.")
+
+
+def print_crism_catalog():
+    gs.message("MRO/CRISM TRDR products (use crism=<key>, or a direct https URL "
+               "to a .IMG on pds-geosciences.wustl.edu):")
+    gs.message(f"  {'key':<32} {'body':<6} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, _lbl, body, desc) in CRISM_CATALOG.items():
+        gs.message(f"  {k:<32} {body:<6} {desc}")
+
+
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
 _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
@@ -905,6 +968,7 @@ def main():
     opt_lid          = options["lid"]
     opt_search       = options["search"]
     opt_cog          = options["cog"]
+    opt_crism        = options["crism"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -919,11 +983,56 @@ def main():
     flag_override    = flags["o"]
     flag_noregion    = flags["r"]
 
-    # ── COG catalog listing / import (independent of the STAC/PDS/OPUS path) ──
+    # ── COG / CRISM catalog listing / import (independent of STAC/PDS/OPUS) ──
     if flag_list and not any((opt_doi, opt_lid, opt_search, opt_opus, opt_opus_id)):
         print_cog_catalog()
-        if not opt_cog:
+        print_crism_catalog()
+        if not opt_cog and not opt_crism:
             return
+
+    if opt_crism:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a CRISM product.")
+        img_url, lbl_url, body_hint = resolve_crism(opt_crism)
+        gs.message(f"CRISM source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "mars")
+        local_img = _rsdata_dest(img_url, body_hint)
+        local_lbl = os.path.join(os.path.dirname(local_img),
+                                  os.path.basename(urllib.parse.urlparse(lbl_url).path))
+        _wget_resumable(img_url, local_img)
+        gs.message(f"Fetching label: {lbl_url}")
+        _wget_resumable(lbl_url, local_lbl)
+
+        nl, ns = _pds3_image_shape(local_lbl)
+        if nl and ns:
+            gs.run_command("g.region", n=nl, s=0, e=ns, w=0,
+                           nsres=1, ewres=1, quiet=True)
+
+        gs.message("Importing CRISM TRDR cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="go" if flag_override else "g",
+                       input=local_lbl, output=opt_output, overwrite=True)
+        # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
+        # groups them under <output>; align the region to band 1.
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+        p_meta.write_planetary_metadata(
+            f"{opt_output}.1",
+            module="p.in.astropedia",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="MRO_CRISM",
+            mission="MRO",
+            body=body_slug.upper(),
+            source_file=img_url,
+        )
+        gs.message(f"Imported CRISM TRDR cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+        return
 
     if opt_cog:
         if any((opt_doi, opt_lid, opt_search)):
@@ -987,9 +1096,9 @@ def main():
 
     # ── OPUS path: opus_id= or opus= ──────────────────────────────────────
     if opt_opus_id or opt_opus:
-        if any((opt_doi, opt_lid, opt_search, opt_cog)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism)):
             gs.fatal("opus= / opus_id= cannot be combined with "
-                     "doi=, lid=, search=, or cog=.")
+                     "doi=, lid=, search=, cog=, or crism=.")
         if opt_opus_id and opt_opus:
             gs.fatal("Provide either opus= (search) or opus_id= (direct), not both.")
         if not flag_list and not opt_output:
@@ -1127,7 +1236,7 @@ def main():
     # Validate: exactly one of doi/lid/search
     n_src = sum(1 for x in (opt_doi, opt_lid, opt_search) if x)
     if n_src == 0:
-        gs.fatal("Provide exactly one of doi=, lid=, search=, cog=, "
+        gs.fatal("Provide exactly one of doi=, lid=, search=, cog=, crism=, "
                  "opus=, or opus_id= (or -l to list options).")
     if n_src > 1:
         gs.fatal("Provide exactly one of doi=, lid=, or search= "

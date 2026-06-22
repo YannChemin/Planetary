@@ -506,6 +506,38 @@ with lower confidence.
 - Works even when the body/matter combination has zero species in the
   database (same fix as Phase 10.1)
 
+### Phase 12 — Band-read cache and site comparison ✓ COMPLETE
+
+**12.1 Band-read cache (internal optimization)**
+- `_read_band()` now caches each band's pixel array (keyed by raster map
+  name) for the lifetime of the module's process, instead of re-issuing
+  `r.out.bin` + a temp-file round-trip on every call
+- Many species share diagnostic/continuum bands (e.g. several Mars
+  phyllosilicates all use 1.41/1.91/2.2 µm), and the full input spectrum is
+  re-read for every species' SAM cross-check (Phase 9.1) — this eliminates
+  that redundant disk I/O
+- Safe because every consumer treats the returned array as read-only
+  (verified across `_detect_species`, `_unmix_nnls`, `_sam_angle_deg`, and
+  the Phase 7/9 reference-comparison paths — none mutate in place)
+- White-box tested via direct module import (`importlib`), since the cache
+  is an internal implementation detail with no CLI-visible flag
+
+**12.2 Site comparison as a GRASS vector (`-z`, `sites=`, `sites_output=`)**
+- Given a vector of candidate sites/zones, adds per-species band-depth
+  statistics as new attribute columns on a fresh copy of the vector — the
+  natural GRASS idiom, rather than a side-channel CSV/JSON report
+- Points (`v.what.rast`): one `<species>_bd` column per detected species
+- Areas (`v.rast.stats`, `method=average,minimum,maximum`):
+  `<species>_average`, `<species>_minimum`, `<species>_maximum` columns
+- Vector kind (point vs area) is auto-detected via `v.info -t`; a vector
+  with neither is a fatal error
+- `sites_output=` is always a *fresh* copy of `sites=` (`g.copy` with
+  `overwrite=True` at the start of the block), so re-running with
+  `overwrite=True` is idempotent and never collides with columns added by
+  a previous run
+- No species detected → warning, not fatal; `sites_output=` is simply not
+  written
+
 ### Phase 4 — Advanced detection modes ✓ COMPLETE
 
 **4.1 Spectral unmixing integration**
@@ -1202,7 +1234,7 @@ Yann Chemin
 
 ## STATUS
 
-Phases 1–11 complete.
+Phases 1–12 complete.
 
 Phase 1: band database (`data/matter_bands.json`), C library extension
 (`p_spectra_bd_multi`, `p_spectra_apply_row_bd_multi`), Python module
@@ -1294,6 +1326,19 @@ has a variable number of leading fields before the per-map values, so
 parsing now anchors from the right instead of a fixed offset. Phase 11 adds
 8 testsuite tests (class TestPmatterbandsPhase11, including an extract→import
 round-trip check; total: 121 tests).
+
+Phase 12: band-read cache + site comparison. `_read_band()` now caches each
+raster's pixel array per process, eliminating redundant `r.out.bin` round-trips
+across species that share diagnostic/continuum bands and across repeated
+full-spectrum reads in the SAM cross-check; verified safe (no consumer
+mutates the returned array) and white-box tested via direct module import.
+Site comparison (`-z`, `sites=`, `sites_output=`) writes per-species
+band-depth statistics as new attribute columns on a fresh copy of a sites
+vector — `<species>_bd` for points (`v.what.rast`), `<species>_average/
+minimum/maximum` for areas (`v.rast.stats`) — auto-detecting point vs. area
+via `v.info -t`. Phase 12 adds 11 testsuite tests across two classes
+(TestPmatterbandsPhase12Cache: 5, TestPmatterbandsPhase12Sites: 6;
+total: 132 tests).
 
 Also fixed in this phase set: the `.deb` package never installed or linked
 `$GISBASE/etc/planetary/matter_bands.json` (`debian/rules`,
