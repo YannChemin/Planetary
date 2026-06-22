@@ -154,6 +154,28 @@ int p_spice_radii(const char *body, double radii[3]);
 int p_spice_bodvrd(const char *body, const char *item,
                     int maxn, int *dim, double *values);
 
+/*!
+ * \brief Fetch a double-precision array variable from the kernel pool.
+ *
+ * Wraps CSPICE gdpool_c(). Generic kernel-pool lookup -- not specific to
+ * any instrument. Used e.g. to read instrument-specific text-kernel (IK)
+ * variables such as a camera model's per-band coefficient table
+ * (CRISM's "INS-74017_CAMERA_COEFF") or a boresight/slit-direction
+ * vector ("INS-74017_BORESIGHT", "INS-74017_SLIT_DIRECTION") that have
+ * no dedicated CSPICE accessor of their own.
+ *
+ * \param varname  kernel pool variable name (case-sensitive, as defined
+ *                 in the loaded kernel, e.g. a .ti instrument kernel)
+ * \param start    index of the first component to return (usually 0)
+ * \param room     maximum number of values to retrieve
+ * \param n_found  output: actual number of values found (0 if the
+ *                 variable doesn't exist in the pool)
+ * \param values   output array (caller-allocated, length >= room)
+ * \return 0 on success, -1 if not found or on CSPICE error
+ */
+int p_spice_gdpool_d(const char *varname, int start, int room,
+                      int *n_found, double *values);
+
 /* ================================================================== */
 /* Ephemeris geometry                                                   */
 /* ================================================================== */
@@ -226,8 +248,13 @@ int p_spice_pxform(const char *from, const char *to, double et,
  * \param dref      ray direction frame (often same as fixref or "J2000")
  * \param dvec      ray direction unit vector in dref frame
  * \param spoint    output: surface intercept in fixref [km]
- * \param trgepc    output: epoch of target point (TDB)
- * \param srfvec    output: vector from observer to spoint [km]
+ * \param trgepc    output: epoch of target point (TDB) -- NOT optional,
+ *                  must point to a real double (passed straight through
+ *                  to sincpt_c, which writes through it unconditionally;
+ *                  passing NULL segfaults deep inside CSPICE)
+ * \param srfvec    output: vector from observer to spoint [km] -- NOT
+ *                  optional, must be a real double[3] buffer, same
+ *                  reason as trgepc
  * \return 1 if intercept found, 0 if ray misses body, -1 on CSPICE error
  */
 int p_spice_sincpt(const char *method,
@@ -237,6 +264,32 @@ int p_spice_sincpt(const char *method,
                     const char *dref, const double dvec[3],
                     double spoint[3], double *trgepc,
                     double srfvec[3]);
+
+/*!
+ * \brief Map a known body-fixed (lon, lat) to a real surface point.
+ *
+ * Wraps CSPICE latsrf_c(). Unlike p_spice_sincpt(), this needs no
+ * observer or look-direction ray -- only a target body-fixed (lon, lat),
+ * exactly the information p.phocube's SPICE mode (-s) already has for
+ * each pixel of a georeferenced raster (no per-pixel camera model
+ * required). With method="DSK/Unprioritized" and a DSK kernel loaded,
+ * this returns the real (non-ellipsoid) shape's surface point at that
+ * (lon, lat); with method="Ellipsoid" it reduces to the same ellipsoid
+ * intercept p_shapemodel already computes directly, without CSPICE.
+ *
+ * \param method    "Ellipsoid" or "DSK/Unprioritized"
+ * \param target    target body name (e.g. "MARS")
+ * \param et        ephemeris time (shape is generally time-invariant,
+ *                  but the CSPICE API requires it)
+ * \param fixref    body-fixed frame name (e.g. "IAU_MARS")
+ * \param lon_deg   planetocentric longitude, degrees
+ * \param lat_deg   planetocentric latitude, degrees
+ * \param spoint    output: body-fixed surface point [km]
+ * \return 0 on success, -1 on CSPICE error or missing DSK data
+ */
+int p_spice_latsrf(const char *method, const char *target, double et,
+                    const char *fixref, double lon_deg, double lat_deg,
+                    double spoint[3]);
 
 /* ================================================================== */
 /* Illumination geometry                                                */

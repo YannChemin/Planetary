@@ -186,6 +186,22 @@ int p_spice_bodvrd(const char *body, const char *item,
     return 0;
 }
 
+int p_spice_gdpool_d(const char *varname, int start, int room,
+                      int *n_found, double *values)
+{
+    if (!varname || !values || room < 1) return -1;
+    SpiceInt n;
+    SpiceBoolean found;
+    gdpool_c(varname, (SpiceInt)start, (SpiceInt)room, &n, values, &found);
+    if (cspice_check("gdpool") < 0) return -1;
+    if (!found) {
+        if (n_found) *n_found = 0;
+        return -1;
+    }
+    if (n_found) *n_found = (int)n;
+    return 0;
+}
+
 /* ================================================================== */
 /* Ephemeris geometry                                                   */
 /* ================================================================== */
@@ -253,6 +269,31 @@ int p_spice_sincpt(const char *method,
     if (cspice_check("sincpt") < 0) return -1;
     if (trgepc) *trgepc = _trgepc;
     return found ? 1 : 0;
+}
+
+/* ================================================================== */
+/* Lat/lon -> body-fixed surface point (no ray-casting/observer)        */
+/* ================================================================== */
+
+int p_spice_latsrf(const char *method, const char *target, double et,
+                    const char *fixref, double lon_deg, double lat_deg,
+                    double spoint[3])
+{
+    if (!method || !target || !fixref || !spoint) return -1;
+
+    SpiceDouble lonlat[1][2];
+    SpiceDouble srfpts[1][3];
+
+    lonlat[0][0] = lon_deg * rpd_c();
+    lonlat[0][1] = lat_deg * rpd_c();
+
+    latsrf_c(method, target, (SpiceDouble)et, fixref, 1, lonlat, srfpts);
+
+    if (cspice_check("latsrf") < 0) return -1;
+    spoint[0] = srfpts[0][0];
+    spoint[1] = srfpts[0][1];
+    spoint[2] = srfpts[0][2];
+    return 0;
 }
 
 /* ================================================================== */

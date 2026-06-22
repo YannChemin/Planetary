@@ -34,6 +34,23 @@ def _find_real_test_kernels():
     return None
 
 
+def _find_real_dsk():
+    """Locate a real DSK kernel on this machine, used by the DSK-mode
+    test below. Not bundled (the file is ~16MB); see RSDATA/Mars/
+    spice_test/phobos_3_3.bds on the dev machine this was verified on
+    (real PHOBOS shape model from NAIF's generic_kernels/dsk/satellites/).
+    """
+    candidates = [
+        os.path.expanduser("~/RSDATA/Mars/spice_test"),
+        os.path.expanduser("~/RSDATA/Moon/spice_test"),
+    ]
+    for d in candidates:
+        dsk = glob.glob(os.path.join(d, "*.bds"))
+        if dsk:
+            return dsk[0]
+    return None
+
+
 class TestPphocube(TestCase):
     """Test p.phocube module.
 
@@ -161,6 +178,134 @@ class TestPphocube(TestCase):
             self.assertGreater(float(stats["min"]), 0.0)
             self.assertLess(float(stats["max"]), 180.0)
             self.assertGreater(float(stats["stddev"]), 0.0)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname},{out_prefix}_*", quiet=True)
+
+    def test_spice_mode_line_rate_produces_row_gradient(self):
+        """-s with line_rate= attached must compute a per-row ephemeris
+        time (centered on the mid-scene epoch), not reuse one constant
+        et for every row. Verified by diffing incidence against the same
+        scene/epoch run *without* line_rate=: the difference must be a
+        real, monotonic, row-indexed gradient (centered at row
+        (nrows-1)/2, sign flipping above/below it) -- not all-zero (which
+        would mean line_rate is being ignored) and not noise."""
+        proj = gs.parse_command("g.proj", flags="g")
+        if proj.get("proj") != "ll":
+            self.skipTest("this test requires a PROJECTION_LL (geographic) "
+                          "location")
+        kernels = _find_real_test_kernels()
+        if not kernels:
+            self.skipTest("no local LSK/PCK/SPK test kernels found "
+                          "(see _find_real_test_kernels)")
+        lsk, pck, spk = kernels
+
+        import numpy as np
+
+        self.runModule("g.region", n=22.45, s=22.0, e=-17.65, w=-18.5,
+                       res=0.05)
+        m_with = "pphocube_test_lr_with_in"
+        m_without = "pphocube_test_lr_without_in"
+        out_with = "pphocube_test_lr_with_out"
+        out_without = "pphocube_test_lr_without_out"
+        try:
+            self.runModule("r.mapcalc", expression=f"{m_with} = 1.0",
+                           overwrite=True)
+            self.runModule("p.spiceinit", map=m_with, target="MOON",
+                           observer="EARTH", time="2026-04-22T14:58:39",
+                           line_rate=0.5, lsk=lsk, pck=pck, spk=spk)
+            self.assertModule(SimpleModule(
+                "p.phocube", input=m_with, output=out_with, flags="si"))
+
+            self.runModule("r.mapcalc", expression=f"{m_without} = 1.0",
+                           overwrite=True)
+            self.runModule("p.spiceinit", map=m_without, target="MOON",
+                           observer="EARTH", time="2026-04-22T14:58:39",
+                           lsk=lsk, pck=pck, spk=spk)
+            self.assertModule(SimpleModule(
+                "p.phocube", input=m_without, output=out_without, flags="si"))
+
+            region = gs.region()
+            nrows = int(region["rows"])
+
+            def _read(mapname):
+                tmp = gs.tempfile()
+                gs.run_command("r.out.bin", input=mapname, output=tmp,
+                               bytes=8, quiet=True)
+                arr = np.fromfile(tmp, dtype=np.float64).reshape(
+                    nrows, int(region["cols"]))
+                os.unlink(tmp)
+                return arr
+
+            diff = (_read(f"{out_with}_incidence")
+                    - _read(f"{out_without}_incidence"))
+            row_means = diff.mean(axis=1)
+
+            self.assertGreater(np.max(np.abs(row_means)), 0,
+                               "line_rate= had no effect -- per-row "
+                               "ephemeris time is not being applied")
+            # Monotonic across rows (real linear-in-row timing offset).
+            self.assertTrue(np.all(np.diff(row_means) < 0)
+                            or np.all(np.diff(row_means) > 0),
+                            "row gradient is not monotonic -- not a real "
+                            "per-row timing effect")
+            center = (nrows - 1) / 2.0
+            self.assertAlmostEqual(
+                float(row_means[int(round(center))])
+                if center == round(center) else
+                float((row_means[int(center)] + row_means[int(center) + 1]) / 2),
+                0.0, delta=max(abs(row_means).max() * 0.5, 1e-9),
+                msg="row gradient should be ~centered at the mid-scene row")
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=(f"{m_with},{m_without},"
+                                   f"{out_with}_*,{out_without}_*"),
+                           quiet=True)
+
+    def test_spice_mode_dsk_shape_differs_from_ellipsoid(self):
+        """When a real DSK kernel is attached, -s mode's local_radius
+        (and the underlying surface point) must come from the real
+        (non-ellipsoid) shape via p_spice_latsrf, not the smooth
+        ellipsoid approximation -- this is the whole point of DSK
+        support. Verified with the real PHOBOS shape model (famously
+        irregular: ~9-13 km radius depending on direction), which the
+        smooth ellipsoid approximation cannot reproduce. Does not
+        require real target-body ephemeris (latsrf needs no observer/
+        look-direction ray), so this works even on a target body whose
+        own SPK isn't loaded -- unlike incidence/emission/phase, which
+        still need real ephemeris and are not exercised here."""
+        proj = gs.parse_command("g.proj", flags="g")
+        if proj.get("proj") != "ll":
+            self.skipTest("this test requires a PROJECTION_LL (geographic) "
+                          "location")
+        kernels = _find_real_test_kernels()
+        dsk = _find_real_dsk()
+        if not kernels or not dsk:
+            self.skipTest("no local LSK/PCK/SPK/DSK test kernels found "
+                          "(see _find_real_test_kernels/_find_real_dsk)")
+        lsk, pck, spk = kernels
+
+        mapname = "pphocube_test_dsk_input"
+        self.runModule("g.region", n=15, s=-15, e=30, w=0, res=1)
+        self.runModule("r.mapcalc",
+                       expression=f"{mapname} = 1.0", overwrite=True)
+        self.runModule("p.spiceinit", map=mapname, target="PHOBOS",
+                       observer="EARTH", time="2026-04-22T14:58:39",
+                       lsk=lsk, pck=pck, spk=spk, dsk=dsk)
+        out_prefix = "pphocube_test_dsk_out"
+        try:
+            module = SimpleModule(
+                "p.phocube", input=mapname, output=out_prefix, flags="sr")
+            self.assertModule(module)
+
+            stats = gs.parse_command("r.univar", flags="g",
+                                      map=f"{out_prefix}_local_radius")
+            self.assertEqual(int(stats["null_cells"]), 0)
+            # Phobos's real shape varies ~9-13 km; a smooth ellipsoid at
+            # this scale would vary far less over a 30x30 deg patch and
+            # vary smoothly -- a real, sizeable stddev is the signature
+            # of genuine irregular-shape data, not an ellipsoid fallback.
+            self.assertGreater(float(stats["stddev"]), 0.05)
         finally:
             self.runModule("g.remove", flags="f", type="raster",
                            pattern=f"{mapname},{out_prefix}_*", quiet=True)

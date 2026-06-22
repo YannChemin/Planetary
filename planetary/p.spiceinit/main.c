@@ -81,8 +81,8 @@ int main(int argc, char *argv[])
 {
     struct GModule *module;
     struct Option  *opt_map, *opt_lsk, *opt_sclk, *opt_ck;
-    struct Option  *opt_spk, *opt_ik, *opt_fk, *opt_pck, *opt_target;
-    struct Option  *opt_observer, *opt_time;
+    struct Option  *opt_spk, *opt_ik, *opt_fk, *opt_pck, *opt_dsk, *opt_target;
+    struct Option  *opt_observer, *opt_time, *opt_line_rate;
     struct Flag    *flag_test;
 
     G_gisinit(argv[0]);
@@ -95,10 +95,11 @@ int main(int argc, char *argv[])
     G_add_keyword(_("geometry"));
     module->label       = _("Attach SPICE kernel assignments to a GRASS raster map.");
     module->description = _("Validates and stores paths to NAIF SPICE kernels (LSK, SCLK, "
-                             "CK, SPK, IK, FK, PCK), target body, observer, and observation "
-                             "time in the raster map's history metadata. p.phocube's SPICE "
-                             "mode (-s) reads these back automatically so kernels need not "
-                             "be specified repeatedly. Multiple paths per kernel type are "
+                             "CK, SPK, IK, FK, PCK, DSK), target body, observer, observation "
+                             "time, and line rate in the raster map's history metadata. "
+                             "p.phocube's SPICE mode (-s) reads these back automatically so "
+                             "kernels need not be specified repeatedly. Multiple paths per "
+                             "kernel type are "
                              "separated by commas.");
 
     opt_map = G_define_standard_option(G_OPT_R_INPUT);
@@ -126,6 +127,16 @@ int main(int argc, char *argv[])
     opt_time->description = _("Observation UTC time (single mid-scene epoch, ISO 8601), "
                               "e.g. 2007-01-05T01:26:56 — stored for downstream modules "
                               "such as p.phocube's SPICE mode (-s)");
+
+    opt_line_rate = G_define_option();
+    opt_line_rate->key         = "line_rate";
+    opt_line_rate->type        = TYPE_DOUBLE;
+    opt_line_rate->required    = NO;
+    opt_line_rate->description = _("Real scan rate, seconds per output row (optional). When "
+                                    "given, p.phocube's SPICE mode (-s) computes each row's "
+                                    "own ephemeris time as time= +/- (row-center_row)*"
+                                    "line_rate instead of using a single mid-scene epoch for "
+                                    "the whole image. Omit for a single-epoch scene (default).");
 
     opt_lsk = G_define_option();
     opt_lsk->key         = "lsk";
@@ -176,6 +187,15 @@ int main(int argc, char *argv[])
     opt_pck->multiple    = YES;
     opt_pck->description = _("PCK kernel(s) — body constants (.tpc, .bpc)");
 
+    opt_dsk = G_define_option();
+    opt_dsk->key         = "dsk";
+    opt_dsk->type        = TYPE_STRING;
+    opt_dsk->required    = NO;
+    opt_dsk->multiple    = YES;
+    opt_dsk->description = _("Digital shape kernel(s) (.bds) — real (non-ellipsoid) shape "
+                              "model; p.phocube's SPICE mode (-s) uses it for real surface "
+                              "intercepts instead of the ellipsoid approximation when present");
+
     flag_test = G_define_flag();
     flag_test->key         = 't';
     flag_test->description = _("Test-load all kernels with CSPICE and report errors (recommended)");
@@ -204,6 +224,7 @@ int main(int argc, char *argv[])
         { opt_ik,   "IK"   },
         { opt_fk,   "FK"   },
         { opt_pck,  "PCK"  },
+        { opt_dsk,  "DSK"  },
         { NULL, NULL }
     };
 
@@ -283,6 +304,15 @@ int main(int argc, char *argv[])
         G_message(_("Observation time: %s"), opt_time->answer);
     }
 
+    /* Store per-line scan rate if given. */
+    if (opt_line_rate->answer) {
+        char paths_arr[1][256];
+        strncpy(paths_arr[0], opt_line_rate->answer, 255);
+        char *pp[1] = { paths_arr[0] };
+        store_kernel_list(mapname, mapset, "LINE_RATE", pp, 1);
+        G_message(_("Line rate: %s s/row"), opt_line_rate->answer);
+    }
+
     /* Clean up CSPICE state after test (do not leave kernels loaded
      * between runs — each module loads its own session). */
     if (do_test) {
@@ -291,7 +321,7 @@ int main(int argc, char *argv[])
     }
 
     if (total_loaded == 0 && !opt_target->answer && !opt_observer->answer &&
-        !opt_time->answer)
+        !opt_time->answer && !opt_line_rate->answer)
         G_warning(_("No kernel files were registered. "
                     "Specify at least one kernel type option."));
 

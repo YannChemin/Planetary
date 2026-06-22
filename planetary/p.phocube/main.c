@@ -44,15 +44,18 @@
 /* SPICE history metadata, written by p.spiceinit as one
  * "SPICE_<KEY>=<value>" line per call to Rast_append_history(). Kernel
  * paths may be semicolon-separated (multiple files per type); TARGET/
- * OBSERVER/TIME are single values. Last occurrence of a given key wins
- * (handles a raster having been re-spiceinit'd). */
+ * OBSERVER/TIME/LINE_RATE are single values. Last occurrence of a given
+ * key wins (handles a raster having been re-spiceinit'd). LINE_RATE is
+ * optional (seconds/row); when absent, -s mode uses a single mid-scene
+ * epoch (TIME) for every row -- see p.phocube.md NOTES. */
 #define SPICE_META_PREFIX "SPICE_"
 
 typedef struct {
     char target[64];
     char observer[64];
     char time[64];
-    int  have_target, have_observer, have_time;
+    double line_rate;  /* seconds per output row; 0 = single mid-scene epoch */
+    int  have_target, have_observer, have_time, have_line_rate, have_dsk;
     int  n_kernels_loaded;
 } SpiceHistoryInfo;
 
@@ -112,6 +115,16 @@ static SpiceHistoryInfo read_spice_history(const char *mapname, const char *maps
             snprintf(info.time, sizeof(info.time), "%s", value);
             info.have_time = 1;
         }
+        else if (strcmp(key, "LINE_RATE") == 0) {
+            info.line_rate = atof(value);
+            info.have_line_rate = 1;
+        }
+        else if (strcmp(key, "DSK") == 0) {
+            int n_before = info.n_kernels_loaded;
+            spice_load_paths(value, &info.n_kernels_loaded);
+            if (info.n_kernels_loaded > n_before)
+                info.have_dsk = 1;
+        }
         else if (strcmp(key, "LSK") == 0 || strcmp(key, "SCLK") == 0 ||
                  strcmp(key, "CK") == 0 || strcmp(key, "SPK") == 0 ||
                  strcmp(key, "IK") == 0 || strcmp(key, "FK") == 0 ||
@@ -146,6 +159,113 @@ static void uppercase_copy(char *dst, size_t n, const char *src)
 }
 
 /* ------------------------------------------------------------------ */
+/* Camera mode (-c): CRISM-specific instrument camera model            */
+/*                                                                      */
+/* CRISM (VNIR detector -74017 / IR detector -74018) is a pushbroom    */
+/* imaging spectrometer: the cross-track (slit) angle of a given       */
+/* (band, sample) pixel relative to the instrument boresight is given  */
+/* by a real, documented linear model from the IK itself --            */
+/* "line_of_sight_angle = a0(band) + a1(band)*line_sample" -- read     */
+/* directly from NAIF's mro_crism_v10.ti. Geometry is computed once at */
+/* one reference band for the whole cube (the real CRISM DDR           */
+/* convention -- per-band "keystone" variation is tiny), not per band. */
+/* ------------------------------------------------------------------ */
+#define CRISM_MAX_CAMERA_COEFF_VALS 1500  /* >= 480 bands * 3 columns */
+
+typedef struct {
+    int    naif_id;
+    char   frame[64];
+    double boresight[3];
+    double slit_dir[3];
+    double a0, a1;     /* camera-model coefficients for the chosen band */
+    int    band;
+} CrismCameraModel;
+
+static void load_crism_camera_model(const char *instrument, int band_opt,
+                                     int have_band_opt, CrismCameraModel *cam)
+{
+    memset(cam, 0, sizeof(*cam));
+
+    if (strcmp(instrument, "CRISM_VNIR") == 0) {
+        cam->naif_id = -74017;
+        snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_VNIR");
+    }
+    else if (strcmp(instrument, "CRISM_IR") == 0) {
+        cam->naif_id = -74018;
+        snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_IR");
+    }
+    else
+        G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
+                        "(v1 supports only CRISM_VNIR, CRISM_IR)."), instrument);
+
+    char varname[80];
+    int n;
+
+    snprintf(varname, sizeof(varname), "INS%d_BORESIGHT", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, 3, &n, cam->boresight) < 0 || n != 3)
+        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
+                        "IK -- has the right CRISM instrument kernel been "
+                        "attached via p.spiceinit's ik= option?"), varname);
+
+    snprintf(varname, sizeof(varname), "INS%d_SLIT_DIRECTION", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, 3, &n, cam->slit_dir) < 0 || n != 3)
+        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                       varname);
+
+    if (have_band_opt)
+        cam->band = band_opt;
+    else {
+        double refband;
+        snprintf(varname, sizeof(varname), "INS%d_REFERENCE_BAND", cam->naif_id);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &refband) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read %s from the "
+                            "loaded IK, and band= was not given."), varname);
+        cam->band = (int)refband;
+    }
+
+    double coeff[CRISM_MAX_CAMERA_COEFF_VALS];
+    snprintf(varname, sizeof(varname), "INS%d_CAMERA_COEFF", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, CRISM_MAX_CAMERA_COEFF_VALS, &n, coeff) < 0)
+        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                       varname);
+
+    int found = 0;
+    for (int i = 0; i + 2 < n; i += 3) {
+        if ((int)coeff[i] == cam->band) {
+            cam->a0 = coeff[i + 1];
+            cam->a1 = coeff[i + 2];
+            found = 1;
+            break;
+        }
+    }
+    if (!found)
+        G_fatal_error(_("Camera mode (-c): band %d not found in %s "
+                        "(valid range is whatever the loaded IK defines)."),
+                       cam->band, varname);
+}
+
+/* Rodrigues' rotation formula: rotate vector v by angle theta (radians)
+ * about unit axis (normalised internally). Pure vector math -- no
+ * CSPICE call needed, the axis/vector are already in the same frame. */
+static void rodrigues_rotate(const double v[3], const double axis_in[3],
+                              double theta, double out[3])
+{
+    double axis[3] = { axis_in[0], axis_in[1], axis_in[2] };
+    double alen = sqrt(axis[0]*axis[0] + axis[1]*axis[1] + axis[2]*axis[2]);
+    if (alen > 0) { axis[0] /= alen; axis[1] /= alen; axis[2] /= alen; }
+
+    double c = cos(theta), s = sin(theta);
+    double dot = v[0]*axis[0] + v[1]*axis[1] + v[2]*axis[2];
+    double cross[3] = {
+        axis[1]*v[2] - axis[2]*v[1],
+        axis[2]*v[0] - axis[0]*v[2],
+        axis[0]*v[1] - axis[1]*v[0]
+    };
+    for (int i = 0; i < 3; i++)
+        out[i] = v[i]*c + cross[i]*s + axis[i]*dot*(1.0 - c);
+}
+
+/* ------------------------------------------------------------------ */
 /* Which backplane outputs to generate                                  */
 /* ------------------------------------------------------------------ */
 typedef struct {
@@ -166,9 +286,10 @@ int main(int argc, char *argv[])
     struct Option  *opt_target, *opt_a, *opt_b, *opt_c;
     struct Option  *opt_sun_x, *opt_sun_y, *opt_sun_z;
     struct Option  *opt_obs_x, *opt_obs_y, *opt_obs_z;
+    struct Option  *opt_instrument, *opt_cam_band;
     struct Flag    *flag_inc, *flag_emi, *flag_pha, *flag_lat;
     struct Flag    *flag_lon, *flag_rad, *flag_res, *flag_all;
-    struct Flag    *flag_spice;
+    struct Flag    *flag_spice, *flag_camera;
     struct History  history;
 
     G_gisinit(argv[0]);
@@ -289,6 +410,34 @@ int main(int argc, char *argv[])
                                  "pixel/line grid, e.g. as produced by 'p.in.pds3 -g' for raw "
                                  "pushbroom cubes) -- see NOTES.");
 
+    flag_camera = G_define_flag(); flag_camera->key = 'c';
+    flag_camera->label = _("Camera mode: real per-pixel boresight ray (CRISM only, v1)");
+    flag_camera->description = _("Builds a real per-pixel look-direction ray from the "
+                                  "instrument's boresight + per-band camera-model "
+                                  "coefficients (read from the IK attached via p.spiceinit) "
+                                  "and intersects it with the target surface (p_spice_sincpt) "
+                                  "instead of assuming the region already gives a known "
+                                  "(lon, lat) per pixel. For raw, un-projected pushbroom "
+                                  "cubes (e.g. CRISM TRDR/EDR) where -s cannot be used. "
+                                  "Requires instrument=. See NOTES.");
+
+    opt_instrument = G_define_option();
+    opt_instrument->key         = "instrument";
+    opt_instrument->type        = TYPE_STRING;
+    opt_instrument->required    = NO;
+    opt_instrument->options     = "CRISM_VNIR,CRISM_IR";
+    opt_instrument->description = _("Instrument camera model to use with -c (v1: CRISM only)");
+
+    opt_cam_band = G_define_option();
+    opt_cam_band->key         = "band";
+    opt_cam_band->type        = TYPE_INTEGER;
+    opt_cam_band->required    = NO;
+    opt_cam_band->description = _("Detector band index for -c's camera-model angle lookup "
+                                   "(default: the instrument's own IK reference band, e.g. "
+                                   "223 for CRISM VNIR / 247 for CRISM IR -- geometry is "
+                                   "computed once at this band for the whole cube, matching "
+                                   "the real CRISM DDR convention, not per-band)");
+
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
 
@@ -340,10 +489,17 @@ int main(int argc, char *argv[])
     /* history, real ephemeris time, real body radii from the loaded PCK. */
     /* ---------------------------------------------------------------- */
     int spice_mode = flag_spice->answer;
+    int camera_mode = flag_camera->answer;
     SpiceHistoryInfo spice_info;
     double et = 0.0;
     char fixref[80] = "";
     char target_upper[64] = "";
+
+    if (spice_mode && camera_mode)
+        G_fatal_error(_("-s and -c are mutually exclusive (two different "
+                        "ways of getting a per-pixel surface point)."));
+    if (camera_mode && !opt_instrument->answer)
+        G_fatal_error(_("-c requires instrument= (v1: CRISM_VNIR or CRISM_IR)."));
 
     /* Projection handling for -s: a real geographic/projected CRS is
      * required (see NOTES) -- an un-georeferenced pixel/line grid
@@ -413,6 +569,47 @@ int main(int argc, char *argv[])
     }
 
     /* ---------------------------------------------------------------- */
+    /* Camera mode (-c) setup: real target/observer/time/kernels from     */
+    /* history (same as -s), plus the CRISM instrument camera model.      */
+    /* No projection/region-CRS handling needed -- row/col are just       */
+    /* (line, sample) indices into the camera model, not coordinates.     */
+    /* ---------------------------------------------------------------- */
+    CrismCameraModel cam;
+    const char *camera_method = "Ellipsoid";
+
+    if (camera_mode) {
+        p_spice_init();
+        spice_info = read_spice_history(input, input_mapset);
+        if (p_spice_str2et(spice_info.time, &et) < 0)
+            G_fatal_error(_("SPICE: could not convert time '%s' to ephemeris "
+                            "time (is an LSK kernel attached?)."), spice_info.time);
+
+        uppercase_copy(target_upper, sizeof(target_upper), spice_info.target);
+        snprintf(fixref, sizeof(fixref), "IAU_%s", target_upper);
+
+        double radii[3];
+        if (p_spice_radii(spice_info.target, radii) == 0) {
+            a_km = radii[0]; b_km = radii[1]; c_km = radii[2];
+            G_message(_("SPICE: using real %s radii from loaded PCK: "
+                        "a=%.3f b=%.3f c=%.3f km"), target_upper, a_km, b_km, c_km);
+        }
+        else
+            G_warning(_("SPICE: no PCK radii found for '%s'; falling back to "
+                        "a_radius=/b_radius=/c_radius= (%.3f/%.3f/%.3f km)."),
+                       spice_info.target, a_km, b_km, c_km);
+
+        if (spice_info.have_dsk)
+            camera_method = "DSK/Unprioritized";
+
+        load_crism_camera_model(opt_instrument->answer,
+                                opt_cam_band->answer ? atoi(opt_cam_band->answer) : 0,
+                                opt_cam_band->answer != NULL, &cam);
+        G_message(_("Camera mode: instrument=%s frame=%s band=%d "
+                    "(a0=%.9f a1=%.9f rad)"),
+                   opt_instrument->answer, cam.frame, cam.band, cam.a0, cam.a1);
+    }
+
+    /* ---------------------------------------------------------------- */
     /* Build ellipsoid shape model                                       */
     /* ---------------------------------------------------------------- */
     PShapeModel *shape = p_shape_ellipsoid(a_km, b_km, c_km);
@@ -430,9 +627,14 @@ int main(int argc, char *argv[])
 
     G_message(_("Computing backplanes for %d x %d pixels ..."), nrows, ncols);
     G_message(_("  Ellipsoid: a=%.3f  b=%.3f  c=%.3f km"), a_km, b_km, c_km);
-    if (spice_mode)
+    if (spice_mode || camera_mode) {
         G_message(_("  SPICE: target=%s observer=%s time=%s (et=%.3f)"),
                    target_upper, spice_info.observer, spice_info.time, et);
+        if (spice_info.have_line_rate)
+            G_message(_("  SPICE: line_rate=%.6f s/row -- per-row ephemeris "
+                        "time, not a single mid-scene epoch"),
+                       spice_info.line_rate);
+    }
     else
         G_message(_("  Observer: (%.1f, %.1f, %.1f) km body-fixed"), obs[0], obs[1], obs[2]);
 
@@ -484,7 +686,19 @@ int main(int argc, char *argv[])
              * the region + CRS (no ray-casting needed -- we're not solving
              * "where does this ray hit", we already know the point), so
              * call p_spice_ilumin() directly per pixel with that known
-             * body-fixed surface point and the real ephemeris time. */
+             * body-fixed surface point and the real ephemeris time.
+             *
+             * et_row: with line_rate= attached (real per-line cadence),
+             * each row gets its own ephemeris time relative to the
+             * mid-scene epoch instead of one constant et for the whole
+             * scene -- real pushbroom/framing acquisitions take a real,
+             * non-zero scan duration, so row 0 and row nrows-1 were not
+             * actually acquired at the same instant. Without line_rate=
+             * (have_line_rate == 0) this is a no-op (et_row == et). */
+            double et_row = et;
+            if (spice_info.have_line_rate)
+                et_row = et + (row - (nrows - 1) / 2.0) * spice_info.line_rate;
+
             for (int col = 0; col < ncols; col++) {
                 double east  = region.west  + (col + 0.5) * region.ew_res;
                 double north = region.north - (row + 0.5) * region.ns_res;
@@ -499,12 +713,31 @@ int main(int argc, char *argv[])
                 /* else: PROJECTION_LL -- region east/north already are
                  * real lon/lat, no transform needed. */
 
-                double r_km = p_shape_local_radius_km(shape, lat_deg, lon_deg);
+                /* DSK kernel attached: use the real (non-ellipsoid) shape
+                 * via latsrf -- still no ray-casting/camera model needed,
+                 * since we already know this pixel's (lon, lat). Falls
+                 * back to the ellipsoid for any (lon, lat) the DSK
+                 * doesn't cover (latsrf returns < 0), rather than
+                 * G_fatal_error -- a real DSK tile boundary is a normal
+                 * condition, not a configuration error. */
+                double r_km;
                 double pt[3];
-                p_shape_latlon_to_xyz(lat_deg, lon_deg, r_km, pt);
+                const char *ilumin_method = "Ellipsoid";
+                int used_dsk = 0;
+                if (spice_info.have_dsk &&
+                    p_spice_latsrf("DSK/Unprioritized", target_upper, et_row,
+                                  fixref, lon_deg, lat_deg, pt) == 0) {
+                    r_km = sqrt(pt[0]*pt[0] + pt[1]*pt[1] + pt[2]*pt[2]);
+                    ilumin_method = "DSK/Unprioritized";
+                    used_dsk = 1;
+                }
+                if (!used_dsk) {
+                    r_km = p_shape_local_radius_km(shape, lat_deg, lon_deg);
+                    p_shape_latlon_to_xyz(lat_deg, lon_deg, r_km, pt);
+                }
 
                 double phase_deg, incidence_deg, emission_deg;
-                int ok = (p_spice_ilumin("Ellipsoid", target_upper, et, fixref,
+                int ok = (p_spice_ilumin(ilumin_method, target_upper, et_row, fixref,
                                          "LT+S", spice_info.observer, pt,
                                          &phase_deg, &incidence_deg,
                                          &emission_deg) == 0);
@@ -526,6 +759,70 @@ int main(int argc, char *argv[])
                 if (bp.resolution) {
                     /* Same approximate formula as flat-field mode (v1 --
                      * see p.phocube.md NOTES). */
+                    double circ = 2.0 * M_PI * r_km;
+                    row_res[col] = circ / ncols * cos(lat_deg * DEG2RAD);
+                }
+            }
+        }
+        else if (camera_mode) {
+            /* Camera mode: build a real per-pixel boresight ray from the
+             * CRISM camera model (cross-track angle = a0 + a1*sample,
+             * rotated about the slit direction) and intersect it with
+             * the target surface via sincpt -- row/col here are real
+             * (line, sample) indices into the raw cube, not coordinates;
+             * the surface point (and hence lat/lon) is *found*, not
+             * known in advance, unlike -s mode. */
+            double et_row = et;
+            if (spice_info.have_line_rate)
+                et_row = et + (row - (nrows - 1) / 2.0) * spice_info.line_rate;
+
+            for (int col = 0; col < ncols; col++) {
+                double theta = cam.a0 + cam.a1 * col;
+                double dvec[3];
+                rodrigues_rotate(cam.boresight, cam.slit_dir, theta, dvec);
+
+                double pt[3], srfvec[3], trgepc;
+                int hit = p_spice_sincpt(camera_method, target_upper, et_row,
+                                         fixref, "LT+S", spice_info.observer,
+                                         cam.frame, dvec, pt, &trgepc, srfvec);
+
+                if (hit != 1) {
+                    spice_failed_pixels++;
+                    if (bp.incidence) Rast_set_d_null_value(&row_inc[col], 1);
+                    if (bp.emission)  Rast_set_d_null_value(&row_emi[col], 1);
+                    if (bp.phase)     Rast_set_d_null_value(&row_pha[col], 1);
+                    if (bp.lat)       Rast_set_d_null_value(&row_lat[col], 1);
+                    if (bp.lon)       Rast_set_d_null_value(&row_lon[col], 1);
+                    if (bp.local_radius) Rast_set_d_null_value(&row_rad[col], 1);
+                    if (bp.resolution)   Rast_set_d_null_value(&row_res[col], 1);
+                    continue;
+                }
+
+                double r_km = sqrt(pt[0]*pt[0] + pt[1]*pt[1] + pt[2]*pt[2]);
+                double lon_deg = atan2(pt[1], pt[0]) * RAD2DEG;
+                double lat_deg = asin(pt[2] / r_km) * RAD2DEG;
+
+                double phase_deg, incidence_deg, emission_deg;
+                int ok = (p_spice_ilumin(camera_method, target_upper, et_row,
+                                         fixref, "LT+S", spice_info.observer,
+                                         pt, &phase_deg, &incidence_deg,
+                                         &emission_deg) == 0);
+
+                if (!ok) {
+                    spice_failed_pixels++;
+                    if (bp.incidence) Rast_set_d_null_value(&row_inc[col], 1);
+                    if (bp.emission)  Rast_set_d_null_value(&row_emi[col], 1);
+                    if (bp.phase)     Rast_set_d_null_value(&row_pha[col], 1);
+                }
+                else {
+                    if (bp.incidence) row_inc[col] = incidence_deg;
+                    if (bp.emission)  row_emi[col] = emission_deg;
+                    if (bp.phase)     row_pha[col] = phase_deg;
+                }
+                if (bp.lat) row_lat[col] = lat_deg;
+                if (bp.lon) row_lon[col] = lon_deg;
+                if (bp.local_radius) row_rad[col] = r_km;
+                if (bp.resolution) {
                     double circ = 2.0 * M_PI * r_km;
                     row_res[col] = circ / ncols * cos(lat_deg * DEG2RAD);
                 }
@@ -608,11 +905,11 @@ int main(int argc, char *argv[])
     }
     G_percent(1, 1, 2);
 
-    if (spice_mode && spice_failed_pixels > 0)
-        G_warning(_("SPICE: p_spice_ilumin failed for %d/%d pixels "
-                    "(set NULL in incidence/emission/phase outputs)."),
+    if ((spice_mode || camera_mode) && spice_failed_pixels > 0)
+        G_warning(_("SPICE: %d/%d pixels failed (ray missed the body, or "
+                    "ilumin/sincpt error) -- set NULL in output bands."),
                    spice_failed_pixels, nrows * ncols);
-    if (spice_mode)
+    if (spice_mode || camera_mode)
         p_spice_clear();
 
     /* ---------------------------------------------------------------- */

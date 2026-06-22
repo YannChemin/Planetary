@@ -20,14 +20,22 @@ and Ancillary Information Facility (NAIF). The kernel types are:
 | IK | Instrument kernel |
 | FK | Frames kernel |
 | PCK | Planetary constants kernel |
+| DSK | Digital shape kernel — real (non-ellipsoid) shape model |
 
 In addition to kernel paths, `target=` stores the target body name,
 `observer=` stores the observer/spacecraft name as known to the loaded
 kernels (e.g. `MRO`), and `time=` stores a single mid-scene UTC
 observation epoch (ISO 8601, e.g. `2007-01-05T01:26:56`) — all three are
-required for *p.phocube -s* to work. The module validates that each
-kernel file is readable before attaching it; pass `-t` to additionally
-test-load every kernel with CSPICE itself.
+required for *p.phocube -s* to work. `line_rate=` (seconds per output
+row) is optional: when given, *p.phocube -s* computes each row's own
+ephemeris time relative to `time=` instead of reusing one constant epoch
+for the whole scene — useful for scenes long enough that real spacecraft
+motion during acquisition changes the geometry row-to-row. `dsk=` is
+also optional: when a DSK kernel is attached, *p.phocube -s* uses the
+real (non-ellipsoid) shape it describes instead of the ellipsoid
+approximation. The module validates that each kernel file is readable
+before attaching it; pass `-t` to additionally test-load every kernel
+with CSPICE itself.
 
 ## NOTES
 

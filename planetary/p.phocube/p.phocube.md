@@ -19,7 +19,7 @@ Available backplane bands:
 | -x | resolution | Approximate ground-sample distance (km/pixel) |
 | -a | (all of the above) | |
 
-Two operating modes:
+Three operating modes:
 
 1. **Flat-field mode (default)**: the user supplies fixed solar-direction
    (`sun_x/y/z=`) and observer-position (`obs_x/y/z=`) vectors in
@@ -39,7 +39,18 @@ Two operating modes:
    `ilumin` once per pixel for the real incidence/emission/phase angles
    at the given observation time. Fails with `G_fatal_error` if the
    active region is an un-georeferenced pixel/line grid
-   (`PROJECTION_XY`) — see NOTES.
+   (`PROJECTION_XY`) — see NOTES. If `line_rate=` was also attached via
+   *p.spiceinit*, each row gets its own ephemeris time instead of one
+   constant epoch for the whole scene (see "Per-line timing" below).
+3. **Camera mode (`-c`, v1: CRISM only)**: for raw, un-projected
+   pushbroom cubes where `-s` cannot be used at all (no known per-pixel
+   (lon, lat) up front). Requires `instrument=` (`CRISM_VNIR` or
+   `CRISM_IR`). Builds a real per-pixel boresight ray from the
+   instrument's camera model (read from the IK attached via
+   *p.spiceinit*) and intersects it with the target surface via
+   `p_spice_sincpt` instead of assuming a known surface point.
+   **Not yet verified correct against real data — see NOTES. Do not
+   trust its output quantitatively yet.**
 
 ## NOTES
 
@@ -57,6 +68,37 @@ resulting backplanes back onto the cube's native pixel/line region (a
 row/col-shaped array round-trip via `r.out.bin`/`r.in.bin`, not a
 reprojection, since both regions share the same row/col count) — see
 `p.atcorr.md`'s worked Mars example for the full sequence.
+
+### Per-line timing in `-s` mode
+
+By default `-s` uses one mid-scene epoch (`time=`) for every row — an
+approximation, since a real pushbroom/framing acquisition takes a real,
+non-zero scan duration and each row was actually acquired at a slightly
+different time. If a real per-line cadence is known, attach it via
+*p.spiceinit*'s `line_rate=` (seconds per output row); `-s` then computes
+each row's own ephemeris time as
+`time= + (row - (nrows-1)/2) * line_rate` instead of reusing a single
+epoch. This still uses one ephemeris time per *row* (not per pixel
+within a row) and does not require or imply a real per-pixel camera
+model (see "Not implemented" below) — it only refines the timing of an
+already-known, already-georeferenced per-pixel (lat, lon).
+
+### Real (DSK) shape models in `-s` mode
+
+By default `-s` still uses the ellipsoid-only shape model
+(`a_radius=`/`b_radius=`/`c_radius=`, or real PCK radii), just driven by
+real ephemeris instead of fixed flat-field vectors. If a DSK kernel
+(real, non-ellipsoid shape model, e.g. from laser altimetry or
+stereophotogrammetry) is also attached via *p.spiceinit*'s `dsk=`, `-s`
+uses it instead: each pixel's known (lon, lat) is mapped to the real
+shape's surface point via CSPICE `latsrf` (`method="DSK/Unprioritized"`)
+rather than the ellipsoid intercept, and `ilumin` is then called with
+that same method so incidence/emission/phase reflect the real local
+surface normal, not the ellipsoid's. This still needs no per-pixel
+camera model — `latsrf` only needs the already-known (lon, lat), exactly
+like the ellipsoid path it replaces. If `latsrf` has no DSK coverage at
+a given pixel's (lon, lat) (e.g. outside the DSK's tiled extent), that
+pixel falls back to the ellipsoid rather than failing the whole run.
 
 ### SPICE mode (`-s`): scope and requirements
 
@@ -101,8 +143,61 @@ time conversion → real PCK radii → per-pixel `ilumin` all produced sane,
 smoothly per-pixel-varying, non-NULL incidence/emission/phase. The
 `PROJECTION_XY` guard was confirmed to reject an un-georeferenced
 pixel/line input with `G_fatal_error` rather than silently misinterpreting
-sample/line indices as degrees. Both are covered by regression tests in
-`testsuite/test_pphocube.py`.
+sample/line indices as degrees. `line_rate=`'s per-row ephemeris time was
+confirmed to produce a real, monotonic, row-indexed incidence gradient
+(vs. an identical run without `line_rate=`), centered on the mid-scene
+row, rather than being silently ignored. DSK shape support was confirmed
+against the real PHOBOS shape model (NAIF `phobos_3_3.bds`): `local_radius`
+varied realistically (~9-13 km, stddev well above an ellipsoid's smooth
+variation over the same patch) instead of the smooth ellipsoid curve, and
+a standalone `latsrf` comparison at matched (lon, lat) showed up to ~1.8 km
+real divergence from the ellipsoid approximation — Phobos's well-known
+large-scale irregularity (e.g. the Stickney crater). All four are covered
+by regression tests in `testsuite/test_pphocube.py`.
+
+### Camera mode (`-c`): real, but not yet verified correct
+
+`-c` reuses the same real `sincpt`/`ilumin` calls already verified
+correct by `-s` mode (above), driven by a real per-pixel ray instead of
+a known surface point. Real-data testing against the actual
+FRT00003BFB CRISM observation (this repo's own worked example; real
+NAIF MRO kernels, including the CRISM gimbal's own CK/SCLK pairing --
+frame `MRO_CRISM_ART`, NAIF ID -74012, decoded via virtual clock ID
+-74999, not the regular spacecraft clock) found and fixed one real
+crash bug (`p_spice_sincpt`'s `trgepc`/`srfvec` outputs are not
+optional -- passing `NULL` segfaults inside CSPICE; now documented in
+`p_spice.h`), and confirmed `sincpt`/`ilumin` themselves produce sane,
+real, smoothly-varying incidence/emission/phase when driven by the
+*unrotated* instrument boresight directly (matching real MRO orbital
+altitude and a genuine ~60 deg off-nadir CRISM gimbal angle, consistent
+with a real targeted "FRT" observation).
+
+What's **not yet verified**: applying CRISM's own documented per-sample
+`CAMERA_COEFF` cross-track angle (`a0(band) + a1(band)*sample`, read
+from the real NAIF IK) on top of that already-correct pointing pushes
+every sample off the planet. The coefficient's ~13 deg swing across 640
+samples is far larger than the IK's own declared FOV envelope
+(`FOV_CROSS_ANGLE` ~= 1.06 deg half-angle), which is the real, unresolved
+inconsistency -- not a guess. ISIS3's actual current `CrismCamera.cpp`
+doesn't use `CAMERA_COEFF` at all; it builds the focal-plane mapping
+from `BORESIGHT_LINE`/`BORESIGHT_SAMPLE` + a generic pinhole camera
+model instead (keywords not present in the public NAIF IK used here).
+Until this is resolved, treat `-c`'s output as unverified -- the
+plumbing (kernel loading, real timing, frame resolution, intercept,
+illumination) is confirmed real and crash-free, but the per-sample
+angle convention is not yet confirmed correct. See `TODO.md` for the
+full real-data trace and the planned fix (switch to the simpler pinhole
+formula).
+
+### Not implemented (out of scope for this version)
+
+See the repo's top-level `TODO.md` for full context. `-c` v1 supports
+only CRISM (VNIR and IR detectors); any other `instrument=` value is a
+`G_fatal_error`, not a guess -- other instruments need their own
+per-instrument camera-model formula (CRISM's `CAMERA_COEFF` convention
+is specific to CRISM, not a general pattern). Real (non-ellipsoid) DSK
+shape models are supported in `-c` the same way as `-s` (reuses
+`camera_method`, `"DSK/Unprioritized"` when a DSK is attached).
 
 ## EXAMPLES
 
@@ -125,6 +220,32 @@ p.spiceinit map=hirise_red target=MARS observer=MRO \
     lsk=naif0012.tls pck=pck00011.tpc spk=mro_struct.bsp ck=mro_sc.bc
 p.phocube -s -iep input=hirise_red output=hirise_geom
 # produces: hirise_geom_incidence, hirise_geom_emission, hirise_geom_phase
+```
+
+SPICE mode with a real DSK shape model (e.g. an irregular small body)
+instead of the ellipsoid approximation, and real per-line timing:
+
+```sh
+p.spiceinit map=phobos_img target=PHOBOS observer=MRO \
+    time=2026-04-22T14:58:39 line_rate=0.001 \
+    lsk=naif0012.tls pck=pck00011.tpc spk=mar097.bsp \
+    dsk=phobos_3_3.bds ck=mro_sc.bc
+p.phocube -s -iepr input=phobos_img output=phobos_geom
+# local_radius (and the surface point feeding incidence/emission/phase)
+# now comes from the real shape model, not a smooth ellipsoid.
+```
+
+Camera mode, real per-pixel ray for a raw CRISM cube (real kernels --
+see NOTES, output not yet verified correct):
+
+```sh
+p.spiceinit map=crism_frt target=MARS observer=MRO \
+    time=2007-01-05T01:26:56.855 line_rate=0.266667 \
+    lsk=naif0012.tls pck=pck00011.tpc sclk=MRO_SCLKSCET.00119.tsc \
+    sclk=MRO_SCLKSCET.00119.65536.tsc fk=mro_v17.tf ik=mro_crism_v10.ti \
+    spk=mro_psp2.bsp spk=mar063.bsp \
+    ck=mro_sc_psp_070102_070108.bc ck=mro_crm_psp_070101_070131.bc
+p.phocube -c -iepntr instrument=CRISM_VNIR input=crism_frt output=crism_geom
 ```
 
 ## REFERENCES
