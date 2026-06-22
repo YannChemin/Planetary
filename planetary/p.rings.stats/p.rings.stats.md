@@ -35,8 +35,8 @@ grass -c XY ~/grassdata/saturn_rings
 p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
     dest=$HOME/RSDATA/Saturn/kernels
 
-# ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
-p.in.astropedia opus_id=co-iss-n1467344155 output=N1467344155_raw
+# ── Step 2: Raw image from OPUS (p.in.archive) ────────────────────────────
+p.in.archive opus_id=co-iss-n1467344155 output=N1467344155_raw
 
 # ── Step 3: Set radlong output region ────────────────────────────────────────
 # north/south = ring_radius [km],  east/west = ring_longitude [deg]
@@ -89,7 +89,7 @@ profiles from it, convert to ring_radius first with `p.rings.project -i`.
 ## SEE ALSO
 
 - [p.spice.find](p.spice.find.md) — download NAIF SPICE kernels
-- [p.in.astropedia](p.in.astropedia.md) — fetch raw PDS3 images from OPUS
+- [p.in.archive](p.in.archive.md) — fetch raw PDS3 images from OPUS
 - [p.in.rings](p.in.rings.md) — project raw camera image to ring-plane space
 - [p.rings.project](p.rings.project.md) — RingCylindrical projection (prerequisite)
 

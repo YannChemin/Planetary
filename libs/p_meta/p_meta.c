@@ -488,6 +488,96 @@ int p_meta_write(PMeta *m, const char *mapname)
 }
 
 /* ------------------------------------------------------------------ */
+/* p_meta_read_string_field — minimal targeted JSON field reader       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Find the next double-quoted string after needle in buf and copy its
+ * unescaped contents into out (caller-allocated, outlen bytes). Minimal
+ * unescaping (\", \\, \n, \r, \t, \uXXXX -> raw byte) -- a mirror of
+ * _json_str()'s escaper above, not a general JSON parser. Returns 0 on
+ * success, -1 if no quoted string follows needle.
+ */
+static int _json_extract_after(const char *buf, const char *needle,
+                                char *out, int outlen)
+{
+    const char *p = strstr(buf, needle);
+    if (!p) return -1;
+    p += strlen(needle);
+    /* Skip to the opening quote of the value (past ':' and whitespace). */
+    while (*p && *p != '"') {
+        if (*p == ',' || *p == '}') return -1; /* hit next field/end first */
+        p++;
+    }
+    if (*p != '"') return -1;
+    p++;
+
+    int n = 0;
+    while (*p && *p != '"' && n < outlen - 1) {
+        if (*p == '\\' && p[1]) {
+            p++;
+            switch (*p) {
+            case 'n': out[n++] = '\n'; break;
+            case 'r': out[n++] = '\r'; break;
+            case 't': out[n++] = '\t'; break;
+            case '"': out[n++] = '"';  break;
+            case '\\': out[n++] = '\\'; break;
+            case 'u':
+                /* \uXXXX -> skip 4 hex digits, emit '?' (field values used
+                 * by this reader -- sensor ids -- are plain ASCII; this
+                 * just avoids corrupting the scan position). */
+                out[n++] = '?';
+                for (int i = 0; i < 4 && p[1]; i++) p++;
+                break;
+            default: out[n++] = *p;
+            }
+            p++;
+        } else {
+            out[n++] = *p++;
+        }
+    }
+    out[n] = '\0';
+    return (*p == '"') ? 0 : -1;
+}
+
+int p_meta_read_string_field(const char *mapname, const char *map_type,
+                              const char *field, char *out, int outlen)
+{
+    if (!mapname || !field || !out || outlen < 1) return -1;
+
+    char *ms = _mapset_path();
+    if (!ms) return -1;
+
+    const char *subdir = (map_type && strcmp(map_type, "raster3d") == 0)
+                              ? "grid3" : "cell_misc";
+    size_t len = strlen(ms) + strlen(subdir) + strlen(mapname) +
+                 strlen(P_META_FILENAME) + 8;
+    char *path = (char *)G_malloc(len);
+    snprintf(path, len, "%s/%s/%s/%s", ms, subdir, mapname, P_META_FILENAME);
+    G_free(ms);
+
+    FILE *fp = fopen(path, "rb");
+    G_free(path);
+    if (!fp) return -1;
+
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (size <= 0 || size > 1 << 20) { fclose(fp); return -1; }
+
+    char *buf = (char *)G_malloc((size_t)size + 1);
+    size_t nread = fread(buf, 1, (size_t)size, fp);
+    fclose(fp);
+    buf[nread] = '\0';
+
+    char needle[128];
+    snprintf(needle, sizeof(needle), "\"%s\"", field);
+    int rc = _json_extract_after(buf, needle, out, outlen);
+    G_free(buf);
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
 /* p_meta_write_3d — 3-D raster (grid3)                                */
 /* ------------------------------------------------------------------ */
 int p_meta_write_3d(PMeta *m, const char *mapname)

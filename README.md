@@ -211,7 +211,7 @@ The category must match one of the strings in the table below exactly.
 
 | Category                       | Modules                                                                                      |
 |--------------------------------|----------------------------------------------------------------------------------------------|
-| **Import & Export**            | `p.in.pds3`, `p.in.pds4`, `p.in.isis`, `p.out.isis`, `p.in.astropedia`, `p.in.lroc.nac`, `p.in.pds`, `p.in.dem`, `p.in.ancillary` |
+| **Import & Export**            | `p.in.pds3`, `p.in.pds4`, `p.in.isis`, `p.out.isis`, `p.in.archive`, `p.in.lroc.nac`, `p.in.pds`, `p.in.dem`, `p.in.ancillary` |
 | **Camera & Geometry**          | `p.spiceinit`, `p.caminfo`, `p.cam2map`                                                     |
 | **SPICE & Ephemeris**          | `p.in.spice`, `p.spice.config`, `p.spice.subpoint`                                          |
 | **Photometric Analysis**       | `p.phocube`, `p.photomet`, `p.atcorr.hapke`, `p.photrim`, `p.albedo`                        |

@@ -1,6 +1,6 @@
-"""Test of p.in.astropedia
+"""Test of p.in.archive
 
-Validates the GRASS p.in.astropedia Python module: interface description,
+Validates the GRASS p.in.archive Python module: interface description,
 binary presence on PATH, and (when network is available) the -l listing
 mode against the USGS Astropedia STAC catalog.  Network-dependent tests
 are skipped gracefully when the host has no internet access.
@@ -47,27 +47,27 @@ CRISM_NETWORK = _crism_archive_available()
 
 
 def _load_module_under_test():
-    """Load p.in.astropedia.py by file path (filename has dots, so it can't
+    """Load p.in.archive.py by file path (filename has dots, so it can't
     be imported as a regular module name)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    script_path = os.path.join(here, "..", "p.in.astropedia.py")
-    spec = importlib.util.spec_from_file_location("p_in_astropedia_mut", script_path)
+    script_path = os.path.join(here, "..", "p.in.archive.py")
+    spec = importlib.util.spec_from_file_location("p_in_archive_mut", script_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-class TestPinAstropedia(TestCase):
-    """Verify p.in.astropedia interface and listing behaviour."""
+class TestPinArchive(TestCase):
+    """Verify p.in.archive interface and listing behaviour."""
 
     def test_module_on_path(self):
-        self.assertIsNotNone(shutil.which("p.in.astropedia"),
-                              "p.in.astropedia not found on PATH")
+        self.assertIsNotNone(shutil.which("p.in.archive"),
+                              "p.in.archive not found on PATH")
 
     def test_interface_description(self):
         """--interface-description must exit 0 (module parses correctly)."""
         rc = subprocess.run(
-            ["p.in.astropedia", "--interface-description"],
+            ["p.in.archive", "--interface-description"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         ).returncode
         self.assertEqual(rc, 0,
@@ -75,12 +75,12 @@ class TestPinAstropedia(TestCase):
 
     def test_missing_source_arg_fails(self):
         """Running without doi/lid/search must exit non-zero."""
-        module = SimpleModule("p.in.astropedia", output="dummy")
+        module = SimpleModule("p.in.archive", output="dummy")
         self.assertModuleFail(module)
 
     def test_conflicting_source_args_fail(self):
         """Supplying both doi= and search= must fail with a clear error."""
-        module = SimpleModule("p.in.astropedia",
+        module = SimpleModule("p.in.archive",
                                doi="10.17189/1519101",
                                search="MOLA",
                                flags="l")
@@ -89,7 +89,7 @@ class TestPinAstropedia(TestCase):
     @unittest.skipUnless(NETWORK, "No network — skipping live STAC test")
     def test_list_mode_search(self):
         """-l search= must list at least one STAC result without error."""
-        module = SimpleModule("p.in.astropedia",
+        module = SimpleModule("p.in.archive",
                                flags="l",
                                search="MOLA 64ppd",
                                limit=3)
@@ -101,7 +101,7 @@ class TestPinAstropedia(TestCase):
     @unittest.skipUnless(NETWORK, "No network — skipping live STAC test")
     def test_list_mode_returns_items(self):
         """-l with a generic planetary keyword should list items."""
-        module = SimpleModule("p.in.astropedia",
+        module = SimpleModule("p.in.archive",
                                flags="l",
                                search="Mars",
                                limit=5)
@@ -112,14 +112,14 @@ class TestPinAstropedia(TestCase):
         """-l with a well-known PDS4 LID must not crash (product may or may
         not be found depending on PDS API availability)."""
         module = SimpleModule(
-            "p.in.astropedia",
+            "p.in.archive",
             flags="l",
             lid="urn:nasa:pds:mgs-mola-dem-mars:data:megt90n000cb",
             limit=1)
         self.assertModule(module)
 
 
-class TestPinAstropediaCrismCatalog(unittest.TestCase):
+class TestPinArchiveCrismCatalog(unittest.TestCase):
     """White-box tests for the crism= catalog resolver (no network)."""
 
     @classmethod
@@ -156,40 +156,154 @@ class TestPinAstropediaCrismCatalog(unittest.TestCase):
             self.mod.resolve_crism("not_a_real_catalog_key")
 
 
-class TestPinAstropediaCrismCli(TestCase):
+class TestPinArchiveCrismCli(TestCase):
     """Black-box CLI tests for crism= (mutual exclusion, listing)."""
 
     def test_crism_conflicts_with_cog(self):
-        module = SimpleModule("p.in.astropedia",
+        module = SimpleModule("p.in.archive",
                                crism="mawrth_vallis_frt00003bfb_vnir",
                                cog="mars_mola_dem_463m",
                                output="dummy")
         self.assertModuleFail(module)
 
     def test_crism_conflicts_with_doi(self):
-        module = SimpleModule("p.in.astropedia",
+        module = SimpleModule("p.in.archive",
                                crism="mawrth_vallis_frt00003bfb_vnir",
                                doi="10.17189/1519101",
                                output="dummy")
         self.assertModuleFail(module)
 
     def test_crism_requires_output(self):
-        module = SimpleModule("p.in.astropedia",
+        module = SimpleModule("p.in.archive",
                                crism="mawrth_vallis_frt00003bfb_vnir")
         self.assertModuleFail(module)
 
     def test_crism_unknown_key_fails(self):
-        module = SimpleModule("p.in.astropedia",
+        module = SimpleModule("p.in.archive",
                                crism="not_a_real_catalog_key",
                                output="dummy")
         self.assertModuleFail(module)
 
     def test_list_includes_crism_catalog(self):
         """-l (no other source) must list both the COG and CRISM catalogs."""
-        module = SimpleModule("p.in.astropedia", flags="l")
+        module = SimpleModule("p.in.archive", flags="l")
         self.assertModule(module)
         combined = (module.outputs.stdout or "") + (module.outputs.stderr or "")
         self.assertIn("mawrth_vallis_frt00003bfb_ir", combined)
+
+    def test_list_includes_m3_and_vims_catalogs(self):
+        """-l (no other source) must also list the M3 and VIMS catalogs."""
+        module = SimpleModule("p.in.archive", flags="l")
+        self.assertModule(module)
+        combined = (module.outputs.stdout or "") + (module.outputs.stderr or "")
+        self.assertIn("m3g20081118t222604_v03_rdn", combined)
+        self.assertIn("titan_v1799424623", combined)
+
+
+class TestPinArchiveM3Catalog(unittest.TestCase):
+    """White-box tests for the m3= catalog resolver (no network)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_module_under_test()
+
+    def test_catalog_has_seed_entry(self):
+        self.assertIn("m3g20081118t222604_v03_rdn", self.mod.M3_CATALOG)
+
+    def test_resolve_m3_catalog_key(self):
+        img_url, lbl_url, body = self.mod.resolve_m3(
+            "m3g20081118t222604_v03_rdn")
+        self.assertTrue(img_url.endswith("_RDN.IMG"))
+        self.assertTrue(lbl_url.endswith(".LBL"))
+        self.assertEqual(body, "Moon")
+        self.assertIn("planetarydata.jpl.nasa.gov", img_url)
+
+    def test_resolve_m3_direct_url(self):
+        url = ("https://planetarydata.jpl.nasa.gov/img/data/m3/CH1M3_0003/"
+               "DATA/20081118_20090214/200811/L1B/"
+               "M3G20081118T222604_V03_RDN.IMG")
+        img_url, lbl_url, body = self.mod.resolve_m3(url)
+        self.assertEqual(img_url, url)
+        self.assertTrue(lbl_url.endswith("M3G20081118T222604_V03_L1B.LBL"))
+        self.assertIsNone(body)
+
+    def test_resolve_m3_rejects_non_rdn_url(self):
+        with self.assertRaises(SystemExit):
+            self.mod.resolve_m3(
+                "https://planetarydata.jpl.nasa.gov/some/file.tif")
+
+    def test_resolve_m3_unknown_key_fails(self):
+        with self.assertRaises(SystemExit):
+            self.mod.resolve_m3("not_a_real_catalog_key")
+
+
+class TestPinArchiveM3Cli(TestCase):
+    """Black-box CLI tests for m3= (mutual exclusion, listing)."""
+
+    def test_m3_conflicts_with_crism(self):
+        module = SimpleModule("p.in.archive",
+                               m3="m3g20081118t222604_v03_rdn",
+                               crism="mawrth_vallis_frt00003bfb_vnir",
+                               output="dummy")
+        self.assertModuleFail(module)
+
+    def test_m3_requires_output(self):
+        module = SimpleModule("p.in.archive",
+                               m3="m3g20081118t222604_v03_rdn")
+        self.assertModuleFail(module)
+
+    def test_m3_unknown_key_fails(self):
+        module = SimpleModule("p.in.archive",
+                               m3="not_a_real_catalog_key",
+                               output="dummy")
+        self.assertModuleFail(module)
+
+
+class TestPinArchiveVimsCatalog(unittest.TestCase):
+    """White-box tests for the vims= catalog resolver (no network)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_module_under_test()
+
+    def test_catalog_has_seed_entry(self):
+        self.assertIn("titan_v1799424623", self.mod.VIMS_CATALOG)
+
+    def test_resolve_vims_catalog_key(self):
+        opus_id, body = self.mod.resolve_vims("titan_v1799424623")
+        self.assertEqual(opus_id, "co-vims-v1799424623")
+        self.assertEqual(body, "Titan")
+
+    def test_resolve_vims_direct_opus_id(self):
+        opus_id, body = self.mod.resolve_vims("co-vims-v9999999999")
+        self.assertEqual(opus_id, "co-vims-v9999999999")
+        self.assertIsNone(body)
+
+    def test_resolve_vims_unknown_key_fails(self):
+        with self.assertRaises(SystemExit):
+            self.mod.resolve_vims("not_a_real_catalog_key")
+
+
+class TestPinArchiveVimsCli(TestCase):
+    """Black-box CLI tests for vims= (mutual exclusion, listing)."""
+
+    def test_vims_conflicts_with_crism(self):
+        module = SimpleModule("p.in.archive",
+                               vims="titan_v1799424623",
+                               crism="mawrth_vallis_frt00003bfb_vnir",
+                               output="dummy")
+        self.assertModuleFail(module)
+
+    def test_vims_requires_output(self):
+        module = SimpleModule("p.in.archive",
+                               vims="titan_v1799424623")
+        self.assertModuleFail(module)
+
+    def test_vims_unknown_key_fails(self):
+        module = SimpleModule("p.in.archive",
+                               vims="not_a_real_catalog_key",
+                               output="dummy")
+        self.assertModuleFail(module)
 
 
 if __name__ == "__main__":

@@ -34,6 +34,8 @@
 #include "../../libs/p_shapemodel/p_shapemodel.h"
 /* p_spice (compiled in) -- SPICE mode (-s) only */
 #include "../../libs/p_spice/p_spice.h"
+/* p_meta (compiled in) -- camera mode (-c) instrument= auto-detection */
+#include "../../libs/p_meta/p_meta.h"
 
 #ifndef M_PI
 #  define M_PI 3.14159265358979323846
@@ -498,6 +500,20 @@ int main(int argc, char *argv[])
     if (spice_mode && camera_mode)
         G_fatal_error(_("-s and -c are mutually exclusive (two different "
                         "ways of getting a per-pixel surface point)."));
+    if (camera_mode && !opt_instrument->answer) {
+        /* Auto-detect from the sensor= field p.in.archive -s writes into
+         * planetary.json for CRISM imports, so -c works without typing
+         * instrument= by hand. Falls through to the fatal error below,
+         * unchanged, for inputs with no/unrecognized metadata. */
+        char sensor_buf[64];
+        if (p_meta_read_string_field(input, "raster", "sensor", sensor_buf,
+                                      sizeof(sensor_buf)) == 0) {
+            if (strcmp(sensor_buf, "MRO_CRISM_VNIR") == 0)
+                opt_instrument->answer = "CRISM_VNIR";
+            else if (strcmp(sensor_buf, "MRO_CRISM_IR") == 0)
+                opt_instrument->answer = "CRISM_IR";
+        }
+    }
     if (camera_mode && !opt_instrument->answer)
         G_fatal_error(_("-c requires instrument= (v1: CRISM_VNIR or CRISM_IR)."));
 

@@ -354,6 +354,61 @@ static PPvlNode *pvl_find_object_deep(const PPvlNode *parent, const char *name)
     return NULL;
 }
 
+/* True if s ends with suffix (case-insensitive). */
+static int str_iendswith(const char *s, const char *suffix)
+{
+    size_t ls = strlen(s), lf = strlen(suffix);
+    if (lf > ls) return 0;
+    return str_ieq(s + (ls - lf), suffix);
+}
+
+/* Recursive depth-first search for a scalar key anywhere under parent
+ * (forward declaration; defined below, used here and by
+ * resolve_data_pointer()/record_bytes_deep()). */
+static PPvlNode *pvl_find_scalar_deep(const PPvlNode *parent, const char *key);
+
+/* Fallback for archives that name their image object something other than
+ * the three well-known PDS3 names (e.g. JPL PDS Imaging Node M3 L1B
+ * products use "OBJECT = RDN_IMAGE" nested inside "OBJECT = RDN_FILE",
+ * with pointer keyword "^RDN_IMAGE" -- not "IMAGE"/"QUBE"/"SPECTRAL_QUBE").
+ * Depth-first search for any OBJECT/GROUP whose name ends in "_IMAGE" or
+ * "_QUBE" that also has a matching "^<name>" pointer somewhere in the
+ * label (the pointer requirement avoids matching unrelated description
+ * objects that merely happen to end in "_IMAGE"). *root* is the true
+ * label root (constant across the recursion, needed for the pointer
+ * search regardless of how deep the candidate object is nested);
+ * *parent* is the node currently being scanned. Returns the object node
+ * and sets *out_name to its name (owned by the PVL tree) or NULL. */
+static PPvlNode *pvl_find_image_object_by_suffix(const PPvlNode *root,
+                                                   const PPvlNode *parent,
+                                                   const char **out_name)
+{
+    if (!parent) return NULL;
+    PPvlNode *n = parent->children;
+    while (n) {
+        if ((n->type == P_PVL_OBJECT || n->type == P_PVL_GROUP) && n->value &&
+            (str_iendswith(n->value, "_IMAGE") || str_iendswith(n->value, "_QUBE"))) {
+            char ptr_key[80];
+            snprintf(ptr_key, sizeof(ptr_key), "^%s", n->value);
+            if (pvl_find_scalar_deep(root, ptr_key)) {
+                *out_name = n->value;
+                return n;
+            }
+        }
+        n = n->next;
+    }
+    /* Recurse into each child OBJECT/GROUP. */
+    n = parent->children;
+    while (n) {
+        if (n->type == P_PVL_OBJECT || n->type == P_PVL_GROUP) {
+            PPvlNode *hit = pvl_find_image_object_by_suffix(root, n, out_name);
+            if (hit) return hit;
+        }
+        n = n->next;
+    }
+    return NULL;
+}
+
 const char *p_pvl_value(const PPvlNode *parent, const char *key)
 {
     PPvlNode *n = p_pvl_find(parent, key);
@@ -402,6 +457,94 @@ int p_pvl_value_int(const PPvlNode *parent, const char *key, int *ok)
     if (end == v) { if (ok) *ok = 0; return 0; }
     if (ok) *ok = 1;
     return (int)l;
+}
+
+/* Parse the *index*'th (0-based) integer out of a PVL tuple value such as
+ * "(64,352,672)" or "( 64, 352, 672 )". Returns 1 on success, 0 if the
+ * value isn't a tuple or doesn't have that many elements. */
+static int pvl_tuple_int(const char *v, int index, int *out)
+{
+    if (!v) return 0;
+    const char *p = strchr(v, '(');
+    if (!p) return 0;
+    p++;
+    for (int i = 0; i < index; i++) {
+        p = strchr(p, ',');
+        if (!p) return 0;
+        p++;
+    }
+    char *end;
+    long val = strtol(p, &end, 0);
+    if (end == p) return 0;
+    *out = (int)val;
+    return 1;
+}
+
+/* Parse the *index*'th (0-based) bare/quoted token out of a PVL tuple
+ * value such as "(SAMPLE,BAND,LINE)". Writes into out (caller buffer,
+ * length outlen), upper-cased, trimmed of quotes/whitespace. Returns 1 on
+ * success, 0 if the value isn't a tuple or doesn't have that many
+ * elements. */
+static int pvl_tuple_token(const char *v, int index, char *out, size_t outlen)
+{
+    if (!v) return 0;
+    const char *p = strchr(v, '(');
+    if (!p) return 0;
+    p++;
+    for (int i = 0; i < index; i++) {
+        p = strchr(p, ',');
+        if (!p) return 0;
+        p++;
+    }
+    while (*p && isspace((unsigned char)*p)) p++;
+    size_t n = 0;
+    while (*p && *p != ',' && *p != ')' && n < outlen - 1) {
+        if (!isspace((unsigned char)*p) && *p != '"')
+            out[n++] = (char)toupper((unsigned char)*p);
+        p++;
+    }
+    out[n] = '\0';
+    return n > 0;
+}
+
+/* Read CORE_ITEMS (a tuple, ordered per AXIS_NAME -- the real PDS3 QUBE
+ * object convention, e.g. OMEGA/VIMS *_QUBE objects: "AXIS_NAME =
+ * (SAMPLE,BAND,LINE)", "CORE_ITEMS = (64,352,672)" means 64 samples, 352
+ * bands, 672 lines -- NOT the fixed sample/band/line order some other
+ * PDS3 IMAGE objects use). Falls back to the common (SAMPLE,BAND,LINE)
+ * order if AXIS_NAME is absent. Returns 1 if all three were resolved. */
+static int pvl_core_items_by_axis(const PPvlNode *img_obj,
+                                    int *samples, int *bands, int *lines)
+{
+    const char *core_v = p_pvl_value(img_obj, "CORE_ITEMS");
+    if (!core_v) return 0;
+    const char *axis_v = p_pvl_value(img_obj, "AXIS_NAME");
+
+    int items[3];
+    if (!pvl_tuple_int(core_v, 0, &items[0]) ||
+        !pvl_tuple_int(core_v, 1, &items[1]) ||
+        !pvl_tuple_int(core_v, 2, &items[2]))
+        return 0;
+
+    const char *names[3] = { "SAMPLE", "BAND", "LINE" }; /* default order */
+    char tok[16];
+    if (axis_v) {
+        for (int i = 0; i < 3; i++) {
+            if (pvl_tuple_token(axis_v, i, tok, sizeof(tok))) {
+                if (strncmp(tok, "SAMPLE", 6) == 0) names[i] = "SAMPLE";
+                else if (strncmp(tok, "BAND", 4) == 0) names[i] = "BAND";
+                else if (strncmp(tok, "LINE", 4) == 0) names[i] = "LINE";
+            }
+        }
+    }
+
+    *samples = *bands = *lines = 0;
+    for (int i = 0; i < 3; i++) {
+        if (strcmp(names[i], "SAMPLE") == 0) *samples = items[i];
+        else if (strcmp(names[i], "BAND") == 0) *bands = items[i];
+        else if (strcmp(names[i], "LINE") == 0) *lines = items[i];
+    }
+    return (*samples > 0 && *lines > 0);
 }
 
 void p_pvl_free(PPvlNode *root)
@@ -785,7 +928,15 @@ PPdsImage *p_pds_open_image(const char *path)
         if (img_obj) { obj_name = obj_names[i]; break; }
     }
     if (!img_obj) {
-        G_warning(_("p_pds: no IMAGE, QUBE or SPECTRAL_QUBE object in '%s'"), path);
+        /* None of the three standard names matched -- some archives use
+         * their own custom object name (e.g. JPL PDS Imaging Node M3 L1B
+         * products: "OBJECT = RDN_IMAGE", pointer "^RDN_IMAGE"). Fall back
+         * to any *_IMAGE/*_QUBE object that has a matching pointer. */
+        img_obj = pvl_find_image_object_by_suffix(root, root, &obj_name);
+    }
+    if (!img_obj) {
+        G_warning(_("p_pds: no IMAGE, QUBE, SPECTRAL_QUBE, or *_IMAGE/*_QUBE "
+                    "object in '%s'"), path);
         p_pvl_free(root);
         fclose(fp);
         return NULL;
@@ -797,13 +948,26 @@ PPdsImage *p_pds_open_image(const char *path)
     /* --- Read dimensions. */
     int ok;
     img->lines   = p_pvl_value_int(img_obj, "LINES",        &ok);
-    if (!ok) img->lines = p_pvl_value_int(img_obj, "CORE_ITEMS_1", &ok);
     img->samples = p_pvl_value_int(img_obj, "LINE_SAMPLES", &ok);
-    if (!ok) img->samples = p_pvl_value_int(img_obj, "CORE_ITEMS_2", &ok);
-    if (!ok) img->samples = p_pvl_value_int(img_obj, "SAMPLES",      &ok);
     img->bands   = p_pvl_value_int(img_obj, "BANDS",        &ok);
-    if (!ok) img->bands = p_pvl_value_int(img_obj, "CORE_ITEMS_3", &ok);
-    if (!ok || img->bands < 1) img->bands = 1;
+    if (!img->lines) img->lines = p_pvl_value_int(img_obj, "CORE_ITEMS_1", &ok);
+    if (!img->samples) {
+        img->samples = p_pvl_value_int(img_obj, "CORE_ITEMS_2", &ok);
+        if (!ok) img->samples = p_pvl_value_int(img_obj, "SAMPLES", &ok);
+    }
+    if (!img->bands) img->bands = p_pvl_value_int(img_obj, "CORE_ITEMS_3", &ok);
+    if (!img->lines || !img->samples) {
+        /* CORE_ITEMS tuple convention, ordered per AXIS_NAME (real PDS3
+         * QUBE products, e.g. OMEGA/VIMS *_QUBE objects -- CORE_ITEMS is
+         * one tuple-valued keyword, not three separate _1/_2/_3 ones). */
+        int s, b, l;
+        if (pvl_core_items_by_axis(img_obj, &s, &b, &l)) {
+            if (!img->samples) img->samples = s;
+            if (!img->bands)   img->bands   = b;
+            if (!img->lines)   img->lines   = l;
+        }
+    }
+    if (img->bands < 1) img->bands = 1;
 
     /* --- Pixel type. */
     int bits = p_pvl_value_int(img_obj, "SAMPLE_BITS", &ok);
@@ -858,6 +1022,34 @@ PPdsImage *p_pds_open_image(const char *path)
     /* --- Line prefix (e.g. Cassini ISS dark/overclocked pixels). */
     img->line_prefix_bytes = p_pvl_value_int(img_obj, "LINE_PREFIX_BYTES", &ok);
     if (!ok) img->line_prefix_bytes = 0;
+
+    /* --- Refuse QUBE sideplanes (SUFFIX_ITEMS) rather than silently
+     * misreading. Real PDS3 QUBE products (e.g. ESA Mars Express OMEGA,
+     * Cassini VIMS raw .qub) append extra sample-/band-direction
+     * "sideplane" bytes per record that this reader does not yet know how
+     * to skip; reading on as if SUFFIX_ITEMS were (0,0,0) silently shifts
+     * every subsequent record, producing wrong-but-plausible-looking
+     * pixel values instead of an obvious failure. Confirmed by trial: even
+     * NASA's own ISIS3 needs a hand-written, format-specific importer for
+     * VIMS's suffixed .qub (ReadVimsBIL() in vims2isis), not a generic
+     * reader -- so this is a real format gap, not a quick parsing fix. */
+    {
+        const char *sfx_v = p_pvl_value(img_obj, "SUFFIX_ITEMS");
+        int s0, s1, s2;
+        if (sfx_v && pvl_tuple_int(sfx_v, 0, &s0) &&
+            pvl_tuple_int(sfx_v, 1, &s1) && pvl_tuple_int(sfx_v, 2, &s2) &&
+            (s0 != 0 || s1 != 0 || s2 != 0)) {
+            G_warning(_("p_pds: '%s' has SUFFIX_ITEMS = (%d,%d,%d) (QUBE "
+                        "sideplane/backplane bytes per record) -- this "
+                        "reader does not yet support skipping them and "
+                        "refuses to silently misread the cube. Not "
+                        "supported yet."), path, s0, s1, s2);
+            p_pvl_free(root);
+            fclose(fp);
+            G_free(img);
+            return NULL;
+        }
+    }
 
     /* --- Data file pointer. */
     char *data_path = NULL;

@@ -25,6 +25,14 @@
 # %end
 
 # %option
+# % key: instrument
+# % type: string
+# % label: Instrument name, for instruments needing extra kernels beyond the spacecraft default
+# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK) and the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK) that CRISM's cross-track pointing needs, in addition to the regular spacecraft kernels.
+# % required: no
+# %end
+
+# %option
 # % key: time
 # % type: string
 # % label: UTC time of interest (ISO 8601: YYYY-MM-DDTHH:MM:SS)
@@ -146,6 +154,26 @@ SPACECRAFT = {
         "ik":      None,
         "fk":      None,
         "pck":     ["pck00010.tpc"],
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Per-instrument kernel knowledge, for instruments whose own pointing isn't
+# fully covered by the spacecraft's regular kernels. Confirmed live against
+# naif.jpl.nasa.gov: CRISM's gimbal/articulation frame (MRO_CRISM_ART, NAIF
+# ID -74012) is driven by a CK that lives in the same MRO/kernels/ck/
+# directory as the regular spacecraft-body CK but with a different filename
+# prefix (mro_crm_* vs mro_sc_psp_*), and is decoded via a virtual SCLK id
+# (-74999) whose kernel lives in the same MRO/kernels/sclk/ directory as the
+# regular spacecraft SCLK but with a ".65536.tsc" suffix instead of plain
+# ".tsc". Both confirmed by directory listing, not guessed.
+# ---------------------------------------------------------------------------
+INSTRUMENT = {
+    "CRISM": {
+        "spacecraft":      "MRO",
+        "ik":              "mro_crism_v10.ti",
+        "extra_ck_prefix": "mro_crm_",
+        "extra_sclk_substr": ".65536.",
     },
 }
 
@@ -298,11 +326,18 @@ _CK_SKIP = re.compile(
 )
 
 
-def _best_ck(files, target_date, pref):
-    """Return the best-matching CK filename covering target_date."""
+def _best_ck(files, target_date, pref, name_prefix=None):
+    """Return the best-matching CK filename covering target_date.
+
+    *name_prefix*, when given, restricts candidates to filenames starting
+    with it (e.g. "mro_crm_" to select CRISM's gimbal/articulation CK
+    instead of the regular spacecraft-body CK, which lives in the same
+    NAIF ck/ directory under a different filename prefix)."""
     candidates = []
     for f in files:
         if not f.endswith(".bc") or f.endswith(".lbl"):
+            continue
+        if name_prefix and not f.startswith(name_prefix):
             continue
         if _CK_SKIP.search(f):
             continue
@@ -392,6 +427,7 @@ def _write_metakernel(mk_path, kernel_paths, spacecraft, target_date):
 
 def main():
     sc_name  = options["spacecraft"].upper()
+    instrument = (options["instrument"] or "").upper() or None
     time_str = options["time"]
     ktypes   = [k.strip() for k in options["kernels"].split(",")]
     dest     = options["dest"]
@@ -405,13 +441,27 @@ def main():
         known = ", ".join(sorted(SPACECRAFT.keys()))
         gs.fatal(f"Unknown spacecraft '{sc_name}'. Supported: {known}")
 
+    instr = None
+    if instrument:
+        if instrument not in INSTRUMENT:
+            known = ", ".join(sorted(INSTRUMENT.keys()))
+            gs.fatal(f"Unknown instrument '{instrument}'. Supported: {known}")
+        instr = INSTRUMENT[instrument]
+        if instr["spacecraft"] != sc_name:
+            gs.fatal(f"instrument={instrument} requires "
+                     f"spacecraft={instr['spacecraft']}, not {sc_name}.")
+
     sc = SPACECRAFT[sc_name]
     sc_dir = sc["dir"]
 
     # Parse UTC time
+    # Only the date matters for kernel selection; strip any sub-second
+    # fraction (e.g. real PDS3 START_TIME values like
+    # "2007-01-05T01:26:56.855") before matching, rather than rejecting it.
+    time_str_nofrac = re.sub(r"(\d{2}:\d{2}:\d{2})\.\d+", r"\1", time_str)
     for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%Y-%jT%H:%M:%S"):
         try:
-            dt = datetime.datetime.strptime(time_str, fmt)
+            dt = datetime.datetime.strptime(time_str_nofrac, fmt)
             break
         except ValueError:
             pass
@@ -467,11 +517,22 @@ def main():
         else:
             gs.warning("No SCLK (.tsc) found.")
 
+        if instr and instr.get("extra_sclk_substr"):
+            substr = instr["extra_sclk_substr"]
+            extra_files = [f for f in files if substr in f and f.endswith(".tsc")]
+            fn2 = sorted(extra_files)[-1] if extra_files else None
+            if fn2:
+                p = _fetch("sclk", "sclk", fn2)
+                downloaded.append(p)
+            else:
+                gs.warning(f"No instrument SCLK matching '{substr}' found.")
+
     # ── IK ────────────────────────────────────────────────────────────────
     if "ik" in ktypes:
         gs.message("Finding IK …")
         files = _list_dir(f"{base_url}/ik/", timeout)
-        fn = _latest_file(files, ".ti", sc.get("ik"))
+        ik_hint = (instr["ik"] if instr and instr.get("ik") else sc.get("ik"))
+        fn = _latest_file(files, ".ti", ik_hint)
         if fn:
             p = _fetch("ik", "ik", fn)
             downloaded.append(p)
@@ -543,6 +604,17 @@ def main():
             gs.message(f"  selected: {fn}")
         else:
             gs.warning(f"No CK covering {target_date} found (pref={ck_pref}).")
+
+        if instr and instr.get("extra_ck_prefix"):
+            prefix = instr["extra_ck_prefix"]
+            fn2 = _best_ck(files, target_date, "any", name_prefix=prefix)
+            if fn2:
+                p = _fetch("ck", "ck", fn2)
+                downloaded.append(p)
+                gs.message(f"  selected (instrument): {fn2}")
+            else:
+                gs.warning(f"No instrument CK matching '{prefix}*' covering "
+                           f"{target_date} found.")
 
     # ── Meta-kernel ────────────────────────────────────────────────────────
     if flag_meta and downloaded and not flag_list:

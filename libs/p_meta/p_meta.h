@@ -120,6 +120,25 @@ int p_meta_write(PMeta *m, const char *mapname);
 int p_meta_write_3d(PMeta *m, const char *mapname);
 
 /*!
+ * \brief Read a single top-level string field from a map's planetary.json.
+ *
+ * A minimal, targeted scanner for exactly this purpose (e.g. reading
+ * back \c sensor written by \c p_meta_write()) -- not a general JSON
+ * parser. Looks in the *current* mapset, same convention as
+ * \c p_meta_write()/p_meta_write_3d().
+ *
+ * \param mapname  GRASS map name (no \c @mapset suffix)
+ * \param map_type "raster" (default; pass NULL) or "raster3d"
+ * \param field    top-level JSON key name (e.g. "sensor")
+ * \param out      output buffer (caller-allocated)
+ * \param outlen   size of \p out
+ * \return 0 on success (value copied into \p out), -1 if the file or
+ *         field doesn't exist
+ */
+int p_meta_read_string_field(const char *mapname, const char *map_type,
+                              const char *field, char *out, int outlen);
+
+/*!
  * \brief Install \c matter_bands.json into the current mapset's \c Misc/ directory.
  *
  * Copies \c $GISBASE/etc/planetary/matter_bands.json to

@@ -636,7 +636,7 @@ def main():
     else:
         # No explicit bounds: align to the DEM, optionally downsampling to
         # scan_res. Without this, a freshly-aligned native-posting region
-        # (e.g. the one p.in.astropedia 0.8.6 sets at import time) makes
+        # (e.g. the one p.in.archive 0.8.6 sets at import time) makes
         # the terrain stage process 100 M+ cells on HiRISE-class DEMs.
         try:
             if scan_res > 0:

@@ -487,6 +487,52 @@ static void test_processing_history_command(void)
 }
 
 /* ------------------------------------------------------------------ */
+
+static void test_read_string_field_roundtrip(void)
+{
+    const char *mapname = "test_read_sensor";
+    setup_mapset(mapname, "cell_misc");
+
+    PMeta *m = p_meta_new();
+    p_meta_set_sensor(m, "MRO_CRISM_VNIR");
+    int rc = p_meta_write(m, mapname);
+    assert(rc == 0);
+    p_meta_free(m);
+
+    char out[64];
+    rc = p_meta_read_string_field(mapname, "raster", "sensor", out, sizeof(out));
+    assert(rc == 0);
+    assert(strcmp(out, "MRO_CRISM_VNIR") == 0);
+    printf("PASS: test_read_string_field_roundtrip\n");
+}
+
+static void test_read_string_field_missing_file(void)
+{
+    char out[64];
+    int rc = p_meta_read_string_field("no_such_map_at_all", "raster",
+                                       "sensor", out, sizeof(out));
+    assert(rc == -1);
+    printf("PASS: test_read_string_field_missing_file\n");
+}
+
+static void test_read_string_field_missing_field(void)
+{
+    const char *mapname = "test_read_missing_field";
+    setup_mapset(mapname, "cell_misc");
+
+    PMeta *m = p_meta_new();
+    /* sensor left NULL -> written as JSON null, not a string. */
+    int rc = p_meta_write(m, mapname);
+    assert(rc == 0);
+    p_meta_free(m);
+
+    char out[64];
+    rc = p_meta_read_string_field(mapname, "raster", "sensor", out, sizeof(out));
+    assert(rc == -1);
+    printf("PASS: test_read_string_field_missing_field\n");
+}
+
+/* ------------------------------------------------------------------ */
 /* Main                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -514,6 +560,9 @@ int main(void)
     test_empty_planetary_block();
     test_set_clear_wavelengths();
     test_processing_history_command();
+    test_read_string_field_roundtrip();
+    test_read_string_field_missing_file();
+    test_read_string_field_missing_field();
 
     /* Clean up */
     char rm_cmd[600];

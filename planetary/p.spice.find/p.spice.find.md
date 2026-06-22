@@ -73,8 +73,8 @@ grass -c XY ~/grassdata/saturn_rings
 p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
     dest=$HOME/RSDATA/Saturn/kernels
 
-# ── Step 2: Raw image from OPUS (p.in.astropedia) ────────────────────────────
-p.in.astropedia opus_id=co-iss-n1467344155 output=N1467344155_raw
+# ── Step 2: Raw image from OPUS (p.in.archive) ────────────────────────────
+p.in.archive opus_id=co-iss-n1467344155 output=N1467344155_raw
 
 # ── Step 3: Set radlong output region (p.in.rings) ───────────────────────────
 g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
@@ -137,10 +137,10 @@ PCK2=$(find "${KDIR}/pck"  -name "pck[0-9]*.tpc"  | sort | tail -1)
 KERNELS="${LSK},${SCLK},${IK},${FK},${PCK1},${PCK2},\
 ${KDIR}/spk/${SPK_BASE},${KDIR}/ck/${CK_BASE}"
 
-# ── Step 2: Fetch raw image from OPUS (p.in.astropedia) ──────────────────────
+# ── Step 2: Fetch raw image from OPUS (p.in.archive) ──────────────────────
 # product=raw: CISSCAL 4.0beta flags almost all ring pixels as sentinel values;
 # the raw PDS3 image + per-column destripe (Step 3) is the usable path.
-p.in.astropedia opus_id="${OPUS_ID}" output="${RAWMAP}" \
+p.in.archive opus_id="${OPUS_ID}" output="${RAWMAP}" \
     product=raw --overwrite
 g.region raster="${RAWMAP}"
 
@@ -197,7 +197,7 @@ d.mon start=wx0 && d.rast "${POLMAP}"
 
 ## SEE ALSO
 
-- [p.in.astropedia](p.in.astropedia.md) — fetch raw PDS3 images from OPUS
+- [p.in.archive](p.in.archive.md) — fetch raw PDS3 images from OPUS
 - [p.in.rings](p.in.rings.md) — project raw camera image to ring-plane space
 - [p.rings.project](p.rings.project.md) — RingCylindrical projection
 - [p.rings.stats](p.rings.stats.md) — radial brightness statistics

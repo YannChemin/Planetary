@@ -1,26 +1,32 @@
 #!/usr/bin/env python3
 """
-MODULE:    p.in.astropedia
+MODULE:    p.in.archive
 AUTHOR:    Yann Chemin <dr.yann.chemin@gmail.com>
-PURPOSE:   Fetch and import planetary data products from the USGS Astropedia
-           STAC catalog, the NASA PDS Federated Search API, or the PDS
-           Ring-Moon Systems Node OPUS search interface. Supports DOI
-           resolution, PDS4 LID lookup, keyword search, curated USGS COG
-           mosaics, and direct OPUS observation queries (including Cassini
-           VIMS hyperspectral cubes). Downloaded files are imported via
-           r.in.gdal, p.in.pds4, or p.in.pds3 depending on file type.
+PURPOSE:   Fetch and import planetary data products from real remote
+           archives: the USGS Astropedia STAC catalog, the NASA PDS
+           Federated Search API, the PDS Geosciences Node (CRISM, M3),
+           the ESA Planetary Science Archive (OMEGA), or the PDS
+           Ring-Moon Systems Node OPUS search interface (Cassini
+           ISS/VIMS). Supports DOI resolution, PDS4 LID lookup, keyword
+           search, curated USGS COG mosaics, curated CRISM/OMEGA/M3/VIMS
+           catalogs, and direct OPUS observation queries. Downloaded
+           files are imported via r.in.gdal, p.in.pds4, or p.in.pds3
+           depending on file type.
 LICENSE:   The Unlicense (https://unlicense.org)
            This is free and unencumbered software released into the public domain.
 """
 
 # %module
-# % description: Fetch and import planetary data from USGS Astropedia, NASA PDS, or OPUS (Ring-Moon Systems Node). Supports VIMS hyperspectral cubes via opus= or opus_id=.
+# % description: Fetch and import planetary data from real remote archives: USGS Astropedia, NASA PDS, PDS Geosciences Node (CRISM, M3), ESA PSA (OMEGA), or OPUS (Ring-Moon Systems Node, Cassini ISS/VIMS).
 # % keyword: Planetary
 # % keyword: Import & Export
 # % keyword: import
 # % keyword: raster
 # % keyword: PDS4
 # % keyword: Astropedia
+# % keyword: CRISM
+# % keyword: OMEGA
+# % keyword: M3
 # % keyword: VIMS
 # % keyword: OPUS
 # % keyword: download
@@ -77,12 +83,30 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: m3
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Chandrayaan-1 M3 L1B product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a Moon Mineralogy Mapper (M3) L1B radiance product (*_RDN.IMG + companion *_L1B.LBL) from the JPL PDS Imaging Node static archive (planetarydata.jpl.nasa.gov). Use -l to list catalog keys.
+# %end
+
+# %option
+# % key: vims
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Cassini VIMS observation: a catalog key (see -l) or a direct OPUS id
+# % description: Fetches a Cassini VIMS hyperspectral cube via the OPUS API -- a dedicated shortcut into the same opus_id= path below, without needing to hand-build an opus= search query. Use -l to list catalog keys. NOTE: raw VIMS .qub import currently fails (by design, not silently) -- see p.in.archive.md NOTES.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
 # % multiple: no
 # % label: OPUS observation ID to download directly
-# % description: Download and import a specific OPUS observation, e.g. co-vims-v1590123456. Skips the search step.
+# % description: Download and import a specific OPUS observation, e.g. co-vims-v1799424623. Skips the search step.
 # %end
 
 # %option
@@ -153,16 +177,23 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # % description: Override projection check (passed as -o to r.in.gdal / p.in.pds4)
 # %end
 
+# %flag
+# % key: s
+# % description: Fetch and attach real SPICE kernels for camera-mode geometry after import (crism= only). Calls p.spice.find then p.spiceinit using the real observation time/body already known from the label. Opt-in: kernel downloads are large (often 100s of MB) and not needed unless you intend to run p.phocube -c on the result.
+# %end
+
 # %option
 # % key: project
 # % type: string
 # % required: no
 # % label: Name of GRASS project to create (or switch into) at the dataset's native CRS
-# % description: When set, p.in.astropedia probes the source dataset's CRS (via gdalsrsinfo for /vsicurl/ URLs, or from the local PDS4 label) and either reuses an existing project of that name OR creates one with the matching projection via g.proj. The current GRASS session is then switched into the new project before the raster is imported, eliminating the CRS-mismatch / reproject step that otherwise bites users importing PDS-native products (e.g. Mars MOLA in Equirectangular Mars) into a non-matching working project. The original project is restored at exit.
+# % description: When set, p.in.archive probes the source dataset's CRS (via gdalsrsinfo for /vsicurl/ URLs, or from the local PDS4 label) and either reuses an existing project of that name OR creates one with the matching projection via g.proj. The current GRASS session is then switched into the new project before the raster is imported, eliminating the CRS-mismatch / reproject step that otherwise bites users importing PDS-native products (e.g. Mars MOLA in Equirectangular Mars) into a non-matching working project. The original project is restored at exit.
 # %end
 
 import os
+import re
 import sys
+import glob
 import json
 import shutil
 import subprocess
@@ -176,6 +207,7 @@ import grass.exceptions
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import p_meta
+import p_spice
 
 # ── API endpoints ──────────────────────────────────────────────────────────
 STAC_BASE    = "https://stac.astrogeology.usgs.gov/api"
@@ -225,6 +257,40 @@ CRISM_CATALOG = {
         "Mars",
         "CRISM FRT00003BFB, Mawrth Vallis (22.3N, 342.1E), S detector "
         "(VNIR, 0.36-1.05 um, 107 bands) - Bishop et al. 2008"),
+}
+
+# Curated catalog of Chandrayaan-1 Moon Mineralogy Mapper (M3) L1B radiance
+# products on the JPL PDS Imaging Node static archive. Detached-label PDS3
+# (^RDN_IMAGE pointer nested inside an OBJECT = RDN_FILE wrapper -- not the
+# standard IMAGE/QUBE/SPECTRAL_QUBE object name; libs/p_pds gained a generic
+# *_IMAGE/*_QUBE object-name fallback to read these). Each entry:
+# key -> (img_url, lbl_url, body, description). Verified live (HTTP 200,
+# Content-Length present, real import: 85 bands, non-degenerate radiance)
+# against planetarydata.jpl.nasa.gov.
+M3_BASE = ("https://planetarydata.jpl.nasa.gov/img/data/m3/CH1M3_0003/DATA/"
+           "20081118_20090214/200811/L1B")
+M3_CATALOG = {
+    "m3g20081118t222604_v03_rdn": (
+        f"{M3_BASE}/M3G20081118T222604_V03_RDN.IMG",
+        f"{M3_BASE}/M3G20081118T222604_V03_L1B.LBL",
+        "Moon",
+        "M3 L1B radiance, orbit 141, 2008-11-18T22:26:04, GLOBAL mode "
+        "(85 bands, 304 samples x 1182 lines)"),
+}
+
+# Curated catalog of Cassini VIMS observation IDs (OPUS opus_id=), exposed
+# as a dedicated vims= shortcut so VIMS doesn't require hand-building an
+# opus= search query. Each entry: key -> (opus_id, body, description).
+# Resolved through the existing opus_files()/_pick_raw_product() machinery
+# -- no new archive-access code, just a curated entry point into it. IDs
+# verified live: real .qub+.lbl files confirmed via the OPUS files API
+# (opus.pds-rings.seti.org/opus/api/files/<id>_ir.json).
+VIMS_CATALOG = {
+    "titan_v1799424623": (
+        "co-vims-v1799424623",
+        "Titan",
+        "Cassini VIMS, Titan flyby, 2015-01-08T15:09:40, 118.5s exposure "
+        "(VIS: 0.35-1.05 um/96 bands, IR: 0.88-5.1 um/256 bands)"),
 }
 
 # Prefer these formats (checked in order against the STAC asset media-types
@@ -435,29 +501,17 @@ def opus_search(params, limit=10):
     return labels, dicts
 
 
-def opus_files(opus_id):
-    """Return downloadable files for *opus_id* from OPUS /api/files/<id>.json.
-
-    Handles both the nested ``{"data": {id: {...}}}`` form and the flat
-    ``{id: {...}}`` form that different OPUS versions may return.
-
-    Returns a list of ``(url, filename, product_type)`` tuples, sorted so
-    ``.qub`` cubes come first and ``.lbl`` labels come second.
-    """
-    # Strip _vis/_ir suffix: the files API keys on the base observation ID.
-    base = opus_id
-    for suf in ("_vis", "_ir", "_VIS", "_IR"):
-        if base.endswith(suf):
-            base = base[: -len(suf)]
-            break
-    url  = f"{OPUS_API_BASE}/files/{base}.json"
+def _opus_files_one(obs_id):
+    """Query OPUS /api/files/<obs_id>.json for exactly *obs_id* (no suffix
+    handling). Returns a list of (url, filename, product_type) tuples, or
+    [] if the API has no files for this exact id."""
+    url  = f"{OPUS_API_BASE}/files/{obs_id}.json"
     resp = http_get_json(url)
 
     # Normalise: may be wrapped under "data" key or keyed directly by obs ID.
     data = resp.get("data", resp)
-    obs  = data.get(base, data)
+    obs  = data.get(obs_id, data)
     if not isinstance(obs, dict):
-        gs.warning(f"OPUS files API returned unexpected format for '{base}'.")
         return []
 
     files = []
@@ -474,6 +528,46 @@ def opus_files(opus_id):
                 continue
             fname = os.path.basename(urllib.parse.urlparse(href).path)
             files.append((href, fname, ptype))
+    return files
+
+
+def opus_files(opus_id, channel=None):
+    """Return downloadable files for *opus_id* from OPUS /api/files/<id>.json.
+
+    VIMS observation IDs come back from /api/data.json with a ``_vis``/
+    ``_ir`` channel suffix (e.g. ``co-vims-v1799424623_ir``), and the real
+    OPUS files API keys on that *exact* suffixed id -- querying the base
+    (unsuffixed) id returns an empty result (confirmed live against
+    opus.pds-rings.seti.org: ``files/co-vims-v1799424623.json`` -> ``{}``,
+    ``files/co-vims-v1799424623_ir.json`` -> real .qub/.lbl URLs).
+
+    Lookup order:
+      1. *opus_id* exactly as given (correct as-is for search results,
+         which already come back suffixed).
+      2. If that's empty and *opus_id* has no ``_vis``/``_ir`` suffix yet
+         and *channel* was given (the ``vims_channel=`` option, for a
+         user-supplied bare ``opus_id=``): retry with that suffix appended.
+      3. If *opus_id* does carry a suffix and step 1 still came back empty:
+         retry with the suffix stripped, in case some other archive
+         convention genuinely needs the base id.
+
+    Returns a list of ``(url, filename, product_type)`` tuples, sorted so
+    ``.qub`` cubes come first and ``.lbl`` labels come second.
+    """
+    has_suffix = opus_id.lower().endswith(("_vis", "_ir"))
+    files = _opus_files_one(opus_id)
+    if not files and not has_suffix and channel:
+        files = _opus_files_one(f"{opus_id}_{channel.lower()}")
+    if not files and has_suffix:
+        base = opus_id
+        for suf in ("_vis", "_ir", "_VIS", "_IR"):
+            if base.endswith(suf):
+                base = base[: -len(suf)]
+                break
+        files = _opus_files_one(base)
+    if not files:
+        gs.warning(f"OPUS files API returned no files for '{opus_id}'.")
+        return []
 
     def _rank(item):
         ext = os.path.splitext(item[1].lower())[1]
@@ -538,6 +632,102 @@ def _pds3_image_shape(lbl_path):
     except OSError:
         pass
     return lines, samples
+
+
+def _pds3_label_field(lbl_path, key):
+    """Parse a single 'KEY = value' field from a PDS3 label file.
+
+    Generalizes _pds3_image_shape()'s line-scanner for an arbitrary
+    keyword (e.g. START_TIME, MRO:FRAME_RATE). Returns the raw value
+    string (quotes/units stripped) or None if not found."""
+    try:
+        with open(lbl_path, "r", errors="ignore") as fh:
+            for line in fh:
+                kv = line.split("=", 1)
+                if len(kv) != 2:
+                    continue
+                if kv[0].strip() != key:
+                    continue
+                val = kv[1].strip()
+                # Strip a trailing unit, e.g. "3.75 <HZ>".
+                val = val.split("<")[0].strip()
+                val = val.strip('"').rstrip(";").strip()
+                return val
+    except OSError:
+        pass
+    return None
+
+
+def _attach_crism_spice(local_lbl, map_band1, body_slug):
+    """Discover and attach real NAIF SPICE kernels for a just-imported CRISM
+    TRDR cube, so p.phocube -c can run without further manual setup.
+
+    Reads the real START_TIME/MRO:FRAME_RATE from the label, runs
+    p.spice.find (spacecraft=MRO, instrument=CRISM -- fetches CRISM's
+    gimbal CK and virtual SCLK in addition to the regular MRO kernels),
+    then p.spiceinit with whatever kernels were actually found. Warns
+    (does not fail) when some kernel types aren't available for this
+    date -- p.spice.find's own SPK/CK matcher has known real-archive gaps
+    for some dates (a separate, pre-existing limitation), and a partial
+    SPICE context is still strictly better than none."""
+    start_time = _pds3_label_field(local_lbl, "START_TIME")
+    if not start_time:
+        gs.warning("-s: could not read START_TIME from the label; "
+                   "skipping SPICE kernel attachment.")
+        return
+    frame_rate = _pds3_label_field(local_lbl, "MRO:FRAME_RATE")
+    line_rate = None
+    if frame_rate:
+        try:
+            line_rate = 1.0 / float(frame_rate)
+        except (ValueError, ZeroDivisionError):
+            pass
+
+    # str2et()/p.spiceinit want plain ISO time; the real label keeps full
+    # sub-second precision (e.g. "2007-01-05T01:26:56.855"), which is fine.
+    gs.message(f"-s: discovering SPICE kernels for MRO/CRISM at {start_time} …")
+    try:
+        gs.run_command("p.spice.find", spacecraft="MRO", instrument="CRISM",
+                       time=start_time,
+                       kernels="lsk,sclk,ik,fk,pck,spk,ck", quiet=True)
+    except grass.exceptions.CalledModuleError as e:
+        gs.warning(f"-s: p.spice.find reported an error ({e}); attaching "
+                   "whatever kernels were already cached.")
+
+    kdir = p_spice.mapset_spice_dir()
+    kernel_globs = {
+        "lsk":  ("*.tls",),
+        "sclk": ("*.tsc",),
+        "ik":   ("*.ti",),
+        "fk":   ("*.tf",),
+        "pck":  ("*.tpc",),
+        "spk":  ("*.bsp",),
+        "ck":   ("*.bc",),
+    }
+    found = {}
+    for ktype, patterns in kernel_globs.items():
+        paths = []
+        for pat in patterns:
+            paths.extend(sorted(glob.glob(os.path.join(kdir, ktype, pat))))
+        found[ktype] = paths
+
+    if not found["spk"] or not found["ck"]:
+        gs.warning("-s: no SPK and/or CK found for this date -- p.phocube -c "
+                   "will not be able to compute real intercepts until these "
+                   "are available. Attaching what was found regardless.")
+
+    kwargs = dict(map=map_band1, target=body_slug.upper(), observer="MRO",
+                  time=start_time, overwrite=True)
+    if line_rate:
+        kwargs["line_rate"] = line_rate
+    for ktype in ("lsk", "sclk", "ik", "fk", "pck", "spk", "ck"):
+        if found[ktype]:
+            kwargs[ktype] = found[ktype]
+
+    gs.message("-s: attaching SPICE kernels via p.spiceinit …")
+    gs.run_command("p.spiceinit", **kwargs)
+    gs.message(f"-s: SPICE context attached to '{map_band1}' "
+               f"({sum(len(v) for v in found.values())} kernel file(s)).")
 
 
 def _opus_id_from_row(row, labels):
@@ -724,6 +914,58 @@ def print_crism_catalog():
     gs.message("  " + "-" * 90)
     for k, (_img, _lbl, body, desc) in CRISM_CATALOG.items():
         gs.message(f"  {k:<32} {body:<6} {desc}")
+
+
+def resolve_m3(m3_arg):
+    """Resolve an m3= argument to (img_url, lbl_url, body_hint).
+
+    Accepts a catalog key (see M3_CATALOG) or a direct https URL to an
+    M3 L1B *_RDN.IMG on planetarydata.jpl.nasa.gov; the companion *_L1B.LBL
+    is derived by replacing the _RDN.IMG suffix."""
+    a = m3_arg.strip()
+    if a in M3_CATALOG:
+        img_url, lbl_url, body, _desc = M3_CATALOG[a]
+        return img_url, lbl_url, body
+    if a.lower().startswith(("http://", "https://")):
+        if not a.upper().endswith("_RDN.IMG"):
+            gs.fatal("Direct m3= URLs must point at an M3 L1B *_RDN.IMG file.")
+        lbl_url = a[: -len("_RDN.IMG")] + "_L1B.LBL"
+        return a, lbl_url, None
+    gs.fatal(f"Unknown M3 key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to an L1B *_RDN.IMG file.")
+
+
+def print_m3_catalog():
+    gs.message("Chandrayaan-1 M3 L1B radiance products (use m3=<key>, or a "
+               "direct https URL to a *_RDN.IMG on planetarydata.jpl.nasa.gov):")
+    gs.message(f"  {'key':<28} {'body':<6} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, _lbl, body, desc) in M3_CATALOG.items():
+        gs.message(f"  {k:<28} {body:<6} {desc}")
+
+
+def resolve_vims(vims_arg):
+    """Resolve a vims= argument to an OPUS observation id.
+
+    Accepts a catalog key (see VIMS_CATALOG) or a direct OPUS id (with or
+    without a _vis/_ir channel suffix). Returns (opus_id, body_hint)."""
+    a = vims_arg.strip()
+    if a in VIMS_CATALOG:
+        opus_id, body, _desc = VIMS_CATALOG[a]
+        return opus_id, body
+    if a.lower().startswith("co-vims-"):
+        return a, None
+    gs.fatal(f"Unknown VIMS key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct OPUS id (e.g. co-vims-v1799424623).")
+
+
+def print_vims_catalog():
+    gs.message("Cassini VIMS observations (use vims=<key>, or a direct OPUS id "
+               "via opus_id=):")
+    gs.message(f"  {'key':<22} {'body':<8} description")
+    gs.message("  " + "-" * 90)
+    for k, (_id, body, desc) in VIMS_CATALOG.items():
+        gs.message(f"  {k:<22} {body:<8} {desc}")
 
 
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
@@ -991,6 +1233,8 @@ def main():
     opt_search       = options["search"]
     opt_cog          = options["cog"]
     opt_crism        = options["crism"]
+    opt_m3           = options["m3"]
+    opt_vims         = options["vims"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -1004,17 +1248,21 @@ def main():
     flag_keep        = flags["k"]
     flag_override    = flags["o"]
     flag_noregion    = flags["r"]
+    flag_spice       = flags["s"]
 
-    # ── COG / CRISM catalog listing / import (independent of STAC/PDS/OPUS) ──
+    # ── COG / CRISM / M3 / VIMS catalog listing / import (independent of
+    # STAC/PDS/OPUS) ──
     if flag_list and not any((opt_doi, opt_lid, opt_search, opt_opus, opt_opus_id)):
         print_cog_catalog()
         print_crism_catalog()
-        if not opt_cog and not opt_crism:
+        print_m3_catalog()
+        print_vims_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_opus, opt_opus_id)):
-            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1042,19 +1290,91 @@ def main():
         # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
         # groups them under <output>; align the region to band 1.
         _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        # Detector-specific sensor id (S = VNIR, L = IR detector, per the
+        # real CRISM TRDR filename convention, e.g. "..._IF156S_TRR3.IMG"
+        # vs "..._IF156L_TRR3.IMG") -- lets p.phocube -c auto-detect
+        # instrument= from this metadata instead of requiring it by hand.
+        sensor = "MRO_CRISM"
+        m = re.search(r"_[A-Za-z0-9]*([SL])_TRR\d*\.IMG$", img_url, re.IGNORECASE)
+        if m:
+            sensor = "MRO_CRISM_VNIR" if m.group(1).upper() == "S" else "MRO_CRISM_IR"
+
         p_meta.write_planetary_metadata(
             f"{opt_output}.1",
-            module="p.in.astropedia",
+            module="p.in.archive",
             command=" ".join(sys.argv),
             data_type="image",
-            sensor="MRO_CRISM",
+            sensor=sensor,
             mission="MRO",
             body=body_slug.upper(),
             source_file=img_url,
         )
         gs.message(f"Imported CRISM TRDR cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+
+        if flag_spice:
+            _attach_crism_spice(local_lbl, f"{opt_output}.1", body_slug)
         return
+
+    if opt_m3:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_opus, opt_opus_id)):
+            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import an M3 product.")
+        img_url, lbl_url, body_hint = resolve_m3(opt_m3)
+        gs.message(f"M3 source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "moon")
+        local_img = _rsdata_dest(img_url, body_hint)
+        local_lbl = os.path.join(os.path.dirname(local_img),
+                                  os.path.basename(urllib.parse.urlparse(lbl_url).path))
+        _wget_resumable(img_url, local_img)
+        gs.message(f"Fetching label: {lbl_url}")
+        _wget_resumable(lbl_url, local_lbl)
+
+        nl, ns = _pds3_image_shape(local_lbl)
+        if nl and ns:
+            gs.run_command("g.region", n=nl, s=0, e=ns, w=0,
+                           nsres=1, ewres=1, quiet=True)
+
+        gs.message("Importing M3 L1B cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="go" if flag_override else "g",
+                       input=local_lbl, output=opt_output, overwrite=True)
+        # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
+        # groups them under <output>; align the region to band 1.
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+        p_meta.write_planetary_metadata(
+            f"{opt_output}.1",
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="CH1_M3",
+            mission="CHANDRAYAAN-1",
+            body=body_slug.upper(),
+            source_file=img_url,
+        )
+        gs.message(f"Imported M3 L1B cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+        return
+
+    if opt_vims:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_opus, opt_opus_id)):
+            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a VIMS product.")
+        opus_id, _body_hint = resolve_vims(opt_vims)
+        gs.message(f"VIMS source: OPUS ID {opus_id}")
+        # Delegate to the existing opus_id= path below, which already
+        # knows how to fetch/import a VIMS .qub via opus_files()/p.in.pds3
+        # (including real-body inference from the resulting download URL).
+        opt_opus_id = opus_id
+        # fall through into the OPUS branch below
 
     if opt_cog:
         if any((opt_doi, opt_lid, opt_search)):
@@ -1103,7 +1423,7 @@ def main():
                        save_default_region=bool(opt_project))
             p_meta.write_planetary_metadata(
                 opt_output,
-                module="p.in.astropedia",
+                module="p.in.archive",
                 command=" ".join(sys.argv),
                 data_type="image",
                 body=body_hint.upper() if body_hint else None,
@@ -1134,7 +1454,7 @@ def main():
             # Direct download: skip search, go straight to files API.
             opus_id = opt_opus_id.strip()
             gs.message(f"Fetching OPUS file list for: {opus_id}")
-            file_list = opus_files(opus_id)
+            file_list = opus_files(opus_id, channel=opt_vims_channel)
             if not file_list:
                 gs.fatal(f"No downloadable files found for OPUS ID '{opus_id}'.")
             labels, rows = [], [{"OPUS ID": opus_id}]
@@ -1150,7 +1470,7 @@ def main():
                 gs.fatal("No OPUS observations matched the search query.")
             opus_id  = _opus_id_from_row(rows[0], labels)
             gs.message(f"Selected OPUS observation: {opus_id}")
-            file_list = opus_files(opus_id)
+            file_list = opus_files(opus_id, channel=opt_vims_channel)
             if not file_list:
                 gs.fatal(f"No downloadable files for OPUS ID '{opus_id}'.")
 
@@ -1243,7 +1563,7 @@ def main():
 
         p_meta.write_planetary_metadata(
             opt_output,
-            module="p.in.astropedia",
+            module="p.in.archive",
             command=" ".join(sys.argv),
             data_type="image",
             sensor=_sensor,
@@ -1266,7 +1586,7 @@ def main():
     if not flag_list and not opt_output:
         gs.fatal("output= is required unless -l (list only) is given.")
 
-    dest_dir = opt_download_dir if opt_download_dir else tempfile.mkdtemp(prefix="p_in_astropedia_")
+    dest_dir = opt_download_dir if opt_download_dir else tempfile.mkdtemp(prefix="p_in_archive_")
     os.makedirs(dest_dir, exist_ok=True)
 
     # ── Read active GRASS region for spatial pre-filtering ─────────────
@@ -1369,7 +1689,7 @@ def main():
         _align_region_to_raster(opt_output, save_default=False)
         p_meta.write_planetary_metadata(
             opt_output,
-            module="p.in.astropedia",
+            module="p.in.archive",
             command=" ".join(sys.argv),
             data_type="image",
             body=str(_body).upper() if _body else None,

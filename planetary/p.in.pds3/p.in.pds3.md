@@ -69,7 +69,7 @@ reflectance/I-F products) to be misclassified as a null pixel. Instead
 no DN is treated as special in that case, and the caller is responsible
 for masking any sensor-specific sentinel the label does not declare
 (e.g. CRISM's undeclared `65535.0` bad/saturated-pixel flag — see the
-`r.mapcalc` masking step in `p.in.astropedia`'s CRISM examples and the
+`r.mapcalc` masking step in `p.in.archive`'s CRISM examples and the
 Mars-mineralogy chapter pipeline referenced there).
 
 ## EXAMPLES

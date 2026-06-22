@@ -4,31 +4,83 @@ Tracked items explicitly deferred out of scope while building `p.phocube`'s
 real SPICE mode (`-s`). See `planetary/p.phocube/p.phocube.md` NOTES and
 `planetary/p.spiceinit/p.spiceinit.md` for the current state of that work.
 
-## 0. Hyperspectral / UV-VIS instrument coverage in `p.in.astropedia`
+## 0. Hyperspectral / UV-VIS instrument coverage in `p.in.archive`
 
-`p.in.astropedia.py` already supports two real, non-STAC retrieval paths
-beyond the generic Astropedia STAC search, each following the same
-pattern: a curated `<NAME>_CATALOG` dict of verified-live URLs (or an
-API query builder), a `resolve_<name>()` function, a `print_<name>_catalog()`
-`-l` listing, and a dedicated `<name>=` option:
+(Module renamed from `p.in.astropedia` to `p.in.archive` this session --
+it fetches from several real remote archives, not just USGS Astropedia.)
+
+`p.in.archive.py` supports real, non-STAC retrieval paths beyond the
+generic Astropedia STAC search, each following the same pattern: a
+curated `<NAME>_CATALOG` dict of verified-live URLs (or an API query
+builder), a `resolve_<name>()` function, a `print_<name>_catalog()` `-l`
+listing, and a dedicated `<name>=` option:
 
 - **CRISM** (`crism=`) -- MRO/CRISM Targeted RDR, fetched directly from
   the PDS Geosciences Node's static archive tree (`pds-geosciences.wustl.edu`),
   since CRISM is indexed neither by OPUS (outer-planet/ring-science only)
   nor the NASA PDS Federated Search. Currently one observation catalogued
   (`FRT00003BFB`, Mawrth Vallis -- this repo's own Mars Mineralogy chapter).
-- **Cassini ISS/VIMS** (`opus=`/`opus_id=`) -- via the PDS Ring-Moon
-  Systems Node's OPUS API, sensor inferred from the OPUS product ID
-  prefix (`co-iss-n*`/`co-iss-w*`/`co-vims-*`).
+- **M3** (`m3=`) -- **done this session.** Chandrayaan-1 Moon Mineralogy
+  Mapper L1B radiance, fetched from the JPL PDS Imaging Node
+  (`planetarydata.jpl.nasa.gov`). Verified end-to-end: real product
+  imported as an 85-band imagery group, non-degenerate per-band radiance
+  confirmed via `r.univar`. Required a real `libs/p_pds` fix (below).
+- **Cassini ISS/VIMS** (`opus=`/`opus_id=`, and now `vims=`) -- via the
+  PDS Ring-Moon Systems Node's OPUS API, sensor inferred from the OPUS
+  product ID prefix (`co-iss-n*`/`co-iss-w*`/`co-vims-*`). `vims=` added
+  this session as the formalized shortcut the priority list below asked
+  for, but raw VIMS `.qub` import itself remains blocked (see below) --
+  `vims=` correctly fetches the right file (and fixed a real OPUS-API
+  bug along the way: the files API requires the `_vis`/`_ir`-suffixed
+  observation id, not the bare one) but `p.in.pds3` now explicitly
+  refuses to read the cube rather than silently misread it.
+- **OMEGA** -- **investigated, not added.** Real, live ESA Planetary
+  Science Archive source confirmed
+  (`archives.esac.esa.int/psa/ftp/MARS-EXPRESS/OMEGA/MEX-M-OMEGA-2-EDR-FLIGHT-V1.0/DATA/ORB<NN>/ORB<NNNN>_<N>.QUB`,
+  attached-label PDS3 QUBE, `TARGET_NAME = MARS` confirmed live), but
+  blocked on the same real gap that blocked VIMS (below) -- no `omega=`
+  option added since it would have nothing to actually import yet.
+
+**Real `libs/p_pds` gap found and partially fixed this session**: real
+PDS3 QUBE products from multiple archives (OMEGA, VIMS, and M3's
+detached-label convention) don't fit the reader's original assumptions.
+Two fixes landed:
+1. A generic `*_IMAGE`/`*_QUBE` object-name fallback (M3's label uses
+   `OBJECT = RDN_IMAGE`/`^RDN_IMAGE`, not the standard
+   `IMAGE`/`QUBE`/`SPECTRAL_QUBE` name) -- this is what unblocked M3.
+2. Parsing the tuple-valued `CORE_ITEMS` keyword (e.g.
+   `CORE_ITEMS = (64,352,672)`, ordered per `AXIS_NAME`), as a fallback
+   alongside the older `LINES`/`LINE_SAMPLES`/`BANDS` and
+   `CORE_ITEMS_1`/`_2`/`_3` keyword conventions.
+
+What's still blocked, for both **OMEGA** and **VIMS**: their QUBE
+objects carry non-zero `SUFFIX_ITEMS` (real per-record
+sideplane/backplane bytes -- OMEGA `(1,7,0)`, VIMS `(1,4,0)`), which
+`libs/p_pds` does not yet know how to skip. Tried to work out the exact
+byte layout from ISIS3's own real, production VIMS importer
+(`ReadVimsBIL()` in `isis/src/cassini/apps/vims2isis/main.cpp`) -- even
+ISIS3 needs a dedicated, hand-written importer for this, not a generic
+one, and the byte accounting still didn't fully reconcile against
+OMEGA's real file size when worked through by hand. Rather than ship a
+half-verified offset formula that would silently misread real science
+data (confirmed by trial: reading on as if `SUFFIX_ITEMS` were zero
+doesn't crash, doesn't obviously fail, just shifts every subsequent
+record and produces wrong-but-plausible pixel values for hundreds of
+bands), `libs/p_pds` now explicitly refuses to open any QUBE object with
+non-zero `SUFFIX_ITEMS` (`G_warning` + clean failure, confirmed via a
+real test against both real labels). Implementing the real per-axis
+suffix-skip correctly is real, separate, dedicated work for a future
+session -- the safety guard means no one can accidentally ship corrupted
+imports in the meantime.
 
 The live Astropedia STAC catalog itself (`stac.astrogeology.usgs.gov`)
 currently has only 14 collections, none of them hyperspectral/UV-VIS
 spectrometer products (LOLA, Galileo/Voyager controlled mosaics, Kaguya
 TC, MRO HiRISE/CTX/THEMIS-IR) -- so any further hyperspectral/UV-VIS
 instrument needs the same kind of dedicated, verified-archive-path
-support CRISM got, not a STAC search. Real candidate instruments, by
-body, with their real archive location (so the next implementer doesn't
-have to re-discover this):
+support CRISM/M3 got, not a STAC search. Remaining real candidate
+instruments, by body, with their real archive location (so the next
+implementer doesn't have to re-discover this):
 
 | Body / region | Instrument | Mission | Type | Real archive |
 |---|---|---|---|---|
@@ -51,16 +103,20 @@ have to re-discover this):
 | Europa (future) | MISE | Europa Clipper | Imaging spectrometer | not yet archived (mission en route) |
 | Jupiter system (future) | MAJIS | JUICE | Imaging spectrometer | not yet archived (mission en route) |
 
-Priority suggestion (real near-term value for this repo's existing Mars
-Mineralogy / `p.matter.bands` work): **OMEGA** first (directly
-complements CRISM for Mars mineral mapping, same body/use-case this
-repo already exercises), then **M3** (same role for the Moon), then
-**VIMS** (formalize into its own `vims=` catalog/shortcut rather than
-the current generic OPUS sensor-inference path), then the rest as
-needed. Point spectrometers (MASCS, NIRS3, OVIRS) are a different
-shape of product (single spectra, not imaging cubes) and may not fit
-`p.in.astropedia`'s current per-pixel-cube import model without
-changes -- worth a separate scoping pass before starting one.
+Status of the original priority list (OMEGA, M3, VIMS): **M3 done**
+(real, verified, working import). **VIMS partially done** -- the
+`vims=` shortcut and a real OPUS-API bug are fixed, but raw `.qub`
+import itself is blocked on the `SUFFIX_ITEMS` gap above. **OMEGA
+investigated, blocked on the same gap**, no CLI option added yet.
+Next real step for either: implement the per-axis `SUFFIX_ITEMS`
+byte-skip in `libs/p_pds` correctly enough to trust on real data (the
+ISIS3 `ReadVimsBIL()` reference above is the right starting point, but
+its byte accounting needs to be re-verified against a real file size
+before trusting it, per this session's experience). Point spectrometers
+(MASCS, NIRS3, OVIRS) are a different shape of product (single spectra,
+not imaging cubes) and may not fit `p.in.archive`'s current
+per-pixel-cube import model without changes -- worth a separate scoping
+pass before starting one.
 
 ## 1. Per-line/per-pixel timing in `p.phocube -s`
 

@@ -110,7 +110,7 @@ land bytes in the right place.
 
 ## SEE ALSO
 
-*[p.in.astropedia](p.in.astropedia.md),
+*[p.in.archive](p.in.archive.md),
 [p.in.pds3](p.in.pds3.md),
 [p.in.pds4](p.in.pds4.md),
 [r.in.gdal](https://grass.osgeo.org/grass-stable/manuals/r.in.gdal.html)*

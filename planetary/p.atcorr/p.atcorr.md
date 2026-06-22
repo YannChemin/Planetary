@@ -128,7 +128,7 @@ documents.
 Mars, thin regime — requires `p.phocube` geometry. `p.phocube` now has a
 real per-pixel SPICE ephemeris mode (`-s`, reading kernels/target/
 observer/time attached via `p.spiceinit`), but it only applies to
-**already-georeferenced** rasters (HiRISE/CTX RDR, MTRDR, `p.in.astropedia`
+**already-georeferenced** rasters (HiRISE/CTX RDR, MTRDR, `p.in.archive`
 COG products, etc.) — raw, un-projected pushbroom/framing sensor-grid
 cubes such as CRISM TRDR (imported pixel/line via `p.in.pds3 -g`) have no
 real per-pixel camera model anywhere in this suite and `-s` will refuse

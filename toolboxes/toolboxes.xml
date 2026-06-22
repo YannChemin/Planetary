@@ -86,8 +86,8 @@
       <module-item name="p.in.lroc.nac">
         <label>Fetch LROC NAC stereo DTM from ASU archive</label>
       </module-item>
-      <module-item name="p.in.astropedia">
-        <label>Fetch PDS4 product from USGS Astropedia / NASA PDS</label>
+      <module-item name="p.in.archive">
+        <label>Fetch planetary product from USGS Astropedia / NASA PDS / PDS Geosciences Node / ESA PSA / OPUS</label>
       </module-item>
       <module-item name="p.in.ancillary">
         <label>Import ancillary data (mineralogy, craters, WEH …)</label>

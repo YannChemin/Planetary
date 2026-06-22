@@ -869,7 +869,7 @@ grass -c EPSG:49900 ~/grassdata/mars
 g.region n=23.85 s=23.35 e=343.05 w=342.55 res=0:00:01
 
 # ── 2. List available HiRISE Enhanced Colour products in this region ─────────
-p.in.astropedia -l search="HiRISE Enhanced Color Mawrth" limit=20
+p.in.archive -l search="HiRISE Enhanced Color Mawrth" limit=20
 
 # ── 3. Import the three HiRISE colour bands ───────────────────────────────────
 # HiRISE Enhanced Colour products expose three bands on Astropedia STAC:
@@ -880,9 +880,9 @@ p.in.astropedia -l search="HiRISE Enhanced Color Mawrth" limit=20
 #
 # Using observation PSP_002074_2025 (2006-12-04, 23.6°N 342.8°E,
 # centred on the main Fe/Mg smectite terrace).
-p.in.astropedia search="PSP_002074_2025" band=1 output=mawrth_bg  --overwrite
-p.in.astropedia search="PSP_002074_2025" band=2 output=mawrth_red --overwrite
-p.in.astropedia search="PSP_002074_2025" band=3 output=mawrth_nir --overwrite
+p.in.archive search="PSP_002074_2025" band=1 output=mawrth_bg  --overwrite
+p.in.archive search="PSP_002074_2025" band=2 output=mawrth_red --overwrite
+p.in.archive search="PSP_002074_2025" band=3 output=mawrth_nir --overwrite
 
 # ── 4. Build an image group ───────────────────────────────────────────────────
 i.group group=mawrth_hirise input=mawrth_bg,mawrth_red,mawrth_nir
@@ -953,7 +953,7 @@ coverage for detection.
 ```bash
 # CRISM covers 0.36–3.92 µm in 544 bands — detects all phyllosilicate features
 # Fetch a CRISM Full Resolution Targeted Reduced Data Record over the same area
-p.in.astropedia search="CRISM FRT Mawrth" limit=5
+p.in.archive search="CRISM FRT Mawrth" limit=5
 
 # Import (example product FRT00003BFB_07_IF166L_TRRU)
 p.in.pds3 \
@@ -1025,7 +1025,7 @@ grass -c EPSG:49900 ~/grassdata/mars
 g.region n=23.70 s=23.50 e=342.90 w=342.70 res=0:00:02
 
 # ── 2. List CRISM targeted products intersecting this region ─────────────────
-p.in.astropedia -lr \
+p.in.archive -lr \
     opus="instrument=MRO CRISM,target=Mars" \
     output=dummy limit=15
 
@@ -1055,15 +1055,15 @@ p.in.astropedia -lr \
 #   FRT0000ABD6  2008-08-22  23.7°N 342.6°E  — cross-section through Al/Fe units
 
 # List IR TRDR products that intersect the working region (OPUS search):
-p.in.astropedia -lr \
+p.in.archive -lr \
     opus="instrument=MRO+CRISM,target=Mars" \
     output=dummy limit=20
 
 # Import the chosen IR tile.
-# p.in.astropedia downloads the .img cube + .lbl from OPUS and dispatches to
+# p.in.archive downloads the .img cube + .lbl from OPUS and dispatches to
 # p.in.pds3, which imports each band as a separate raster: mawrth_crism_ir.1 …
 CRISM_TILE="mro-crism-frt00003bfb_07_if166s_trr3"   # set to chosen tile OPUS ID
-p.in.astropedia \
+p.in.archive \
     opus_id="${CRISM_TILE}" \
     output=mawrth_crism_ir \
     --overwrite

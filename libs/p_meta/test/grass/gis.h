@@ -23,6 +23,7 @@
 
 /* Environment — read from process environment */
 static inline const char *G_getenv(const char *key) { return getenv(key); }
+static inline const char *G_getenv_nofatal(const char *key) { return getenv(key); }
 
 /* Diagnostics */
 static inline void _g_warning_stub(const char *fmt, ...)

@@ -1,9 +1,9 @@
-# p.in.astropedia - Fetch and import planetary data from USGS Astropedia, NASA PDS, or OPUS
+# p.in.archive - Fetch and import planetary data from real remote archives
 
 ## DESCRIPTION
 
-*p.in.astropedia* searches for and imports planetary data products from
-three public registries:
+*p.in.archive* searches for and imports planetary data products from
+several real remote archives:
 
 - **USGS Astropedia STAC** — the authoritative catalog of cartographic
   and image products from USGS Astrogeology Science Center, covering
@@ -42,6 +42,26 @@ three public registries:
   via `p.in.pds3 -g`. Pass a catalog key (see `-l`) or a direct `https` URL
   to a `.IMG`.
 
+- **Chandrayaan-1 M3 L1B products** (`m3=`) — the JPL PDS Imaging Node
+  static archive (`planetarydata.jpl.nasa.gov`) hosts Moon Mineralogy
+  Mapper L1B radiance cubes as detached-label PDS3 products with a
+  non-standard pointer (`^RDN_IMAGE`, nested inside an `OBJECT = RDN_FILE`
+  wrapper, not the usual `IMAGE`/`QUBE`/`SPECTRAL_QUBE` object name —
+  `libs/p_pds` gained a generic `*_IMAGE`/`*_QUBE` object-name fallback to
+  read these). `m3=` fetches the `*_RDN.IMG` + companion `*_L1B.LBL` and
+  imports the 85-band cube as a GRASS imagery group via `p.in.pds3 -g`,
+  same as `crism=`. Pass a catalog key (see `-l`) or a direct `https` URL
+  to a `*_RDN.IMG`. Verified end-to-end against a real product (real,
+  non-degenerate per-band radiance, confirmed via `r.univar`).
+
+- **Cassini VIMS** (`vims=`) — a dedicated shortcut into the `opus_id=`
+  path below: resolves a catalog key to a real OPUS observation ID and
+  fetches it the same way `opus_id=` already does. **Raw VIMS `.qub`
+  cubes currently fail to import** (see NOTES) — `vims=` correctly
+  *fetches* the right file (and fixed a real bug in doing so, see NOTES),
+  but `p.in.pds3` now explicitly refuses to read it rather than silently
+  producing wrong data.
+
 On download, the file format is detected by extension and dispatched
 to the appropriate GRASS importer:
 
@@ -57,7 +77,7 @@ to the appropriate GRASS importer:
 
 ### Spatial pre-filtering from the active GRASS region
 
-On startup *p.in.astropedia* reads the current GRASS computational
+On startup *p.in.archive* reads the current GRASS computational
 region (equivalent to `g.region -p`) and extracts the longitude/latitude
 bounding box [W, S, E, N]. This bbox is forwarded to both the STAC
 `bbox` filter and the PDS API `bbox` parameter so that **only products
@@ -67,10 +87,10 @@ Use the **`-r` flag** to disable the spatial pre-filter and search globally.
 
 ```sh
 # List Moon DEM products that overlap the active map window
-p.in.astropedia -l search="LOLA DEM"
+p.in.archive -l search="LOLA DEM"
 
 # Same search without spatial constraint
-p.in.astropedia -lr search="LOLA DEM"
+p.in.archive -lr search="LOLA DEM"
 ```
 
 ### USGS COG mosaics (`cog=`)
@@ -96,34 +116,43 @@ hyperspectral cubes (`.qub`):
 
 ```sh
 # List recent Cassini VIMS observations of Saturn
-p.in.astropedia -l opus="instrument=Cassini VIMS,target=Saturn" output=x
+p.in.archive -l opus="instrument=Cassini VIMS,target=Saturn" output=x
 
 # Import VIS channel of the first result
-p.in.astropedia opus="instrument=Cassini VIMS,target=Titan" \
+p.in.archive opus="instrument=Cassini VIMS,target=Titan" \
     vims_channel=vis output=vims_titan_vis
 
 # Import a specific VIMS observation by OPUS ID (IR channel)
-p.in.astropedia opus_id=co-vims-v1590123456 vims_channel=ir output=vims_ir
+p.in.archive opus_id=co-vims-v1799424623 vims_channel=ir output=vims_ir
 ```
 
 VIMS cubes are PDS3 format; both `.qub` channels (VIS: 96 bands,
 0.35–1.05 µm; IR: 256 bands, 0.88–5.1 µm) are imported via `p.in.pds3`.
-The companion `.lbl` label file is fetched automatically.
+The companion `.lbl` label file is fetched automatically. **Raw VIMS
+`.qub` import currently fails** — see "VIMS and OMEGA: real format gaps
+found, not yet fixed" below.
+
+The OPUS files API keys on the *exact* `_vis`/`_ir`-suffixed observation
+id (confirmed live: querying the bare/unsuffixed id always returns no
+files); `opus_files()` tries the id exactly as given first, then retries
+with `vims_channel=`'s suffix appended if that was empty and the given id
+had no suffix yet — fixed this session after finding the unsuffixed
+lookup never actually worked.
 
 ### MRO/CRISM TRDR products (`crism=`)
 
 ```sh
 # List the built-in CRISM catalog
-p.in.astropedia -l
+p.in.archive -l
 
 # Import the Mawrth Vallis FRT00003BFB VNIR cube (S detector, 107 bands)
-p.in.astropedia crism=mawrth_vallis_frt00003bfb_vnir output=crism_mawrth_vnir
+p.in.archive crism=mawrth_vallis_frt00003bfb_vnir output=crism_mawrth_vnir
 
 # Import the IR cube (L detector, 438 bands, 1.00-3.92 um)
-p.in.astropedia crism=mawrth_vallis_frt00003bfb_ir output=crism_mawrth_ir
+p.in.archive crism=mawrth_vallis_frt00003bfb_ir output=crism_mawrth_ir
 
 # Or pass a direct https URL to any other TRDR .IMG on the archive
-p.in.astropedia \
+p.in.archive \
     crism="https://pds-geosciences.wustl.edu/mro/mro-m-crism-3-rdr-targeted-v1/mrocr_2101/trdr/2007/2007_005/FRT00003BFB/FRT00003BFB_01_IF156L_TRR3.IMG" \
     output=crism_mawrth_ir
 ```
@@ -148,44 +177,114 @@ table (column `FILE_SPECIFICATION_NAME`) on the real archive.
 
 Downloads land in `~/RSDATA/<Body>/` and are resumable via `wget -c`.
 
+### Chandrayaan-1 M3 L1B products (`m3=`)
+
+```sh
+# List the built-in M3 catalog
+p.in.archive -l
+
+# Import the seed L1B radiance cube (orbit 141, 85 bands)
+p.in.archive m3=m3g20081118t222604_v03_rdn output=m3_radiance
+```
+
+Verified live end-to-end: real HTTP 200 on `*_RDN.IMG`/`*_L1B.LBL`,
+successful `p.in.pds3 -g` import (85 bands matching the label's own
+`BANDS` count), and non-degenerate per-band radiance confirmed via
+`r.univar` (e.g. band 1: -27 to 435 W/(m²·µm·sr)). `output=` becomes a
+GRASS imagery group, same convention as `crism=`.
+
+M3's L1B label uses a non-standard data-object name
+(`OBJECT = RDN_IMAGE`, pointer `^RDN_IMAGE`, nested inside an outer
+`OBJECT = RDN_FILE` wrapper) instead of the PDS3-standard
+`IMAGE`/`QUBE`/`SPECTRAL_QUBE` — `libs/p_pds` gained a generic fallback
+(any `*_IMAGE`/`*_QUBE` object with a matching `^<name>` pointer
+anywhere in the label) to read these, found and fixed this session.
+
+### VIMS and OMEGA: real format gaps found, not yet fixed
+
+Two more real instruments were investigated this session for `p.in.archive`
+support (ESA Mars Express OMEGA, Cassini VIMS raw `.qub`) and both hit
+the same real, underlying gap in `libs/p_pds`: their PDS3 **QUBE**
+objects carry non-zero `SUFFIX_ITEMS` (extra "sideplane"/backplane bytes
+appended per sample- and band-direction record — e.g. OMEGA's
+`SUFFIX_ITEMS = (1,7,0)`, VIMS's `(1,4,0)`), which this reader does not
+yet know how to skip. Reading on as if `SUFFIX_ITEMS` were `(0,0,0)`
+silently shifts every subsequent record — confirmed by trial: it doesn't
+crash, doesn't obviously fail, and produces wrong-but-plausible-looking
+pixel values for hundreds of bands before finally erroring out at the
+very end of the file. **`libs/p_pds` now explicitly refuses to open any
+QUBE object with non-zero `SUFFIX_ITEMS` rather than risk that** — a real
+`G_warning`/`gs.fatal`, not a guess.
+
+This isn't a quick parsing fix: even NASA's own ISIS3 needs a dedicated,
+hand-written importer for VIMS's suffixed `.qub`
+(`ReadVimsBIL()` in `isis/src/cassini/apps/vims2isis/main.cpp`) rather
+than its generic PDS3 reader — confirmed by reading ISIS3's real source.
+Implementing the real byte layout (per-band sample-suffix bytes,
+per-line band-suffix "sideplane" records) correctly enough to trust on
+real science data is a separate, dedicated piece of work, left for a
+future session rather than risk shipping a half-verified byte-offset
+formula that silently corrupts data.
+
+What *did* get fixed and is real, working progress from this
+investigation:
+
+- `libs/p_pds` now parses the PDS3 QUBE `CORE_ITEMS` tuple convention
+  (e.g. `CORE_ITEMS = (64,352,672)`, ordered per `AXIS_NAME`) as a
+  fallback when the older `LINES`/`LINE_SAMPLES`/`BANDS` or
+  `CORE_ITEMS_1`/`_2`/`_3` keywords aren't present — needed by both
+  OMEGA and VIMS, and by any other real QUBE product using this
+  convention.
+- The OPUS files-API suffix bug above (`opus_files()` always failing on
+  the bare/unsuffixed observation id).
+- The `SUFFIX_ITEMS` safety guard itself, which protects *any* future
+  QUBE product from this same silent-corruption failure mode, not just
+  these two.
+
+`omega=` was not added as a CLI option this round, since it would have
+nothing to actually import yet; OMEGA's real, live ESA Planetary Science
+Archive URL pattern
+(`archives.esac.esa.int/psa/ftp/MARS-EXPRESS/OMEGA/MEX-M-OMEGA-2-EDR-FLIGHT-V1.0/DATA/ORB<NN>/ORB<NNNN>_<N>.QUB`)
+is recorded in `TODO.md` for whoever picks up the suffix-byte work next.
+
 ## EXAMPLES
 
 ### List products matching a keyword
 
 ```sh
-p.in.astropedia -l search="MOLA 64ppd" limit=5
+p.in.archive -l search="MOLA 64ppd" limit=5
 ```
 
 ### List the built-in USGS COG catalog
 
 ```sh
-p.in.astropedia -l
+p.in.archive -l
 ```
 
 ### Window a global LOLA DEM to the active region
 
 ```sh
 g.region n=337590 s=130740 e=263040 w=-8850 res=30
-p.in.astropedia cog=moon_lola_dem_118m output=lola_sector
+p.in.archive cog=moon_lola_dem_118m output=lola_sector
 ```
 
 ### Import a Moon LOLA DEM by DOI
 
 ```sh
-p.in.astropedia doi=10.17189/1520642 output=lola_dem
+p.in.archive doi=10.17189/1520642 output=lola_dem
 ```
 
 ### Import a specific PDS4 product by LID
 
 ```sh
-p.in.astropedia \
+p.in.archive \
     lid="urn:nasa:pds:mgs-mola-dem-mars:data:megt90n000cb" \
     output=mola_megt90
 ```
 
 ## Saturn ring imaging pipelines
 
-**p.in.astropedia** is Step 2 in both Cassini ring imaging chains — it
+**p.in.archive** is Step 2 in both Cassini ring imaging chains — it
 fetches the raw PDS3 image from OPUS so that no manual download is needed.
 The full pipelines are described in [p.in.rings](p.in.rings.md); summaries
 below show where this module fits.
@@ -204,7 +303,7 @@ p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" \
     dest=$HOME/RSDATA/Saturn/kernels
 
 # ── Step 2: Raw image from OPUS  ← this module ────────────────────────────────
-p.in.astropedia opus_id=co-iss-n1467344155 output=N1467344155_raw
+p.in.archive opus_id=co-iss-n1467344155 output=N1467344155_raw
 
 # ── Step 3: Set radlong output region ────────────────────────────────────────
 g.region n=86550 s=86250 e=66.55 w=66.25 nsres=0.25 ewres=0.0003
@@ -276,7 +375,7 @@ ${KDIR}/spk/${SPK_BASE},${KDIR}/ck/${CK_BASE}"
 # product.  The companion .LBL label is matched by base name automatically.
 # The file is downloaded to ~/RSDATA/Misc/ and imported via p.in.pds3, which
 # reads LINE_PREFIX_BYTES=24 (ISS dark/overclocked pixel prefix) correctly.
-p.in.astropedia opus_id="${OPUS_ID}" output="${RAWMAP}" \
+p.in.archive opus_id="${OPUS_ID}" output="${RAWMAP}" \
     product=raw --overwrite
 g.region raster="${RAWMAP}"
 
