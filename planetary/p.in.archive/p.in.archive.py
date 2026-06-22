@@ -101,6 +101,15 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: omega
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Mars Express OMEGA EDR product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a Mars Express OMEGA hyperspectral cube (attached-label PDS3 QUBE, single .QUB file -- no separate .LBL) from the ESA Planetary Science Archive (archives.esac.esa.int). Use -l to list catalog keys.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
@@ -296,6 +305,21 @@ VIMS_CATALOG = {
         "Titan",
         "Cassini VIMS, Titan flyby, 2015-01-08T15:09:40, 118.5s exposure "
         "(VIS: 0.35-1.05 um/96 bands, IR: 0.88-5.1 um/256 bands)"),
+}
+
+# Curated catalog of Mars Express OMEGA EDR products on the ESA Planetary
+# Science Archive (archives.esac.esa.int). Attached-label PDS3 QUBE -- a
+# single .QUB file carries both label and data, no companion .LBL. Verified
+# live: real HTTP 200, real import (352 bands, sane raw DN within the
+# label's own declared saturation bounds).
+OMEGA_BASE = ("https://archives.esac.esa.int/psa/ftp/MARS-EXPRESS/OMEGA/"
+              "MEX-M-OMEGA-2-EDR-FLIGHT-V1.0/DATA")
+OMEGA_CATALOG = {
+    "orb0100_0": (
+        f"{OMEGA_BASE}/ORB01/ORB0100_0.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 100, 2004-02-10T18:07:10 "
+        "(352 bands, 64 samples x 424 lines)"),
 }
 
 # Prefer these formats (checked in order against the STAC asset media-types
@@ -1023,6 +1047,33 @@ def print_vims_catalog():
         gs.message(f"  {k:<22} {body:<8} {desc}")
 
 
+def resolve_omega(omega_arg):
+    """Resolve an omega= argument to (img_url, body_hint).
+
+    Accepts a catalog key (see OMEGA_CATALOG) or a direct https URL to an
+    attached-label OMEGA EDR *.QUB on archives.esac.esa.int -- there is no
+    companion .LBL (label and data share one file)."""
+    a = omega_arg.strip()
+    if a in OMEGA_CATALOG:
+        img_url, body, _desc = OMEGA_CATALOG[a]
+        return img_url, body
+    if a.lower().startswith(("http://", "https://")):
+        if not a.upper().endswith(".QUB"):
+            gs.fatal("Direct omega= URLs must point at an OMEGA EDR *.QUB file.")
+        return a, None
+    gs.fatal(f"Unknown OMEGA key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to an EDR *.QUB file.")
+
+
+def print_omega_catalog():
+    gs.message("Mars Express OMEGA EDR products (use omega=<key>, or a direct "
+               "https URL to a *.QUB on archives.esac.esa.int):")
+    gs.message(f"  {'key':<14} {'body':<6} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, body, desc) in OMEGA_CATALOG.items():
+        gs.message(f"  {k:<14} {body:<6} {desc}")
+
+
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
 _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
@@ -1290,6 +1341,7 @@ def main():
     opt_crism        = options["crism"]
     opt_m3           = options["m3"]
     opt_vims         = options["vims"]
+    opt_omega        = options["omega"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -1313,12 +1365,13 @@ def main():
         print_crism_catalog()
         print_m3_catalog()
         print_vims_catalog()
-        if not any((opt_cog, opt_crism, opt_m3, opt_vims)):
+        print_omega_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_opus, opt_opus_id)):
-            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1388,8 +1441,8 @@ def main():
         return
 
     if opt_m3:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_opus, opt_opus_id)):
-            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_opus, opt_opus_id)):
+            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1435,8 +1488,8 @@ def main():
         return
 
     if opt_vims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_opus, opt_opus_id)):
-            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_opus, opt_opus_id)):
+            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1448,6 +1501,41 @@ def main():
         # (including real-body inference from the resulting download URL).
         opt_opus_id = opus_id
         # fall through into the OPUS branch below
+
+    if opt_omega:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_opus, opt_opus_id)):
+            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import an OMEGA product.")
+        img_url, body_hint = resolve_omega(opt_omega)
+        gs.message(f"OMEGA source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "mars")
+        local_img = _rsdata_dest(img_url, body_hint)
+        _wget_resumable(img_url, local_img)
+
+        gs.message("Importing OMEGA EDR cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="go" if flag_override else "g",
+                       input=local_img, output=opt_output, overwrite=True)
+        # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
+        # groups them under <output>; align the region to band 1.
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+        p_meta.write_planetary_metadata(
+            f"{opt_output}.1",
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="MEX_OMEGA",
+            mission="MARS EXPRESS",
+            body=body_slug.upper(),
+            source_file=img_url,
+        )
+        gs.message(f"Imported OMEGA EDR cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+        return
 
     if opt_cog:
         if any((opt_doi, opt_lid, opt_search)):
