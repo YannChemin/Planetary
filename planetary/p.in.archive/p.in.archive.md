@@ -127,10 +127,13 @@ p.in.archive opus_id=co-vims-v1799424623 vims_channel=ir output=vims_ir
 ```
 
 VIMS cubes are PDS3 format; both `.qub` channels (VIS: 96 bands,
-0.35–1.05 µm; IR: 256 bands, 0.88–5.1 µm) are imported via `p.in.pds3`.
-The companion `.lbl` label file is fetched automatically. **Raw VIMS
-`.qub` import currently fails** — see "VIMS and OMEGA: real format gaps
-found, not yet fixed" below.
+0.35–1.05 µm; IR: 256 bands, 0.88–5.1 µm) are imported via `p.in.pds3`
+and registered as a multi-band imagery group (`output.1` .. `output.N`),
+same convention as `crism=`/`m3=`. The companion `.lbl` label, and the
+`.fmt` "structure" files real VIMS labels reference via `^STRUCTURE`
+(`core_description.fmt`, `suffix_description.fmt`,
+`band_bin_center.fmt`), are all fetched automatically — see "QUBE
+sample-/band-suffix bytes" below for why the `.fmt` files matter.
 
 The OPUS files API keys on the *exact* `_vis`/`_ir`-suffixed observation
 id (confirmed live: querying the bare/unsuffixed id always returns no
@@ -226,43 +229,82 @@ first match) — verified live: real longitude/latitude/radius/phase-angle
 values for this same orbit, sane (radius 1734-1738 km, matching the
 Moon; phase angle 82-98°).
 
-### VIMS and OMEGA: real format gaps found, not yet fixed
+### QUBE sample-/band-suffix bytes (VIMS, OMEGA)
 
-Two more real instruments were investigated this session for `p.in.archive`
-support (ESA Mars Express OMEGA, Cassini VIMS raw `.qub`) and both hit
-the same real, underlying gap in `libs/p_pds`: their PDS3 **QUBE**
-objects carry non-zero `SUFFIX_ITEMS` (extra "sideplane"/backplane bytes
-appended per sample- and band-direction record — e.g. OMEGA's
-`SUFFIX_ITEMS = (1,7,0)`, VIMS's `(1,4,0)`), which this reader does not
-yet know how to skip. Reading on as if `SUFFIX_ITEMS` were `(0,0,0)`
-silently shifts every subsequent record — confirmed by trial: it doesn't
-crash, doesn't obviously fail, and produces wrong-but-plausible-looking
-pixel values for hundreds of bands before finally erroring out at the
-very end of the file. **`libs/p_pds` now explicitly refuses to open any
-QUBE object with non-zero `SUFFIX_ITEMS` rather than risk that** — a real
-`G_warning`/`gs.fatal`, not a guess.
+Real PDS3 **QUBE** objects from some archives (Cassini VIMS, ESA Mars
+Express OMEGA) carry non-zero `SUFFIX_ITEMS` — extra "sideplane"/
+"backplane" bytes appended per sample- and band-direction record (e.g.
+OMEGA's `SUFFIX_ITEMS = (1,7,0)`, VIMS's `(1,4,0)`). `libs/p_pds` skips
+these correctly for the one layout actually observed in both real
+archives: `BAND_STORAGE_TYPE = LINE_INTERLEAVED` (BIL) with a zero
+line-suffix — a sample-suffix block is appended after each band's core
+samples within a line, and a band-suffix backplane is appended once per
+line after all bands. The byte layout was derived from, and verified
+against, NASA's own ISIS3 production importer
+(`ReadVimsBIL()` in `isis/src/cassini/apps/vims2isis/main.cpp`), then
+confirmed directly against real downloaded `.qub` files (sane,
+non-uniform per-band DN ranges; cross-checked against a parallel manual
+`p.in.pds3` run). Any other QUBE organisation, or a nonzero
+line-suffix, is still refused (`G_warning` + clean failure) rather than
+guessed — this isn't a generic suffix-skipper, just the one real,
+verified layout.
 
-This isn't a quick parsing fix: even NASA's own ISIS3 needs a dedicated,
-hand-written importer for VIMS's suffixed `.qub`
-(`ReadVimsBIL()` in `isis/src/cassini/apps/vims2isis/main.cpp`) rather
-than its generic PDS3 reader — confirmed by reading ISIS3's real source.
-Implementing the real byte layout (per-band sample-suffix bytes,
-per-line band-suffix "sideplane" records) correctly enough to trust on
-real science data is a separate, dedicated piece of work, left for a
-future session rather than risk shipping a half-verified byte-offset
-formula that silently corrupts data.
+`libs/p_pds` also infers BIL automatically from
+`AXIS_NAME = (SAMPLE,BAND,LINE)` when `BAND_STORAGE_TYPE` is absent
+entirely (true for both OMEGA and VIMS — the QUBE convention is that
+axis order *is* the storage order), and tolerates VIMS's real
+object-name/pointer-keyword mismatch (`OBJECT = SPECTRAL_QUBE` but
+`^QUBE = (...)`, not `^SPECTRAL_QUBE`).
 
-What *did* get fixed and is real, working progress from this
-investigation:
+**`^STRUCTURE` external "structure files".** VIMS labels factor
+`CORE_ITEM_BYTES`/`CORE_ITEM_TYPE`/`CORE_NULL`/etc. out into small shared
+`.fmt` files referenced via `^STRUCTURE = "core_description.fmt"`
+instead of inlining them (OMEGA inlines everything directly — no
+`^STRUCTURE` needed). Without resolving these, `p.in.pds3` silently fell
+back to a wrong 8-bit-unsigned default instead of the real
+16-bit-signed DN — no error, no warning, just wrong data. `libs/p_pds`
+now splices in any `^STRUCTURE`-referenced file's keywords as if they
+had been inlined; `vims=` fetches the `.fmt` files OPUS already
+enumerates alongside the `.qub`/`.lbl`.
 
-- `libs/p_pds` now parses the PDS3 QUBE `CORE_ITEMS` tuple convention
-  (e.g. `CORE_ITEMS = (64,352,672)`, ordered per `AXIS_NAME`) as a
-  fallback when the older `LINES`/`LINE_SAMPLES`/`BANDS` or
-  `CORE_ITEMS_1`/`_2`/`_3` keywords aren't present — needed by both
-  OMEGA and VIMS, and by any other real QUBE product using this
-  convention.
+One real, benign edge case found and left as-is (not a bug): the very
+last image line of real OMEGA/VIMS cubes runs a few bytes short of a
+full line for the highest-numbered bands. `p_pds_read_row()` reports
+this as a per-row read failure; `p.in.pds3`'s existing
+`write_band()` already turns that into a GRASS NULL row rather than
+aborting, so it degrades safely (a small fraction of pixels NULL at one
+edge) instead of crashing or misreading.
+
+What else got fixed along the way:
+
+- `libs/p_pds` now parses the PDS3 QUBE `CORE_ITEMS`/`SUFFIX_ITEMS`
+  tuple convention (e.g. `CORE_ITEMS = (64,352,672)`, ordered per
+  `AXIS_NAME`) as a fallback when the older `LINES`/`LINE_SAMPLES`/
+  `BANDS` or `CORE_ITEMS_1`/`_2`/`_3` keywords aren't present.
 - The OPUS files-API suffix bug above (`opus_files()` always failing on
   the bare/unsuffixed observation id).
+- `crism=`, `omega=`, and the OPUS `vims=`/ISS path were all silently
+  failing to apply their detector-specific `sensor=`/`mission=`
+  metadata, because `p.in.pds3` already writes a generic
+  `planetary.json` from the label's own fields, and
+  `p_meta.write_planetary_metadata()` is create-only (first-write-wins)
+  — fixed by updating the existing record in place instead.
+
+### Mars Express OMEGA EDR products (`omega=`)
+
+```sh
+# List the built-in OMEGA catalog
+p.in.archive -l
+
+# Import a real Mars-orbit OMEGA EDR cube (orbit 100, 352 bands)
+p.in.archive omega=orb0100_0 output=omega_orbit100
+```
+
+Attached-label PDS3 QUBE — a single `.QUB` file carries both label and
+data, no companion `.LBL` to fetch. `output=` becomes a GRASS imagery
+group, same convention as `crism=`/`m3=`/`vims=`. Verified live: real
+352-band cube from `archives.esac.esa.int`, sane raw DN within the
+label's own declared saturation bounds (-32768/32767).
 - The `SUFFIX_ITEMS` safety guard itself, which protects *any* future
   QUBE product from this same silent-corruption failure mode, not just
   these two.

@@ -56,44 +56,71 @@ listing, and a dedicated `<name>=` option:
   (`v1799424623_1.qub`), sane non-uniform per-band DN ranges (e.g. band 1:
   67-240, band 50: 67-1520), registered as an imagery group like
   crism=/m3=.
-- **OMEGA** -- **investigated, not added.** Real, live ESA Planetary
-  Science Archive source confirmed
-  (`archives.esac.esa.int/psa/ftp/MARS-EXPRESS/OMEGA/MEX-M-OMEGA-2-EDR-FLIGHT-V1.0/DATA/ORB<NN>/ORB<NNNN>_<N>.QUB`,
-  attached-label PDS3 QUBE, `TARGET_NAME = MARS` confirmed live), but
-  blocked on the same real gap that blocked VIMS (below) -- no `omega=`
-  option added since it would have nothing to actually import yet.
+- **OMEGA** (`omega=`) -- **done in a later session**, once the QUBE
+  suffix-bytes gap below was fixed. Real, live ESA Planetary Science
+  Archive source (`archives.esac.esa.int/.../DATA/ORB<NN>/ORB<NNNN>_<N>.QUB`,
+  attached label, no companion `.LBL`). Unlike VIMS, OMEGA's
+  `CORE_ITEM_BYTES`/`CORE_ITEM_TYPE`/`SUFFIX_ITEM_BYTES` etc. are all
+  inlined directly in the QUBE object (no `^STRUCTURE` externalization
+  needed). Verified live: real 352-band orbit-100 Mars cube
+  (`ORB0100_0.QUB`), sane raw DN within the label's own declared
+  saturation bounds (-32768/32767). One real, benign edge case found and
+  left as-is (not a bug to fix): the very last image line of real OMEGA
+  (and VIMS) cubes runs a few bytes short of a full line for the
+  highest-numbered bands -- `p_pds_read_row()` already reports this as a
+  per-row read failure, and the existing caller convention
+  (`p.in.pds3`'s `write_band()`) already turns that into a GRASS NULL row
+  rather than aborting, so it degrades safely (~0.05% of pixels NULL at
+  one edge) instead of either crashing or silently misreading.
 
-**Real `libs/p_pds` gap found and partially fixed this session**: real
+**Real `libs/p_pds` gaps found and fixed (across two sessions)**: real
 PDS3 QUBE products from multiple archives (OMEGA, VIMS, and M3's
-detached-label convention) don't fit the reader's original assumptions.
-Two fixes landed:
+detached-label convention) didn't fit the reader's original assumptions.
+Fixes landed:
 1. A generic `*_IMAGE`/`*_QUBE` object-name fallback (M3's label uses
    `OBJECT = RDN_IMAGE`/`^RDN_IMAGE`, not the standard
    `IMAGE`/`QUBE`/`SPECTRAL_QUBE` name) -- this is what unblocked M3.
-2. Parsing the tuple-valued `CORE_ITEMS` keyword (e.g.
+2. Parsing the tuple-valued `CORE_ITEMS`/`SUFFIX_ITEMS` keywords (e.g.
    `CORE_ITEMS = (64,352,672)`, ordered per `AXIS_NAME`), as a fallback
    alongside the older `LINES`/`LINE_SAMPLES`/`BANDS` and
    `CORE_ITEMS_1`/`_2`/`_3` keyword conventions.
+3. **QUBE sample-/band-suffix (sideplane/backplane) byte skipping**, for
+   `BAND_STORAGE_TYPE = LINE_INTERLEAVED` (BIL) cubes with a zero
+   line-suffix -- the real layout both OMEGA (`SUFFIX_ITEMS = (1,7,0)`)
+   and VIMS (`SUFFIX_ITEMS = (1,4,0)`) actually use, verified against
+   NASA's own ISIS3 `ReadVimsBIL()` (`isis/src/cassini/apps/vims2isis/main.cpp`)
+   as the authoritative reference for the byte layout, then verified
+   directly against real downloaded `.qub` files (sane, non-uniform,
+   correctly-ranged DN values; cross-checked against a parallel manual
+   `p.in.pds3` run). `p_pds_open_image_named()` now also infers BIL
+   from `AXIS_NAME = (SAMPLE,BAND,LINE)` alone when `BAND_STORAGE_TYPE`
+   is absent (true for both real archives) , and tolerates the
+   object-name/pointer-keyword mismatch real VIMS labels have
+   (`OBJECT = SPECTRAL_QUBE` but `^QUBE = (...)`, not `^SPECTRAL_QUBE`).
+   Any other organisation or a nonzero line-suffix is still refused
+   (`G_warning` + clean failure) rather than guessed.
+4. **`^STRUCTURE` external "structure file" support** -- some QUBE
+   archives (confirmed: VIMS) factor `CORE_ITEM_BYTES`/`CORE_ITEM_TYPE`/
+   `CORE_NULL`/etc. out of the main label into small shared `.fmt` files
+   referenced via `^STRUCTURE = "core_description.fmt"` rather than
+   inlining them (OMEGA inlines everything directly, no `^STRUCTURE`
+   needed). Found live: without this, `p.in.pds3` silently fell back to
+   a wrong 8-bit-unsigned default instead of the real 16-bit-signed DN
+   -- no error, no warning, just wrong data. `p.in.archive`'s `vims=`
+   path now also fetches the `.fmt` files OPUS already enumerates
+   alongside the `.qub`/`.lbl`.
 
-What's still blocked, for both **OMEGA** and **VIMS**: their QUBE
-objects carry non-zero `SUFFIX_ITEMS` (real per-record
-sideplane/backplane bytes -- OMEGA `(1,7,0)`, VIMS `(1,4,0)`), which
-`libs/p_pds` does not yet know how to skip. Tried to work out the exact
-byte layout from ISIS3's own real, production VIMS importer
-(`ReadVimsBIL()` in `isis/src/cassini/apps/vims2isis/main.cpp`) -- even
-ISIS3 needs a dedicated, hand-written importer for this, not a generic
-one, and the byte accounting still didn't fully reconcile against
-OMEGA's real file size when worked through by hand. Rather than ship a
-half-verified offset formula that would silently misread real science
-data (confirmed by trial: reading on as if `SUFFIX_ITEMS` were zero
-doesn't crash, doesn't obviously fail, just shifts every subsequent
-record and produces wrong-but-plausible pixel values for hundreds of
-bands), `libs/p_pds` now explicitly refuses to open any QUBE object with
-non-zero `SUFFIX_ITEMS` (`G_warning` + clean failure, confirmed via a
-real test against both real labels). Implementing the real per-axis
-suffix-skip correctly is real, separate, dedicated work for a future
-session -- the safety guard means no one can accidentally ship corrupted
-imports in the meantime.
+Also fixed, found via live OMEGA/VIMS end-to-end testing (not specific to
+the QUBE suffix work, but only surfaced by it): `crism=`, `omega=`, and
+the OPUS `vims=`/ISS path were all silently failing to apply their
+detector-specific `sensor=`/`mission=` metadata, because `p.in.pds3`
+already writes a generic `planetary.json` for every map it creates (from
+the label's own `INSTRUMENT_ID`/`MISSION_NAME`), and
+`p_meta.write_planetary_metadata()` is deliberately create-only
+(first-write-wins) -- so the more specific follow-up call was always a
+silent no-op. Fixed by loading the existing record and updating it in
+place instead of calling the create-only helper, in all four affected
+call sites.
 
 The live Astropedia STAC catalog itself (`stac.astrogeology.usgs.gov`)
 currently has only 14 collections, none of them hyperspectral/UV-VIS
