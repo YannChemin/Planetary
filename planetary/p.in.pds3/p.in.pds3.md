@@ -46,6 +46,32 @@ the output dimensions.
 
 OpenMP parallelism is used when reading multi-band QUBE products.
 
+### Data pointers nested inside `OBJECT = FILE`
+
+Some PDS3 archives (e.g. MRO/CRISM Targeted RDR) wrap multiple data
+objects sharing one physical file inside an enclosing
+`OBJECT = FILE ... END_OBJECT = FILE` block, placing pointer keywords
+such as `^IMAGE` one level below the label root rather than at the top
+level. The label parser performs a recursive depth-first search for
+these pointer keywords (and for `RECORD_BYTES`) so both flat and
+`OBJECT = FILE`-wrapped labels resolve correctly. A label whose pointer
+keyword cannot be found at all (instead of merely being nested) falls
+back to reading the label file itself as pixel data and will fail
+loudly with read errors past the label's own (small) size — it does not
+silently produce garbage.
+
+### Null/special-pixel defaults
+
+When a product label declares neither `CORE_NULL` nor
+`MISSING_CONSTANT`, the null DN is **not** defaulted to `0.0`: doing so
+would cause every legitimate near-zero sample (common across
+reflectance/I-F products) to be misclassified as a null pixel. Instead
+no DN is treated as special in that case, and the caller is responsible
+for masking any sensor-specific sentinel the label does not declare
+(e.g. CRISM's undeclared `65535.0` bad/saturated-pixel flag — see the
+`r.mapcalc` masking step in `p.in.astropedia`'s CRISM examples and the
+Mars-mineralogy chapter pipeline referenced there).
+
 ## EXAMPLES
 
 Import a MOC-WA Mars image (attached label, UINT8):
