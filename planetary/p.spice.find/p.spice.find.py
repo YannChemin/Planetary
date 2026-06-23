@@ -28,7 +28,7 @@
 # % key: instrument
 # % type: string
 # % label: Instrument name, for instruments needing extra kernels beyond the spacecraft default
-# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK), the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK), and (with kernels=...,iak) the crismAddendum IAK that CRISM's camera model needs. ISS_NAC, ISS_WAC (CASSINI) -- fetches the IssNAAddendum/IssWAAddendum IAK (with kernels=...,iak) that their pinhole camera models need.
+# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK), the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK), and (with kernels=...,iak) the crismAddendum IAK that CRISM's camera model needs. ISS_NAC, ISS_WAC (CASSINI) -- fetches the IssNAAddendum/IssWAAddendum IAK (with kernels=...,iak) that their pinhole camera models need. OMEGA_SWIR_C, OMEGA_SWIR_L (MEX) -- selects MEX_OMEGA_V03.TI as the ik= (no IAK exists; the whiskbroom camera model is built entirely from this public IK).
 # % required: no
 # %end
 
@@ -180,8 +180,8 @@ SPACECRAFT = {
         "dir":     "MEX",
         "body":    "Mars",
         "sclk":    None,  # single "STEP" SCLK, latest in sclk/, no date-range to pick
-        "ik":      None,
-        "fk":      None,
+        "ik":      None,  # per-instrument IK chosen via instrument= (e.g. MEX_OMEGA_V03.TI)
+        "fk":      "MEX_V*",  # latest versioned spacecraft FK
         "pck":     ["pck00010.tpc"],
     },
 }
@@ -224,6 +224,17 @@ INSTRUMENT = {
         # model uses this yet (see TODO.md).
         "iak_prefix":      "vimsAddendum",
     },
+    "OMEGA_SWIR_C": {
+        "spacecraft":      "MEX",
+        "ik":              "MEX_OMEGA_V03.TI",
+        # No IAK on the ISIS3 AWS mirror for OMEGA -- the whiskbroom mirror
+        # model (p.phocube -c) is built entirely from this real public IK's
+        # own "OMEGA Pixels Geometry" section, see TODO.md.
+    },
+    "OMEGA_SWIR_L": {
+        "spacecraft":      "MEX",
+        "ik":              "MEX_OMEGA_V03.TI",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -246,6 +257,14 @@ _RE_YYDOY_YYDOY   = re.compile(r'^(\d{2})(\d{3})_(\d{2})(\d{3})')
 _RE_YYMMDD_YYMMDD = re.compile(r'^(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})')
 # SPK: YYMMDD{letters}_CLASS_YYDOY_YYDOY  e.g. 040701AP_SCPSE_04173_04236.bsp
 _RE_SPK_COVERAGE  = re.compile(r'^\d{6}[A-Z]+_[A-Z0-9]+_(\d{2})(\d{3})_(\d{2})(\d{3})')
+# MEX-style: a word-prefixed YYMMDD_YYMMDD pair anywhere in the name, not at
+# the very start, e.g. "ATNM_MEASURED_040101_050101_V03.BC" or
+# "MEX_ROB_040101_041231_003.BSP" -- confirmed live against
+# naif.jpl.nasa.gov/pub/naif/MEX/kernels/{ck,spk}/. Tried last (re.search,
+# not re.match) since it's the most permissive pattern and other missions'
+# filenames are already caught by the start-anchored patterns above.
+_RE_YYMMDD_YYMMDD_ANYWHERE = re.compile(
+    r'(?<!\d)(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?!\d)')
 
 
 def _file_date_range(name):
@@ -271,6 +290,13 @@ def _file_date_range(name):
         y1, doy1, y2, doy2 = (int(x) for x in m.groups())
         try:
             return _yydoy_to_date(y1, doy1), _yydoy_to_date(y2, doy2)
+        except ValueError:
+            pass
+    m = _RE_YYMMDD_YYMMDD_ANYWHERE.search(name)
+    if m:
+        y1, mo1, d1, y2, mo2, d2 = (int(x) for x in m.groups())
+        try:
+            return _yymmdd_to_date(y1, mo1, d1), _yymmdd_to_date(y2, mo2, d2)
         except ValueError:
             pass
     return None
@@ -420,9 +446,13 @@ def _best_ck(files, target_date, pref, name_prefix=None):
     NAIF ck/ directory under a different filename prefix)."""
     candidates = []
     for f in files:
-        if not f.endswith(".bc") or f.endswith(".lbl"):
+        # Case-insensitive: real archives disagree on filename case (e.g.
+        # CASSINI/MRO ck/ filenames are lowercase, MEX's are all-uppercase
+        # "ATNM_MEASURED_*.BC" -- confirmed live against naif.jpl.nasa.gov).
+        fl = f.lower()
+        if not fl.endswith(".bc") or fl.endswith(".lbl"):
             continue
-        if name_prefix and not f.startswith(name_prefix):
+        if name_prefix and not fl.startswith(name_prefix.lower()):
             continue
         if _CK_SKIP.search(f):
             continue
@@ -443,7 +473,7 @@ def _best_spk(files, target_date):
     """Return the best SPK covering target_date (prefer SCPSE, shortest span)."""
     candidates = []
     for f in files:
-        if not f.endswith(".bsp"):
+        if not f.lower().endswith(".bsp"):
             continue
         r = _file_date_range(f)
         if r is None:
@@ -471,15 +501,20 @@ def _latest_file(files, ext, hint=None):
     last-sorted match.  If hint is an exact name, return it if present.
     Without a hint, return the last-sorted file with the extension.
     """
+    # Case-insensitive throughout: real archives disagree on filename case
+    # (e.g. MEX's sclk/ik/fk are all-uppercase "MEX_260522_STEP.TSC", unlike
+    # CASSINI/MRO's lowercase convention -- confirmed live).
+    ext_l = ext.lower()
     if hint:
         if hint.endswith("*"):
-            prefix = hint[:-1]
-            matches = sorted(f for f in files if f.startswith(prefix) and f.endswith(ext))
+            prefix = hint[:-1].lower()
+            matches = sorted(f for f in files
+                              if f.lower().startswith(prefix) and f.lower().endswith(ext_l))
             return matches[-1] if matches else None
         for f in files:
-            if f == hint:
+            if f.lower() == hint.lower():
                 return f
-    matches = [f for f in files if f.endswith(ext)]
+    matches = [f for f in files if f.lower().endswith(ext_l)]
     return sorted(matches)[-1] if matches else None
 
 

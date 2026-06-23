@@ -141,6 +141,67 @@ def test_latest_file_exact():
 
 
 # ---------------------------------------------------------------------------
+# MEX regression tests (TODO.md "Known, documented gap" -- MEX's real CK/SPK
+# filenames don't have the date at the start, and MEX's whole archive uses
+# uppercase extensions/filenames unlike CASSINI/MRO's lowercase convention).
+# ---------------------------------------------------------------------------
+
+def test_file_date_range_mex_ck():
+    r = _mod._file_date_range("ATNM_MEASURED_040101_050101_V03.BC")
+    assert r == (datetime.date(2004, 1, 1), datetime.date(2005, 1, 1))
+
+
+def test_file_date_range_mex_spk():
+    r = _mod._file_date_range("MEX_ROB_040101_041231_003.BSP")
+    assert r == (datetime.date(2004, 1, 1), datetime.date(2004, 12, 31))
+
+
+def test_best_ck_mex_uppercase_bc():
+    files = [
+        "ATNM_MEASURED_030602_040101_V03.BC",
+        "ATNM_MEASURED_040101_050101_V03.BC",
+        "ATNM_MEASURED_050101_060101_V03.BC",
+    ]
+    target = datetime.date(2004, 2, 10)
+    best = _mod._best_ck(files, target, "ra")
+    assert best == "ATNM_MEASURED_040101_050101_V03.BC"
+
+
+def test_best_spk_mex_uppercase_bsp():
+    files = ["MEX_ROB_040101_041231_003.BSP", "MEX_ROB_050101_051231_003.BSP"]
+    target = datetime.date(2004, 2, 10)
+    best = _mod._best_spk(files, target)
+    assert best == "MEX_ROB_040101_041231_003.BSP"
+
+
+def test_latest_file_case_insensitive_no_hint():
+    files = ["MEX_260522_STEP.TSC"]
+    result = _mod._latest_file(files, ".tsc", None)
+    assert result == "MEX_260522_STEP.TSC"
+
+
+def test_latest_file_case_insensitive_exact_hint():
+    files = ["MEX_OMEGA_V03.TI", "MEX_ASPERA_V09.TI"]
+    result = _mod._latest_file(files, ".ti", "MEX_OMEGA_V03.TI")
+    assert result == "MEX_OMEGA_V03.TI"
+
+
+def test_latest_file_case_insensitive_prefix_hint():
+    files = ["MEX_V16.TF", "MEX_SCI_V01.TF"]
+    result = _mod._latest_file(files, ".tf", "MEX_V*")
+    assert result == "MEX_V16.TF"
+
+
+def test_cassini_lowercase_unaffected_by_case_fix():
+    """Confirms the case-insensitivity fix didn't change CASSINI/MRO
+    selection (same scenario as test_best_ck_selects_shortest_ra)."""
+    files = ["04183_04185ra.bc", "04180_04191ra.bc", "04183_04213ca_ISS.bc"]
+    target = datetime.date(2004, 7, 1)
+    best = _mod._best_ck(files, target, "ra")
+    assert best == "04183_04185ra.bc"
+
+
+# ---------------------------------------------------------------------------
 # Network integration tests — require live NAIF server.
 # Run with:  pytest ... -m network
 # ---------------------------------------------------------------------------
@@ -265,3 +326,63 @@ class TestNetworkIak:
         files = self._ls("usgs_data/mex/kernels/iak/")
         matches = [f for f in files if "omega" in f.lower()]
         assert not matches, f"Unexpected OMEGA IAK found: {matches}"
+
+
+def _naif_mex_reachable():
+    try:
+        import urllib.request
+        urllib.request.urlopen(
+            "https://naif.jpl.nasa.gov/pub/naif/MEX/kernels/ck/", timeout=10,
+        )
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.network
+@pytest.mark.skipif(not _naif_mex_reachable(), reason="NAIF server not reachable")
+class TestNetworkMex:
+    """Verify live kernel selection for MEX (real OMEGA orbit-100 epoch,
+    2004-02-10) -- regression coverage for the TODO.md "Known, documented
+    gap" closed this session: MEX's real CK/SPK filenames don't have the
+    date at the start (ATNM_MEASURED_YYMMDD_YYMMDD_VNN.BC,
+    MEX_ROB_YYMMDD_YYMMDD_NNN.BSP), and MEX's whole archive uses uppercase
+    filenames/extensions unlike CASSINI/MRO's lowercase convention."""
+
+    TARGET = datetime.date(2004, 2, 10)
+    NAIF = "https://naif.jpl.nasa.gov/pub/naif"
+
+    def _ls(self, path):
+        return _mod._list_dir(f"{self.NAIF}/{path}", timeout=30)
+
+    def test_ck_covers_target(self):
+        files = self._ls("MEX/kernels/ck/")
+        best = _mod._best_ck(files, self.TARGET, "ra")
+        assert best is not None, "No MEX CK found for 2004-02-10"
+        r = _mod._file_date_range(best)
+        assert r[0] <= self.TARGET <= r[1]
+
+    def test_spk_covers_target(self):
+        files = self._ls("MEX/kernels/spk/")
+        best = _mod._best_spk(files, self.TARGET)
+        assert best is not None, "No MEX SPK found for 2004-02-10"
+        r = _mod._file_date_range(best)
+        assert r[0] <= self.TARGET <= r[1]
+
+    def test_sclk_present(self):
+        files = self._ls("MEX/kernels/sclk/")
+        result = _mod._latest_file(files, ".tsc", _mod.SPACECRAFT["MEX"]["sclk"])
+        assert result is not None
+        assert result.upper().endswith(".TSC")
+
+    def test_fk_latest_mex_v(self):
+        files = self._ls("MEX/kernels/fk/")
+        result = _mod._latest_file(files, ".tf", _mod.SPACECRAFT["MEX"]["fk"])
+        assert result is not None
+        assert result.upper().startswith("MEX_V") and result.upper().endswith(".TF")
+
+    def test_ik_omega(self):
+        files = self._ls("MEX/kernels/ik/")
+        result = _mod._latest_file(
+            files, ".ti", _mod.INSTRUMENT["OMEGA_SWIR_C"]["ik"])
+        assert result == "MEX_OMEGA_V03.TI"
