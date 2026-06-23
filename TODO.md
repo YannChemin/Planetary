@@ -365,12 +365,100 @@ slug here, e.g. VEX/Venus Express does not), and `iak_prefix` entries in
 `TestNetworkIak` to `p.spice.find`'s test suite (5 tests, all passing
 live) confirming presence/absence per the findings above.
 
-**Known gap, not yet fixed**: this machine has a system-wide addon
-install at `/usr/lib/grass/addons/scripts/p.spice.find` (root-owned,
-ahead of `$GRASS_ADDON_BASE=~/.grass8/addons` on `PATH`) that is now
-stale relative to the source tree and `/usr/local/grass86/scripts/`
-(the `make install` target used during this session). Needs `sudo cp
+(Renamed `INSTRUMENT["ISS_WA"]` -> `ISS_WAC` shortly after, for
+consistency with `p.in.archive`'s `sensor=CASSINI_ISS_WAC` and
+`p.phocube`'s `instrument=` options -- see below.)
+
+**Known gap, recurring**: this machine has a system-wide addon install
+at `/usr/lib/grass/addons/scripts/p.spice.find` (root-owned, ahead of
+`$GRASS_ADDON_BASE=~/.grass8/addons` on `PATH`) that goes stale every
+time the source tree changes and needs a manual `sudo cp
 /usr/local/grass86/scripts/p.spice.find /usr/lib/grass/addons/scripts/p.spice.find`
-(or removing/fixing that system install so `PATH` resolves the
-`GRASS_ADDON_BASE` copy instead) to pick up this change for normal
-`p.spice.find` invocations outside this dev session.
+to pick it up (done twice this session, including after the `ISS_WAC`
+rename). `p.phocube` does not have this problem (no system-wide addon
+copy found for it).
+
+### Cassini ISS NAC/WAC camera model added to `p.phocube -c`
+
+Following the AWS-mirror indexing above, implemented `instrument=
+ISS_NAC`/`ISS_WAC` -- a structurally different, harder shape than
+CRISM's 1-D pushbroom pinhole:
+
+- **Real 2-D framing geometry**: both `sample` and `line` are genuine
+  focal-plane offsets (`dx`/`dy`), one static boresight per whole frame
+  (no per-line gimbal CK, unlike CRISM -- added an `is_framing` flag to
+  the camera struct so CRISM's `line` axis, which is *time*, doesn't get
+  misread as a focal-plane offset -- caught and fixed before any testing
+  by inspection, not by a failed run).
+- **Real radial lens distortion** (`K1`): confirmed the exact formula
+  from ISIS3's own `RadialDistortionMap.cpp`
+  (`isis/src/base/objs/RadialDistortionMap/`): `ux=dx*(1+K1*r2)`,
+  `uy=dy*(1+K1*r2)` -- closed-form, no iteration needed for the forward
+  (sample -> ray) direction this module needs.
+- **A custom IAK-defined frame**, not the bare NAIF one:
+  `CASSINI_ISS_NAC_USGS`/`_WAC_USGS`, a 180 deg Z-rotation fixing a real,
+  documented missing rotation in NAIF's own `cas_v*.tf`. Resolvable
+  automatically once the IAK is `furnsh`'d via `ik=` (confirmed live --
+  no new loading machinery needed).
+- **Focal length genuinely varies per filter-wheel pair** (dozens of
+  `INS-8236{0,1}_<F1>_<F2>_FOCAL_LENGTH` IAK keys, e.g. `CL1_CL2`,
+  confirmed key order matches the real PDS3 label's `FILTER_NAME` tuple
+  order exactly). Added a `filter_name` capture to `p.in.archive.py`'s
+  OPUS ISS import (the Python `p_meta.PlanetaryMetadata.filter_name`
+  field already existed in the schema but nothing populated it for ISS
+  until now) and a `p.phocube` auto-read of it via the *already-generic*
+  `p_meta_read_string_field()` (no `libs/p_meta` C changes needed at all
+  -- that reader does a flat `strstr` over the whole JSON file, so it
+  already worked for a field nested under `extended_metadata.planetary`
+  without modification). `filter1=`/`filter2=` CLI options override it;
+  the IAK's own `DEFAULT_FOCAL_LENGTH` is the documented last-resort
+  fallback (its own comment: "not being used... but was left in").
+
+Renamed `CrismCameraModel` -> `PinholeCameraModel` and
+`load_crism_camera_model()` -> `load_pinhole_camera_model()` (now shared
+by CRISM and ISS); removed nothing from CRISM's path (`is_framing=0`,
+`k1=0` for it, `boresight_line` stays unused as before).
+
+**Verified end-to-end against two real Cassini ISS frames**, both
+confirmed via OPUS's own `SURFACEGEOsaturn_rangetobody1` field (Saturn's
+surface actually in view) *before* downloading -- the first two
+real-target candidates tried (`N1498508609_1`, `N1508882636_1`, both
+locally cached from an earlier session) turned out to be pointed ~4.5
+deg off Saturn's disk (real archived "TARGET_NAME=SATURN" images are not
+guaranteed to be disk-centered; NAC's FOV is only 0.35 deg), so the OPUS
+metadata check was the fix, not a guess:
+
+- **NAC** (`co-iss-n1466182140`, 2004-06-17, filter `P0/CB2` -- not in
+  the IAK, exercises the `DEFAULT_FOCAL_LENGTH` fallback): 100% pixel
+  hit rate (0/262144 NULL), southern-hemisphere-only latitudes (-34.0 to
+  -0.9 deg), emission 0.03-34.5 deg, incidence 66.5-92.7 deg.
+- **WAC** (`co-iss-w1466182067`, same observation sequence, filter
+  `CB2/IRP0` -- exact IAK match): WAC's wide FOV captures the whole disk
+  at this 8.29M km range -- 41694/1048576 pixels hit (~4%, matching
+  Saturn's small angular size relative to the frame), full -180..179.7
+  deg longitude coverage, latitudes -89.6 to +67.9 deg.
+
+Both verified kernel sets cached at `~/RSDATA/Saturn/spice_test/` and
+`~/RSDATA/Misc/{N1466182140_1_CALIB,W1466182067_1_CALIB}.{LBL,IMG}`;
+added `test_camera_mode_real_iss_nac_geometry`/`_wac_geometry` to
+`p.phocube`'s test suite (both passing, ~25s combined).
+
+**Found, not fixed (pre-existing, out of scope for this work): a real
+`p.spice.find` CK/SPK date-matching bug.** `_best_ck()`/`_best_spk()`
+match candidates by *date only* (`r[0] <= target_date <= r[1]`), not
+time-of-day. Real Cassini "ra" reconstructed CK/SPK files are released
+in ~5-day windows whose *actual data* coverage runs from day-N 00:01 to
+day-(N+5) 00:01 -- NOT through the end of day N+5 despite the filename
+implying otherwise (confirmed via `ckcov_c`/`spkcov_c` directly).
+Requesting a time late in the *last* day of a window's filename range
+silently selects that window instead of the *next* one (which actually
+covers it), because both nominally match per filename-date overlap and
+the matcher doesn't break the tie by time-of-day or coverage span
+precision. Hit this twice while picking ISS verification targets
+(`N1498508609_1`'s and `N1508882636_1`'s real `START_TIME`s both fell in
+this gap); worked around by manually fetching the adjacent file. A real
+fix would need either real `ckcov_c`/`spkcov_c` coverage checks (precise
+but a CSPICE round-trip per candidate) or at least preferring the
+later-starting file on a date tie (cheap, would have fixed both cases
+here). Left as a documented gap, not fixed, to keep this session's scope
+to the camera model.

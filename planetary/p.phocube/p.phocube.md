@@ -242,11 +242,14 @@ downloading:
 ### Not implemented (out of scope for this version)
 
 See the repo's top-level `TODO.md` for full context. `-c` supports
-only CRISM (VNIR and IR detectors); any other `instrument=` value is a
-`G_fatal_error`, not a guess -- other instruments need their own
-per-instrument camera-model formula (the pinhole focal-plane convention
-used here is not necessarily how every instrument's optics work, e.g.
-VIMS's whiskbroom scan mirrors). Real (non-ellipsoid) DSK
+CRISM (VNIR and IR detectors) and Cassini ISS (NAC and WAC); any other
+`instrument=` value is a `G_fatal_error`, not a guess -- other
+instruments need their own per-instrument camera-model formula (the
+pinhole focal-plane convention used here is not necessarily how every
+instrument's optics work, e.g. VIMS's whiskbroom scan mirrors -- VIMS's
+own IAK exists but only fixes frame-ID housekeeping, no boresight/focal-
+length, and MEX/OMEGA has no IAK on the mirror at all; both still need
+from-scratch research, not this pinhole convention). Real (non-ellipsoid) DSK
 shape models are supported in `-c` the same way as `-s` (reuses
 `camera_method`, `"DSK/Unprioritized"` when a DSK is attached).
 
@@ -299,6 +302,24 @@ p.spiceinit map=crism_frt target=MARS observer=MRO \
     spk=mro_psp2.bsp spk=mar063.bsp \
     ck=mro_sc_psp_070102_070108.bc ck=mro_crm_psp_070101_070131.bc
 p.phocube -c -iepntr instrument=CRISM_VNIR input=crism_frt output=crism_geom
+```
+
+Camera mode, real per-pixel ray for a raw Cassini ISS NAC frame (real
+kernels, verified correct against co-iss-n1466182140 -- see NOTES):
+
+```sh
+p.spice.find spacecraft=CASSINI instrument=ISS_NAC time=2004-06-17T16:24:48 \
+    kernels=lsk,sclk,ik,fk,pck,spk,ck,iak dest=./spice
+p.spiceinit map=iss_frame target=SATURN observer=CASSINI \
+    time=2004-169T16:24:48.262 \
+    lsk=spice/lsk/naif0012.tls pck=spice/pck/cpck_rock_21Jan2011_merged.tpc \
+    sclk=spice/sclk/cas00172.tsc fk=spice/fk/cas_v43.tf \
+    ik=spice/ik/cas_iss_v10.ti,spice/iak/IssNAAddendum005.ti \
+    spk=spice/spk/*.bsp ck=spice/ck/*.bc
+p.phocube -c -iepntr instrument=ISS_NAC input=iss_frame output=iss_geom \
+    filter1=CL1 filter2=CL2
+# filter1=/filter2= optional if the raster's own planetary.json
+# 'filter_name' was set by p.in.archive's OPUS ISS import.
 ```
 
 ## REFERENCES
