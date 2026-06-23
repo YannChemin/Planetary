@@ -199,9 +199,49 @@ all physically sane for a real targeted MRO observation. `band=` was
 removed from `-c`'s options -- the real geometry is band-independent
 (matching ISIS3), so there was nothing left for it to select.
 
+#### Cassini ISS NAC/WAC: a real 2-D framing camera, not a 1-D slit
+
+`instrument=ISS_NAC`/`ISS_WAC` add a second, structurally different
+camera shape: a real 2-D framing camera (both `sample` *and* `line` are
+focal-plane offsets, one static boresight per whole frame -- unlike
+CRISM, where `line` is time and per-line pointing instead comes from the
+gimbal CK) with genuine radial lens distortion (`K1`, ISIS3's own
+`RadialDistortionMap` convention: `ux=dx*(1+K1*r2)`, `uy=dy*(1+K1*r2)`,
+applied before the ray is built), a custom IAK-defined frame fixing a
+real, documented missing 180 deg rotation in NAIF's own `cas_v*.tf`
+(`CASSINI_ISS_NAC_USGS`/`_WAC_USGS`, not the bare `CASSINI_ISS_NAC`/
+`_WAC`), and a focal length that genuinely varies per filter-wheel pair
+(dozens of `INS-8236{0,1}_<F1>_<F2>_FOCAL_LENGTH` IAK keys, not one
+constant). `filter1=`/`filter2=` (e.g. `CL1`/`CL2`) select the pair; when
+omitted, read from the raster's own `planetary.json` `filter_name` field
+(set automatically by `p.in.archive`'s OPUS ISS import); when neither is
+available, falls back to the IAK's own `DEFAULT_FOCAL_LENGTH` with a
+warning (a real, IAK-documented fallback -- "not being used... but was
+left in" -- unlike CRISM's discredited `CAMERA_COEFF` guess).
+
+Both IAKs (`IssNAAddendum005.ti`/`IssWAAddendum005.ti`) come from the
+same ISIS3 AWS mirror as CRISM's, fetchable directly via `p.spice.find
+spacecraft=CASSINI instrument=ISS_NAC kernels=iak` (or `ISS_WAC`).
+
+Real-data results, both confirmed via OPUS's own `SURFACEGEOsaturn_
+rangetobody1` field (Saturn's surface actually in view) before
+downloading:
+
+- **NAC** (`co-iss-n1466182140`, 2004-06-17, filter `P0/CB2` -- not in
+  the IAK, exercises the `DEFAULT_FOCAL_LENGTH` fallback): 100% pixel
+  hit rate, southern-hemisphere latitudes only (-34 to -0.9 deg),
+  emission 0.03-34.5 deg, incidence 66.5-92.7 deg -- all physically sane
+  for a disk view from ~8.3M km.
+- **WAC** (`co-iss-w1466182067`, same sequence, filter `CB2/IRP0` --
+  exact IAK match, exercises the non-fallback path): WAC's much wider
+  FOV captures the *whole* disk at this range -- ~4% pixel hit rate
+  (matching Saturn's small angular size relative to the frame) with full
+  -180..180 deg longitude coverage and latitudes from -89.6 to +67.9 deg,
+  confirming the whole-disk geometry, not just a crash-free run.
+
 ### Not implemented (out of scope for this version)
 
-See the repo's top-level `TODO.md` for full context. `-c` v1 supports
+See the repo's top-level `TODO.md` for full context. `-c` supports
 only CRISM (VNIR and IR detectors); any other `instrument=` value is a
 `G_fatal_error`, not a guess -- other instruments need their own
 per-instrument camera-model formula (the pinhole focal-plane convention
