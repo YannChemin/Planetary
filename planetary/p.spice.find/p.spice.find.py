@@ -381,6 +381,27 @@ _CK_SKIP = re.compile(
 )
 
 
+def _trailing_edge_risk(r, target_date):
+    """Return 1 if target_date is exactly the *last* nominal day of a
+    CK/SPK file's date range, else 0.
+
+    Real archived "ra"-reconstructed CK/SPK files are released in
+    fixed-cadence windows (e.g. 5 days) whose *actual* data coverage
+    runs from day-N 00:01 to day-(N+5) 00:01 -- NOT through the end of
+    day N+5 despite the filename implying otherwise (confirmed live via
+    ckcov_c/spkcov_c against real CASSINI archive files -- see TODO.md).
+    Consecutive release windows' filename date ranges overlap by
+    exactly one day at this boundary (e.g. "..._05292_05297..." and
+    "..._05297_05302..."), so a target time late on that shared day
+    needs the *next* file, which actually has data for the whole day,
+    not the one whose range nominally ends there. This is a real,
+    confirmed risk flag, not a guess -- used only to break ties when
+    another candidate without the risk exists; it never excludes a
+    candidate outright (still useful when it's the only match, e.g. for
+    a time genuinely in the first few minutes of that day)."""
+    return 1 if target_date >= r[1] else 0
+
+
 def _best_ck(files, target_date, pref, name_prefix=None):
     """Return the best-matching CK filename covering target_date.
 
@@ -401,11 +422,12 @@ def _best_ck(files, target_date, pref, name_prefix=None):
             continue
         if r[0] <= target_date <= r[1]:
             score, span = _ck_type_score(f, pref)
-            candidates.append((score, span, f))
+            edge_risk = _trailing_edge_risk(r, target_date)
+            candidates.append((score, edge_risk, span, f))
     if not candidates:
         return None
     candidates.sort()
-    return candidates[0][2]
+    return candidates[0][3]
 
 
 def _best_spk(files, target_date):
@@ -421,11 +443,12 @@ def _best_spk(files, target_date):
             span = (r[1] - r[0]).days
             # Prefer SCPSE (spacecraft + planets + satellites in one file)
             scpse_bonus = 0 if "SCPSE" in f.upper() else 10
-            candidates.append((scpse_bonus, span, f))
+            edge_risk = _trailing_edge_risk(r, target_date)
+            candidates.append((scpse_bonus, edge_risk, span, f))
     if not candidates:
         return None
     candidates.sort()
-    return candidates[0][2]
+    return candidates[0][3]
 
 
 # ---------------------------------------------------------------------------

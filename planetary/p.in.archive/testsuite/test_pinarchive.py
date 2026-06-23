@@ -380,6 +380,43 @@ class TestPinArchiveOmegaCli(TestCase):
         self.assertModuleFail(module)
 
 
+class TestPinArchiveIssFilterPair(unittest.TestCase):
+    """White-box tests for _pds3_filter_pair() (no network) -- Cassini ISS
+    NAC/WAC's p.phocube -c camera model needs the real filter pair to
+    look up the right INS-<id>_<F1>_<F2>_FOCAL_LENGTH IAK key (focal
+    length varies per filter combination); this captures it from the
+    real PDS3 label into the planetary.json 'filter_name' sidecar field."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_module_under_test()
+
+    def test_parses_real_filter_name_tuple(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".LBL",
+                                          delete=False) as f:
+            f.write('FILTER_NAME = ("CL1","CL2")\nTARGET_NAME = "SATURN"\n')
+            path = f.name
+        try:
+            self.assertEqual(self.mod._pds3_filter_pair(path), "CL1/CL2")
+        finally:
+            os.unlink(path)
+
+    def test_returns_none_when_absent(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".LBL",
+                                          delete=False) as f:
+            f.write('TARGET_NAME = "SATURN"\n')
+            path = f.name
+        try:
+            self.assertIsNone(self.mod._pds3_filter_pair(path))
+        finally:
+            os.unlink(path)
+
+    def test_returns_none_for_missing_file(self):
+        self.assertIsNone(self.mod._pds3_filter_pair("/no/such/file.LBL"))
+
+
 class TestPinArchiveE2EImport(TestCase):
     """Real, network-heavy end-to-end download+import+verify tests, one per
     p.in.archive hyperspectral sensor (crism=/m3=/vims=/omega=).

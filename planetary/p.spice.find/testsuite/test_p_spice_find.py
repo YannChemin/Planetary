@@ -91,6 +91,43 @@ def test_best_spk_prefers_scpse():
     assert best == "040629AP_SCPSE_04179_04185.bsp"
 
 
+def test_best_ck_avoids_trailing_edge_of_window():
+    """Regression test for a real bug found verifying p.phocube's Cassini
+    ISS camera model (see TODO.md): "ra" reconstructed CK files' actual
+    data coverage ends at the *start* of their nominal last day, not its
+    end (confirmed live via ckcov_c against 05292_05297ra.bc: real
+    coverage was 2005-292 00:01 to 2005-297 00:01). A target time late on
+    day 297 needs 05297_05302ra.bc (which starts -- and so actually
+    covers -- that whole day), not 05292_05297ra.bc, even though both
+    nominally match by date alone."""
+    files = ["05292_05297ra.bc", "05297_05302ra.bc"]
+    target = datetime.date(2005, 10, 24)  # day 297
+    best = _mod._best_ck(files, target, "ra")
+    assert best == "05297_05302ra.bc"
+
+
+def test_best_ck_still_prefers_shortest_span_away_from_edge():
+    """The trailing-edge fix must not override the existing
+    shortest-span preference when the target isn't on a window
+    boundary (no real coverage risk) -- same scenario as
+    test_best_ck_selects_shortest_ra, confirming no regression."""
+    files = ["04183_04185ra.bc", "04180_04191ra.bc"]
+    target = datetime.date(2004, 7, 1)  # day 183, not the last day of either
+    best = _mod._best_ck(files, target, "ra")
+    assert best == "04183_04185ra.bc"
+
+
+def test_best_spk_avoids_trailing_edge_of_window():
+    """SPK equivalent of test_best_ck_avoids_trailing_edge_of_window --
+    same real bug (confirmed live via spkcov_c), same fix, same
+    overlapping-window boundary (day 297) as the real CASSINI archive
+    case in TODO.md."""
+    files = ["051010R_SCPSE_05292_05297.bsp", "051024BP_SCPSE_05297_05302.bsp"]
+    target = datetime.date(2005, 10, 24)  # day 297
+    best = _mod._best_spk(files, target)
+    assert best == "051024BP_SCPSE_05297_05302.bsp"
+
+
 def test_latest_file_prefix():
     files = ["cas_v40.tf", "cas_v41.tf", "cas_v43.tf", "cas_dyn_v03.tf"]
     result = _mod._latest_file(files, ".tf", "cas_v*")
