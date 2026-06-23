@@ -443,22 +443,35 @@ Both verified kernel sets cached at `~/RSDATA/Saturn/spice_test/` and
 added `test_camera_mode_real_iss_nac_geometry`/`_wac_geometry` to
 `p.phocube`'s test suite (both passing, ~25s combined).
 
-**Found, not fixed (pre-existing, out of scope for this work): a real
-`p.spice.find` CK/SPK date-matching bug.** `_best_ck()`/`_best_spk()`
-match candidates by *date only* (`r[0] <= target_date <= r[1]`), not
-time-of-day. Real Cassini "ra" reconstructed CK/SPK files are released
-in ~5-day windows whose *actual data* coverage runs from day-N 00:01 to
+**Fixed: the `p.spice.find` CK/SPK trailing-edge date-matching bug**
+(found above). `_best_ck()`/`_best_spk()` matched candidates by *date
+only* (`r[0] <= target_date <= r[1]`), not time-of-day. Real Cassini
+"ra" reconstructed CK/SPK files are released in fixed-cadence windows
+(e.g. ~5 days) whose *actual data* coverage runs from day-N 00:01 to
 day-(N+5) 00:01 -- NOT through the end of day N+5 despite the filename
-implying otherwise (confirmed via `ckcov_c`/`spkcov_c` directly).
-Requesting a time late in the *last* day of a window's filename range
-silently selects that window instead of the *next* one (which actually
-covers it), because both nominally match per filename-date overlap and
-the matcher doesn't break the tie by time-of-day or coverage span
-precision. Hit this twice while picking ISS verification targets
-(`N1498508609_1`'s and `N1508882636_1`'s real `START_TIME`s both fell in
-this gap); worked around by manually fetching the adjacent file. A real
-fix would need either real `ckcov_c`/`spkcov_c` coverage checks (precise
-but a CSPICE round-trip per candidate) or at least preferring the
-later-starting file on a date tie (cheap, would have fixed both cases
-here). Left as a documented gap, not fixed, to keep this session's scope
-to the camera model.
+implying otherwise (confirmed via `ckcov_c`/`spkcov_c` directly against
+real CASSINI archive files). Requesting a time late in the *last* day
+of a window's filename range silently selected that window instead of
+the *next* one (which actually covers it), because both nominally match
+per filename-date overlap and the matcher didn't break the tie by
+coverage risk.
+
+Fix: added `_trailing_edge_risk(r, target_date)` (returns 1 iff
+`target_date` is exactly the window's *last* nominal day), inserted as
+a tie-breaker between the existing type/SCPSE preference and span
+preference in both `_best_ck()`'s and `_best_spk()`'s candidate sort
+keys -- `(type_score, edge_risk, span, f)` / `(scpse_bonus, edge_risk,
+span, f)`. Deliberately a tie-breaker, not an exclusion: a
+trailing-edge candidate is still returned when it's the only match
+(e.g. a target genuinely in the first few minutes of that day).
+Verified against the exact real dates that exposed the bug
+(`p.spice.find spacecraft=CASSINI time=2005-297T21:35:08 kernels=ck,spk
+-l`, live against naif.jpl.nasa.gov): now correctly selects
+`05297_05302ra.bc`/`051024BP_SCPSE_05296_05306.bsp` instead of
+`05292_05297ra.bc`/`050802R_SCPSE_05169_05186.bsp`. Added
+`test_best_ck_avoids_trailing_edge_of_window`,
+`test_best_spk_avoids_trailing_edge_of_window`, and
+`test_best_ck_still_prefers_shortest_span_away_from_edge` (confirms the
+existing shortest-span preference is unaffected when there's no real
+edge risk) -- all 22 of `p.spice.find`'s tests pass, including the
+5 live network ones.

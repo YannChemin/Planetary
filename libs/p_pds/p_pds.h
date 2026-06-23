@@ -134,6 +134,20 @@ typedef struct PPdsImage {
     int suffix_line_items;    /*!< not yet supported; nonzero refuses to open                       */
     int suffix_item_bytes;    /*!< bytes per suffix item (4, matching all real archives seen so far) */
 
+    /* Real archives disagree on band-suffix backplane row width: Cassini
+     * VIMS pads each row to (samples + suffix_sample_items) items (real
+     * ISIS3 vims2isis source, ReadVimsBIL()), but MEX OMEGA's real
+     * archived QUBE uses exactly `samples` items per row -- confirmed
+     * via exact (FILE_RECORDS-LABEL_RECORDS)*RECORD_BYTES byte-count
+     * arithmetic against a real downloaded file, not a guess. When the
+     * label provides FILE_RECORDS/RECORD_BYTES/LABEL_RECORDS with
+     * RECORD_TYPE=FIXED_LENGTH, the true per-line byte stride is
+     * derived from those instead of assumed -- ground truth beats a
+     * formula that can vary by mission. 0 means "derive on the fly with
+     * the (samples + suffix_sample_items) assumption", for labels
+     * without those fields. */
+    long line_stride_bytes;
+
     /* --- file handle ------------------------------------------------ */
     char *data_path;    /*!< heap-owned path to binary data file           */
     void *_fp;          /*!< opaque FILE* (do not access directly)         */
@@ -260,6 +274,30 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
  * Caller must pre-allocate buf of size img->lines * img->samples * sizeof(double).
  */
 int p_pds_read_band(PPdsImage *img, int band, double *buf, int grass_special);
+
+/*!
+ * \brief Read one row of one QUBE band-suffix ("backplane") sideplane.
+ *
+ * Some real PDS3 QUBE products (e.g. Cassini VIMS, Mars Express OMEGA)
+ * append extra "band-suffix" rows once per line, after all real bands
+ * -- per-line housekeeping/calibration sideplanes, not spectral data.
+ * For example, MEX OMEGA's band-suffix index 0 holds the real scanning
+ * mirror position (DN) at each sample within that line's scan -- the
+ * value a camera model needs to reconstruct per-pixel cross-track
+ * pointing (see OMEGA_HK.TXT and the OMEGA IK's "OMEGA Pixels Geometry"
+ * section).  Values are returned raw (no OFFSET/SCALING_FACTOR
+ * applied, unlike p_pds_read_row() -- suffix items are housekeeping
+ * integers, not calibrated DN).
+ *
+ * \param img            open PPdsImage (must have suffix_band_items > 0
+ *                        and BAND_STORAGE_TYPE = LINE_INTERLEAVED)
+ * \param suffix_index   0-based index into the suffix_band_items rows
+ * \param row             0-based line index
+ * \param buf             output buffer of length img->samples
+ * \return 0 on success, -1 on error or unsupported layout
+ */
+int p_pds_read_band_suffix_row(PPdsImage *img, int suffix_index, int row,
+                                double *buf);
 
 /*!
  * \brief Close a PPdsImage and free all resources.

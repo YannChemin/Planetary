@@ -416,6 +416,123 @@ static void test_vims_style_suffix_and_structure(void)
     printf("PASS: test_vims_style_suffix_and_structure\n");
 }
 
+static void test_omega_style_suffix_narrower_than_vims(void)
+{
+    /* Real MEX OMEGA QUBE products (e.g. ORB0100_0.QUB, confirmed by
+     * exact (FILE_RECORDS-LABEL_RECORDS)*RECORD_BYTES byte-count
+     * arithmetic against a real downloaded file) use band-suffix
+     * backplane rows exactly `samples` items wide -- unlike Cassini
+     * VIMS's real (samples + suffix_sample_items) width (confirmed
+     * against ISIS3's own vims2isis/ReadVimsBIL() source). Without the
+     * RECORD_TYPE=FIXED_LENGTH cross-check, p_pds would assume VIMS's
+     * wider convention and misalign every line after the first by
+     * (suffix_band_items * suffix_item_bytes) bytes -- this reproduces
+     * that exact real-world discrepancy synthetically: 4 samples x 2
+     * bands x 2 lines, 1 sample-suffix item, 2 band-suffix rows. */
+    char tmppath[] = "/tmp/test_p_pds_omega_XXXXXX";
+    int fd = mkstemp(tmppath);
+    assert(fd >= 0);
+    FILE *fp = fdopen(fd, "w+b");
+    assert(fp);
+
+    const char *label_tmpl =
+        "PDS_VERSION_ID = PDS3\r\n"
+        "RECORD_TYPE    = FIXED_LENGTH\r\n"
+        "RECORD_BYTES   = 56\r\n"
+        "FILE_RECORDS   = 2\r\n"
+        "LABEL_RECORDS  = 0\r\n"
+        "OBJECT = QUBE\r\n"
+        "  AXES         = 3\r\n"
+        "  AXIS_NAME    = (SAMPLE,BAND,LINE)\r\n"
+        "  CORE_ITEMS   = (4,2,2)\r\n"
+        "  CORE_ITEM_BYTES = 2\r\n"
+        "  CORE_ITEM_TYPE  = LSB_INTEGER\r\n"
+        "  SUFFIX_ITEMS = (1,2,0)\r\n"
+        "  ^QUBE        = %06ld <BYTES>\r\n"
+        "END_OBJECT = QUBE\r\n"
+        "END\r\n";
+
+    char label_buf[2048];
+    int label_len = snprintf(label_buf, sizeof(label_buf), label_tmpl, 0L);
+    assert(label_len > 0 && (size_t)label_len < sizeof(label_buf));
+    long data_off = label_len;
+    int label_len2 = snprintf(label_buf, sizeof(label_buf), label_tmpl, data_off);
+    assert(label_len2 == label_len);
+
+    fwrite(label_buf, 1, (size_t)label_len, fp);
+
+    /* Per line: 2 bands, each 4 LSB-INT16 core samples + 1-item (4 byte)
+     * sample-suffix; then 2 band-suffix rows, each exactly 4 items (16
+     * bytes) wide -- the real OMEGA convention, narrower than VIMS's
+     * assumed (samples + suffix_sample_items) = 5. */
+    /* +1000 keeps the LSB-encoded low byte of every value out of the
+     * ASCII/whitespace range scan_past_ascii() uses to detect a stale
+     * ^QUBE pointer (e.g. raw value 10 = bytes {0x0A,0x00} in LSB order
+     * -- 0x0A is '\n', indistinguishable from trailing label
+     * whitespace) -- a test-data artifact, not a real layout concern. */
+    int16_t core[2][2][4] = {
+        { {1010,1011,1012,1013}, {1020,1021,1022,1023} },
+        { {1030,1031,1032,1033}, {1040,1041,1042,1043} },
+    };
+    int32_t mirror_dn[2][2][4] = {
+        { {100,110,120,130}, {0,0,0,0} },
+        { {200,210,220,230}, {0,0,0,0} },
+    };
+    uint8_t samp_sfx_filler[4] = {0xAA,0xAA,0xAA,0xAA};
+    for (int line = 0; line < 2; line++) {
+        for (int band = 0; band < 2; band++) {
+            for (int s = 0; s < 4; s++) {
+                int16_t v = core[line][band][s];
+                uint8_t b[2] = { (uint8_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF) };
+                fwrite(b, 1, 2, fp);
+            }
+            fwrite(samp_sfx_filler, 1, 4, fp);
+        }
+        for (int sfx = 0; sfx < 2; sfx++) {
+            for (int s = 0; s < 4; s++) {
+                int32_t v = mirror_dn[line][sfx][s];
+                uint8_t b[4] = { (uint8_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF),
+                                  (uint8_t)((v >> 16) & 0xFF), (uint8_t)((v >> 24) & 0xFF) };
+                fwrite(b, 1, 4, fp);
+            }
+        }
+    }
+    fflush(fp);
+    fclose(fp);
+
+    PPdsImage *img = p_pds_open_image(tmppath);
+    assert(img);
+    assert(img->samples == 4 && img->bands == 2 && img->lines == 2);
+    assert(img->suffix_sample_items == 1 && img->suffix_band_items == 2);
+    assert(img->line_stride_bytes == 56); /* ground truth, not the wider VIMS guess (64) */
+
+    double row_buf[4];
+    static const double expected_core[2][2][4] = {
+        { {1010,1011,1012,1013}, {1020,1021,1022,1023} },
+        { {1030,1031,1032,1033}, {1040,1041,1042,1043} },
+    };
+    for (int line = 0; line < 2; line++) {
+        for (int band = 0; band < 2; band++) {
+            assert(p_pds_read_row(img, band, line, row_buf, 0) == 0);
+            for (int s = 0; s < 4; s++)
+                assert(fabs(row_buf[s] - expected_core[line][band][s]) < 1e-9);
+        }
+    }
+
+    static const double expected_mirror[2][4] = {
+        {100,110,120,130}, {200,210,220,230},
+    };
+    for (int line = 0; line < 2; line++) {
+        assert(p_pds_read_band_suffix_row(img, 0, line, row_buf) == 0);
+        for (int s = 0; s < 4; s++)
+            assert(fabs(row_buf[s] - expected_mirror[line][s]) < 1e-9);
+    }
+
+    p_pds_close(img);
+    remove(tmppath);
+    printf("PASS: test_omega_style_suffix_narrower_than_vims\n");
+}
+
 /* ------------------------------------------------------------------ */
 /* ISIS3 test-data label (detached, no .img needed — label parse only) */
 /* ------------------------------------------------------------------ */
@@ -494,6 +611,7 @@ int main(void)
     test_synthetic_image();
     test_named_object_selection();
     test_vims_style_suffix_and_structure();
+    test_omega_style_suffix_narrower_than_vims();
     test_hirise_label_parse();
     printf("=== ALL PASSED ===\n");
     return 0;

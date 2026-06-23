@@ -1181,6 +1181,50 @@ PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
         }
     }
 
+    /* Cross-check (and, when it disagrees, override) the assumed BIL
+     * per-line stride against the label's own fixed-record byte
+     * accounting -- see the line_stride_bytes comment in p_pds.h. Only
+     * meaningful when there's a real suffix backplane to get wrong. */
+    img->line_stride_bytes = 0;
+    if (img->organization == P_PDS_ORG_BIL &&
+        (img->suffix_sample_items || img->suffix_band_items)) {
+        const char *rt = p_pvl_value(root, "RECORD_TYPE");
+        int ok_fr, ok_rb, ok_lr;
+        int file_records  = p_pvl_value_int(root, "FILE_RECORDS", &ok_fr);
+        int record_bytes  = p_pvl_value_int(root, "RECORD_BYTES", &ok_rb);
+        int label_records = p_pvl_value_int(root, "LABEL_RECORDS", &ok_lr);
+        if (rt && str_ieq(rt, "FIXED_LENGTH") && ok_fr && ok_rb && ok_lr &&
+            img->lines > 0) {
+            long data_bytes = (long)(file_records - label_records) * record_bytes;
+            if (data_bytes > 0 && data_bytes % img->lines == 0) {
+                long assumed_stride =
+                    ((long)img->samples * img->bytes_per_pixel +
+                     (long)img->line_prefix_bytes +
+                     (long)img->suffix_sample_items * img->suffix_item_bytes) *
+                        (long)img->bands +
+                    (long)img->suffix_band_items *
+                        ((long)img->samples + img->suffix_sample_items) *
+                        img->suffix_item_bytes;
+                long real_stride = data_bytes / img->lines;
+                if (real_stride != assumed_stride) {
+                    G_message(_("p_pds: '%s' real per-line byte stride "
+                                "(%ld, from FILE_RECORDS/RECORD_BYTES/"
+                                "LABEL_RECORDS) differs from the assumed "
+                                "(samples + sample-suffix-items) band-suffix "
+                                "width (%ld) -- using the real, label-"
+                                "derived stride (e.g. MEX OMEGA's band-"
+                                "suffix rows are exactly `samples` items "
+                                "wide, unlike Cassini VIMS's)."),
+                              path, real_stride, assumed_stride);
+                }
+                /* Always prefer the label-derived ground truth when
+                 * available, even when it agrees with the assumption --
+                 * one fewer thing for read_band_suffix_row() to assume. */
+                img->line_stride_bytes = real_stride;
+            }
+        }
+    }
+
     /* --- Data file pointer. */
     char *data_path = NULL;
     long  data_off  = 0;
@@ -1341,8 +1385,10 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
         long line_backplane_bytes = (long)img->suffix_band_items *
                                      ((long)ns + img->suffix_sample_items) *
                                      img->suffix_item_bytes;
-        long full_line_stride = band_record_stride * (long)img->bands +
-                                 line_backplane_bytes;
+        long full_line_stride = img->line_stride_bytes > 0
+                                     ? img->line_stride_bytes
+                                     : band_record_stride * (long)img->bands +
+                                           line_backplane_bytes;
         seek_pos = img->data_offset
                    + (long)row  * full_line_stride
                    + (long)band * band_record_stride
@@ -1420,6 +1466,81 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
         G_free(elem);
     }
 
+    return 0;
+}
+
+int p_pds_read_band_suffix_row(PPdsImage *img, int suffix_index, int row,
+                                double *buf)
+{
+    if (!img || !img->_fp || !buf) return -1;
+    if (row < 0 || row >= img->lines) return -1;
+    if (suffix_index < 0 || suffix_index >= img->suffix_band_items) return -1;
+    if (img->organization != P_PDS_ORG_BIL) return -1;
+
+    FILE *fp  = (FILE *)img->_fp;
+    int   bpp = img->bytes_per_pixel;
+    int   ns  = img->samples;
+    int   sfx_bpp = img->suffix_item_bytes;
+    long  pfx = (long)img->line_prefix_bytes;
+
+    long row_bytes      = (long)ns * bpp;
+    long record_stride  = row_bytes + pfx;
+    long samp_sfx_bytes = (long)img->suffix_sample_items * sfx_bpp;
+    long band_record_stride = record_stride + samp_sfx_bytes;
+    long assumed_suffix_row_bytes =
+        ((long)ns + img->suffix_sample_items) * sfx_bpp;
+    long assumed_full_line_stride = band_record_stride * (long)img->bands +
+        (long)img->suffix_band_items * assumed_suffix_row_bytes;
+
+    /* Band-suffix backplane rows are appended once per line, after all
+     * real bands (each padded to band_record_stride, including their own
+     * sample-suffix slot). Real archives disagree on each row's own
+     * width, though: Cassini VIMS pads to (samples + suffix_sample_items)
+     * items (real ISIS3 ReadVimsBIL() source), but MEX OMEGA's real
+     * archived QUBE uses exactly `samples` items per row -- confirmed via
+     * exact byte-count arithmetic, see line_stride_bytes in p_pds.h. When
+     * the label gave us that ground truth, derive the real per-row width
+     * from it instead of assuming; otherwise fall back to the
+     * (samples + suffix_sample_items) assumption. suffix_index selects
+     * which of the suffix_band_items rows (e.g. OMEGA's 7 housekeeping
+     * side-planes, index 0 = scanning mirror position -- OMEGA_HK.TXT). */
+    long full_line_stride = img->line_stride_bytes > 0
+                                 ? img->line_stride_bytes
+                                 : assumed_full_line_stride;
+    long suffix_row_bytes = img->line_stride_bytes > 0
+        ? (full_line_stride - band_record_stride * (long)img->bands) /
+              img->suffix_band_items
+        : assumed_suffix_row_bytes;
+
+    long seek_pos = img->data_offset
+                    + (long)row * full_line_stride
+                    + band_record_stride * (long)img->bands
+                    + pfx
+                    + (long)suffix_index * suffix_row_bytes;
+
+    /* Suffix items are LSB_SIGNED_INTEGER, suffix_item_bytes wide, in
+     * every real archive seen so far (Cassini VIMS, MEX OMEGA) -- their
+     * own SAMPLE_SUFFIX_ITEM_TYPE/BAND_SUFFIX_ITEM_TYPE keyword is not
+     * yet parsed since it has never disagreed with this default. */
+    long suffix_row_width = suffix_row_bytes / sfx_bpp;
+    uint8_t *raw = (uint8_t *)G_malloc((size_t)suffix_row_width * sfx_bpp);
+    if (fseek(fp, seek_pos, SEEK_SET) != 0 ||
+        fread(raw, sfx_bpp, suffix_row_width, fp) != (size_t)suffix_row_width) {
+        G_warning(_("p_pds: read error at row %d, suffix band %d"),
+                   row, suffix_index);
+        G_free(raw);
+        return -1;
+    }
+    int host_is_le = p_pds_is_little_endian();
+    for (int s = 0; s < ns; s++) {
+        uint8_t *p = raw + (size_t)s * sfx_bpp;
+        if (!host_is_le)
+            p_pds_swap_bytes(p, 1, sfx_bpp);
+        int32_t v;
+        memcpy(&v, p, sizeof(v));
+        buf[s] = (double)v;
+    }
+    G_free(raw);
     return 0;
 }
 
