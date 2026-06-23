@@ -475,3 +475,114 @@ Verified against the exact real dates that exposed the bug
 existing shortest-span preference is unaffected when there's no real
 edge risk) -- all 22 of `p.spice.find`'s tests pass, including the
 5 live network ones.
+
+**Known, documented gap, not fixed this session**: MEX's real CK
+(`ATNM_MEASURED_YYMMDD_YYMMDD_VNN.BC`) and SPK
+(`MEX_ROB_YYYYMMDD_YYYYMMDD_NNN.BSP`) filename conventions do not match
+any existing `_file_date_range()` regex in `p.spice.find` (date not at
+filename start for the CK; the SPK uses 8-digit years). Automated kernel
+selection for MEX CK/SPK currently fails/returns `None` -- the OMEGA
+verification below used manually-identified, directly-`curl`'d kernels
+instead. A new `SPACECRAFT["MEX"]` entry was added (id `-41`, body
+`Mars`, `pck=["pck00010.tpc"]`) but `sclk`/`ik`/`fk` were left `None`
+since MEX ships a single un-dated SCLK/IK/FK (no date-range picking
+needed) -- not yet re-synced to the system-wide addon copy.
+
+### MEX OMEGA SWIR-C/SWIR-L camera model added to `p.phocube -c`
+
+Following plan item 3 (this repo's own `calm-spinning-pearl` plan,
+"Cassini ISS" item -- OMEGA was explicitly deferred there as "not
+actionable" since no IAK exists on the ISIS3 AWS mirror, see above).
+Revisited from scratch against the real public NAIF/ESA IK instead of
+an IAK, since OMEGA genuinely has none:
+
+- **A third, structurally different camera shape**: not a pinhole
+  focal-plane map at all (unlike CRISM/ISS), but a real whiskbroom
+  scanning mirror. Per `MEX_OMEGA_V03.TI`'s own "OMEGA Pixels Geometry"
+  section: each pixel's pointing is the "central" pixel vector
+  (boresight, `(0,0,1)` in the detector's own frame) rotated about the
+  detector frame's `+Y` axis by `offset_angle = (dn_position -
+  MIRROR_CENTER_POSITION) * MIRROR_SLOPE` degrees, where `dn_position`
+  is the *real* per-sample scanning-mirror position (DN) -- not
+  synthesized, not assumed constant. `MIRROR_CENTER_POSITION=512`,
+  `MIRROR_SLOPE=0.0092243187` deg/DN, read from the IK under the shared
+  SWIR id (`INS-41420_*`), not the per-channel SWIR-C/SWIR-L id, since
+  one physical mirror serves both InSb arrays.
+- **A genuine pre-existing `libs/p_pds` correctness bug, found as a
+  side effect of this research, not previously known**: real archives
+  disagree on band-suffix ("backplane") sideplane row width. Cassini
+  VIMS pads each row to `(samples + suffix_sample_items)` items
+  (confirmed against ISIS3's own `vims2isis/main.cpp::ReadVimsBIL()`
+  source, found by searching `$HOME/dev/ISIS3` per this repo's global
+  CLAUDE.md instruction); MEX OMEGA's real archived QUBE uses exactly
+  `samples` items per row -- confirmed via exact
+  `(FILE_RECORDS-LABEL_RECORDS)*RECORD_BYTES` byte-count arithmetic
+  against a real downloaded file (`ORB0100_0.QUB`: 39973 records, 512
+  bytes/record, 11 label records, 424 lines -> exactly 48256 bytes/line,
+  vs the VIMS-style-assumed 48284 -- a difference of exactly
+  `suffix_band_items * suffix_item_bytes` = 7*4=28 bytes). This silently
+  affected every line beyond line 0 of every previous OMEGA import.
+  Fixed via a new `PPdsImage.line_stride_bytes` field: when the label
+  provides `FILE_RECORDS`/`RECORD_BYTES`/`LABEL_RECORDS` with
+  `RECORD_TYPE=FIXED_LENGTH`, the real per-line byte stride is derived
+  from those (ground truth) instead of assumed, in both
+  `p_pds_read_row()`'s BIL case and the new
+  `p_pds_read_band_suffix_row()` -- generic and label-driven, not a
+  hardcoded per-mission branch. Added
+  `test_omega_style_suffix_narrower_than_vims` to `libs/p_pds`'s test
+  suite (9/9 passing).
+- **New `p.in.pds3 suffix_band=` option**: `p.phocube`'s camera mode
+  only has access to already-imported GRASS rasters, not the original
+  PDS3 file -- so OMEGA's per-sample mirror-DN housekeeping data
+  (embedded only in the QUBE's own band-suffix sideplane) was not
+  reachable at all without this. `suffix_band=1` (1-based) imports one
+  sideplane as its own raster (raw values, no `OFFSET`/
+  `SCALING_FACTOR`), via the new `p_pds_read_band_suffix_row()` API.
+- **A real architectural workaround, not a hack**: the real FK
+  (`MEX_V16.TF`) centers `MEX_OMEGA_SWIR_C`/`_SWIR_L`'s frame on the
+  `MEX_OMEGA` instrument body (-41400), which has no SPK ephemeris of
+  its own (a fixed-mount instrument id, not a tracked body) --
+  `sincpt`'s `dref` handling needs that center body's state regardless
+  of aberration correction (`"LT"` alone still failed, not just
+  `"LT+S"`'s stellar-aberration term). Since both `MEX_OMEGA_SWIR_C`
+  and `_SWIR_L` are plain fixed-angle TKFRAMEs relative to
+  `MEX_SPACECRAFT` (`_SWIR_L` via `_SWIR_C`), the fix is a one-time,
+  time-independent `p_spice_pxform()` call at camera-model load time to
+  pre-rotate into `MEX_SPACECRAFT` (whose center, -41, has real
+  ephemeris throughout) and pass that as `dref` to `sincpt` instead --
+  exact, not approximate, since TK frames have no light-time dependency.
+- VNIR deliberately deferred: its own per-pixel mirror-DN equivalence
+  for synced-acquisition products (where VNIR's sample count is forced
+  to match SWIR's, per the EAICD) isn't yet verified -- still a real
+  open question, not solved by this session's SWIR work.
+
+**Verified end-to-end against a real MEX OMEGA EDR** (`ORB0100_0.QUB`,
+orbit 100, 2004-02-10T18:07:10, 424 lines x 64 samples x 352 bands; real
+kernels fetched directly from `naif.jpl.nasa.gov/pub/naif/MEX/kernels/`
+-- `naif0012.tls`, `MEX_260522_STEP.TSC`, `MEX_OMEGA_V03.TI`,
+`MEX_V16.TF`, `MARS_IAU2000_V0.TPC`, `pck00010.tpc`,
+`MEX_ROB_040101_041231_003.BSP`, `ATNM_MEASURED_040101_050101_V03.BC`;
+plus real NAIF generic kernels `de432s.bsp` and `mar099.bsp`, needed
+because the real reconstructed-orbit SPK only gives MEX relative to
+MARS (499), not all the way to the solar system barycenter that
+`sincpt`/`ilumin` need). Using the cube's own real mid-scene epoch
+(`2004-02-10T18:08:35.0475`) and real per-line cadence
+(`line_rate=0.401002358`, derived from `(STOP_TIME-START_TIME)/LINES`):
+100% pixel hit rate (0 NULL), and computed lat/lon bounds match the
+label's own ground truth (`MAXIMUM_LATITUDE=-70.253`,
+`MINIMUM_LATITUDE=-78.167`, `EASTERNMOST_LONGITUDE=303.019`,
+`WESTERNMOST_LONGITUDE=291.415`) to within ~0.05 deg:
+
+| | computed | label |
+|---|---|---|
+| max lat | -70.253 | -70.253 |
+| min lat | -78.135 | -78.167 |
+| east lon | 302.969 | 303.019 |
+| west lon | 291.477 | 291.415 |
+
+The cross-track rotation sign convention (`sin(theta)` for the `+X`
+component) matched the real ground truth on the first try -- no
+empirical sign-flipping was needed. Added
+`test_camera_mode_real_omega_swir_c_geometry` to `p.phocube`'s test
+suite (passing, ~5s); real kernels + cube cached at
+`~/RSDATA/Mars/spice_omega/` and `~/RSDATA/Mars/ORB0100_0.QUB`.

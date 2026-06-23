@@ -85,6 +85,30 @@ for masking any sensor-specific sentinel the label does not declare
 `r.mapcalc` masking step in `p.in.archive`'s CRISM examples and the
 Mars-mineralogy chapter pipeline referenced there).
 
+### QUBE band-suffix ("backplane") sideplanes
+
+Some real PDS3 QUBE products (e.g. Cassini VIMS, Mars Express OMEGA)
+append extra "band-suffix" rows once per line, after all real bands --
+per-line housekeeping/calibration sideplanes, not spectral data. For
+example, MEX OMEGA's band-suffix index 1 holds the real scanning mirror
+position (DN) at each sample within that line's scan -- the per-pixel
+value `p.phocube`'s OMEGA camera model needs to reconstruct cross-track
+pointing (see `OMEGA_HK.TXT` and the OMEGA IK's "OMEGA Pixels Geometry"
+section). Use **suffix_band=** (1-based) to import one such sideplane
+as its own raster instead of the real image bands; output is a single
+raster named **output=**. Values are raw (no `OFFSET`/`SCALING_FACTOR`
+applied, unlike the regular band import path -- suffix items are
+housekeeping integers, not calibrated DN).
+
+Real archives disagree on how wide each band-suffix row is: Cassini
+VIMS pads each row to `(samples + suffix_sample_items)` items (per
+ISIS3's own `vims2isis` source), but MEX OMEGA's real archived QUBE
+uses exactly `samples` items per row. When the label provides
+`FILE_RECORDS`/`RECORD_BYTES`/`LABEL_RECORDS` with
+`RECORD_TYPE=FIXED_LENGTH`, *p.in.pds3* derives the true per-line byte
+stride from those (ground truth) instead of assuming the VIMS
+convention, and emits a `G_message` when the two disagree.
+
 ## EXAMPLES
 
 Import a MOC-WA Mars image (attached label, UINT8):
@@ -120,6 +144,14 @@ describes the RDN radiance cube also describes these):
 ```sh
 p.in.pds3 -g object=LOC_IMAGE input=M3G20081118T222604_V03_L1B.LBL output=m3_loc
 p.in.pds3 -g object=OBS_IMAGE input=M3G20081118T222604_V03_L1B.LBL output=m3_obs
+```
+
+Import the real scanning mirror position sideplane from a MEX OMEGA
+QUBE (needed by `p.phocube -c instrument=OMEGA_SWIR_C/OMEGA_SWIR_L`):
+
+```sh
+p.in.pds3 input=ORB0100_0.QUB output=omega_mirror_dn suffix_band=1
+r.univar omega_mirror_dn
 ```
 
 ## REFERENCES

@@ -175,6 +175,15 @@ SPACECRAFT = {
         "fk":      None,
         "pck":     ["pck00010.tpc"],
     },
+    "MEX": {
+        "id":      -41,
+        "dir":     "MEX",
+        "body":    "Mars",
+        "sclk":    None,  # single "STEP" SCLK, latest in sclk/, no date-range to pick
+        "ik":      None,
+        "fk":      None,
+        "pck":     ["pck00010.tpc"],
+    },
 }
 
 # ---------------------------------------------------------------------------

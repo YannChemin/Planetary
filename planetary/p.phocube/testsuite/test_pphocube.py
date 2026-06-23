@@ -122,6 +122,35 @@ def _find_iss_test_kernels():
     return paths
 
 
+def _find_omega_test_kernels():
+    """Locate the real MEX OMEGA kernel set + raw QUBE on this machine,
+    used by the -c (camera mode) OMEGA test below. Not bundled (mar099.bsp
+    alone is ~1.2GB) -- skips on hosts without a local copy. See
+    RSDATA/Mars/spice_omega/ and RSDATA/Mars/ORB0100_0.QUB on the dev
+    machine this was verified on. Unlike CRISM/ISS, no IAK exists for
+    OMEGA on the ISIS3 AWS mirror -- MIRROR_CENTER_POSITION/MIRROR_SLOPE
+    come straight from the real public NAIF/ESA IK (MEX_OMEGA_V03.TI).
+    de432s.bsp + mar099.bsp are real NAIF generic planetary ephemeris
+    kernels, needed because the real reconstructed-orbit SPK
+    (MEX_ROB_*.BSP) only gives MEX relative to MARS (499), not all the
+    way to the solar system barycenter."""
+    d = os.path.expanduser("~/RSDATA/Mars/spice_omega")
+    cube = os.path.expanduser("~/RSDATA/Mars/ORB0100_0.QUB")
+    needed = {
+        "lsk": "naif0012.tls", "sclk": "MEX_260522_STEP.TSC",
+        "ik": "MEX_OMEGA_V03.TI", "fk": "MEX_V16.TF",
+        "pck1": "MARS_IAU2000_V0.TPC", "pck2": "pck00010.tpc",
+        "spk1": "MEX_ROB_040101_041231_003.BSP", "spk2": "de432s.bsp",
+        "spk3": "mar099.bsp",
+        "ck": "ATNM_MEASURED_040101_050101_V03.BC",
+    }
+    paths = {k: os.path.join(d, v) for k, v in needed.items()}
+    if not os.path.exists(cube) or not all(os.path.exists(p) for p in paths.values()):
+        return None
+    paths["cube"] = cube
+    return paths
+
+
 class TestPphocube(TestCase):
     """Test p.phocube module.
 
@@ -548,6 +577,67 @@ class TestPphocube(TestCase):
         finally:
             self.runModule("g.remove", flags="f", type="raster",
                            pattern=f"{mapname},{out_prefix}_*", quiet=True)
+
+    def test_camera_mode_real_omega_swir_c_geometry(self):
+        """Real-kernel correctness check for -c OMEGA_SWIR_C: a real MEX
+        OMEGA EDR (orbit 100, 2004-02-10, ORB0100_0.QUB) confirms the
+        whiskbroom scanning-mirror model (boresight rotated about the
+        detector frame's +Y axis by (mirror_dn - MIRROR_CENTER_POSITION)
+        * MIRROR_SLOPE degrees, read straight from the real public IK --
+        no IAK exists for OMEGA) against this cube's own real, known
+        ground-truth lat/lon bounds (label: MAXIMUM_LATITUDE=-70.253,
+        MINIMUM_LATITUDE=-78.167, EASTERNMOST_LONGITUDE=303.019,
+        WESTERNMOST_LONGITUDE=291.415). Confirms a 100% pixel hit rate
+        and that computed bounds land within ~0.1 deg of the label's,
+        not just crash-free output. Also exercises p.in.pds3's
+        suffix_band= option (the per-sample mirror-DN housekeeping
+        sideplane this camera model depends on)."""
+        kernels = _find_omega_test_kernels()
+        if not kernels:
+            self.skipTest("no local MEX OMEGA test kernel set found "
+                          "(see _find_omega_test_kernels)")
+
+        band_prefix = "pphocube_test_omega_swirc"
+        mirror_map = "pphocube_test_omega_mirror_dn"
+        out_prefix = "pphocube_test_omega_out"
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        # Imports all 352 bands (VIS+SWIR-L+SWIR-C); only band 1
+        # (SWIR-C channel 0) is needed for this geometry check.
+        self.runModule("p.in.pds3", input=kernels["cube"], output=band_prefix,
+                       overwrite=True, quiet=True)
+        self.runModule("p.in.pds3", input=kernels["cube"], output=mirror_map,
+                       suffix_band=1, overwrite=True, quiet=True)
+        self.runModule("g.region", raster=f"{band_prefix}.1")
+        self.runModule(
+            "p.spiceinit", map=f"{band_prefix}.1", target="MARS", observer="-41",
+            # Mid-scene epoch + real per-line cadence, both derived from
+            # this cube's own real START_TIME/STOP_TIME/LINES (label:
+            # 2004-02-10T18:07:10.035 .. 18:10:00.060, 424 lines).
+            time="2004-02-10T18:08:35.0475", line_rate="0.401002358",
+            lsk=kernels["lsk"], sclk=kernels["sclk"], ik=kernels["ik"],
+            fk=kernels["fk"], pck=f"{kernels['pck1']},{kernels['pck2']}",
+            spk=f"{kernels['spk1']},{kernels['spk2']},{kernels['spk3']}",
+            ck=kernels["ck"])
+        try:
+            module = SimpleModule(
+                "p.phocube", flags="ctn", input=f"{band_prefix}.1",
+                output=out_prefix, instrument="OMEGA_SWIR_C",
+                mirror_dn=mirror_map)
+            self.assertModule(module)
+
+            lat = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lat")
+            lon = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lon")
+            self.assertEqual(int(lat["null_cells"]), 0,
+                             "expected 100% pixel hit rate (0 NULL)")
+            self.assertAlmostEqual(float(lat["max"]), -70.253, delta=0.1)
+            self.assertAlmostEqual(float(lat["min"]), -78.167, delta=0.1)
+            # lon is computed in [-180,180]; the label's bounds are 0-360E.
+            self.assertAlmostEqual(float(lon["max"]) + 360.0, 303.019, delta=0.1)
+            self.assertAlmostEqual(float(lon["min"]) + 360.0, 291.415, delta=0.1)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{band_prefix}.*,{mirror_map},{out_prefix}_*",
+                           quiet=True)
 
 
 if __name__ == "__main__":

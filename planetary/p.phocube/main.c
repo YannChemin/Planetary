@@ -192,6 +192,35 @@ static void uppercase_copy(char *dst, size_t n, const char *src)
 /* CASSINI_ISS_NAC_USGS, a 180-degree fix for a real, documented gap in */
 /* NAIF's own cas_v*.tf), not the bare NAIF frame -- resolvable once the */
 /* IAK is furnsh'd via ik=, same mechanism as its other keywords.       */
+/*                                                                      */
+/* MEX OMEGA SWIR-C/SWIR-L are a third, genuinely different shape: not  */
+/* a pinhole focal-plane map at all, but a whiskbroom scanning mirror.  */
+/* No IAK exists for OMEGA (none on the ISIS3 AWS mirror) -- the model  */
+/* comes entirely from the real public NAIF/ESA IK (MEX_OMEGA_V03.TI's  */
+/* "OMEGA Pixels Geometry" section): each pixel's pointing is the       */
+/* "central" pixel vector (boresight, (0,0,1) in the detector's own     */
+/* frame) rotated about the detector frame's +Y axis by                 */
+/* offset_angle = (dn_position - MIRROR_CENTER_POSITION) * MIRROR_SLOPE */
+/* degrees, where dn_position is the REAL per-sample scanning-mirror     */
+/* position (DN) recorded in the cube's own QUBE band-suffix sideplane   */
+/* (see p.in.pds3's suffix_band= and OMEGA_HK.TXT) -- mirror_dn= here   */
+/* points at that already-imported raster (one row per line, one value */
+/* per sample within it). MIRROR_CENTER_POSITION/MIRROR_SLOPE are read   */
+/* from the IK under the shared SWIR id (-41420), not the per-channel   */
+/* SWIR-C/SWIR-L id, since both channels share one physical mirror.     */
+/* VNIR is deferred (see TODO.md): its own per-pixel mirror-DN           */
+/* equivalence for synced-acquisition products isn't yet verified.       */
+/*                                                                      */
+/* The real FK (MEX_V16.TF) centers MEX_OMEGA_SWIR_C/_SWIR_L's frame on */
+/* the MEX_OMEGA instrument body (-41400), which has no SPK ephemeris   */
+/* of its own (a fixed-mount instrument id, not a tracked body) -- */
+/* sincpt's dref handling needs that center body's state regardless of  */
+/* aberration correction. Since both are plain fixed-angle TKFRAMEs     */
+/* relative to MEX_SPACECRAFT (SWIR-L via SWIR-C), the fix is to        */
+/* pre-rotate dvec into MEX_SPACECRAFT ourselves (a one-time, time-     */
+/* independent pxform -- TK frames have no light-time dependency) and   */
+/* pass dref="MEX_SPACECRAFT" to sincpt instead, since -41 (the          */
+/* spacecraft) has real ephemeris throughout. */
 /* ------------------------------------------------------------------ */
 typedef struct {
     int    naif_id;
@@ -205,6 +234,11 @@ typedef struct {
                           * 0: line is time, not focal-plane geometry
                           * (CRISM) -- per-line pointing instead comes
                           * from the gimbal CK; dy must stay 0. */
+    int    is_omega;       /* 1: OMEGA whiskbroom scanning-mirror model
+                              instead of a pinhole focal-plane map. */
+    double mirror_center;  /* INS-41420_MIRROR_CENTER_POSITION (DN)    */
+    double mirror_slope;   /* INS-41420_MIRROR_SLOPE (deg/DN)          */
+    double omega_rot[3][3]; /* fixed rotation: detector frame -> MEX_SPACECRAFT */
 } PinholeCameraModel;
 
 static void load_pinhole_camera_model(const char *instrument,
@@ -217,7 +251,17 @@ static void load_pinhole_camera_model(const char *instrument,
 
     int is_iss = 0;
 
-    if (strcmp(instrument, "CRISM_VNIR") == 0) {
+    if (strcmp(instrument, "OMEGA_SWIR_C") == 0) {
+        cam->naif_id = -41421;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_SWIR_C");
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "OMEGA_SWIR_L") == 0) {
+        cam->naif_id = -41422;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_SWIR_L");
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "CRISM_VNIR") == 0) {
         cam->naif_id = -74017;
         snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_VNIR");
     }
@@ -239,11 +283,39 @@ static void load_pinhole_camera_model(const char *instrument,
     }
     else
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
-                        "(supports CRISM_VNIR, CRISM_IR, ISS_NAC, ISS_WAC)."),
+                        "(supports CRISM_VNIR, CRISM_IR, ISS_NAC, ISS_WAC, "
+                        "OMEGA_SWIR_C, OMEGA_SWIR_L)."),
                        instrument);
 
     char varname[80];
     int n;
+
+    if (cam->is_omega) {
+        /* Mirror parameters live under the shared SWIR id (-41420), not
+         * the per-channel SWIR-C/SWIR-L id -- one physical mirror serves
+         * both InSb arrays. */
+        if (p_spice_gdpool_d("INS-41420_MIRROR_CENTER_POSITION", 0, 1, &n,
+                              &cam->mirror_center) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read "
+                            "INS-41420_MIRROR_CENTER_POSITION from the "
+                            "loaded IK (MEX_OMEGA_V03.TI)."));
+        if (p_spice_gdpool_d("INS-41420_MIRROR_SLOPE", 0, 1, &n,
+                              &cam->mirror_slope) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read "
+                            "INS-41420_MIRROR_SLOPE from the loaded IK "
+                            "(MEX_OMEGA_V03.TI)."));
+
+        /* Pre-rotate into MEX_SPACECRAFT (see the comment block above
+         * this struct) -- a fixed TKFRAME chain, so et is irrelevant. */
+        if (p_spice_pxform(cam->frame, "MEX_SPACECRAFT", 0.0, cam->omega_rot) < 0)
+            G_fatal_error(_("Camera mode (-c): pxform('%s' -> 'MEX_SPACECRAFT') "
+                            "failed -- is the real MEX frame kernel "
+                            "(MEX_V16.TF) attached via p.spiceinit's fk=?"),
+                           cam->frame);
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_SPACECRAFT");
+        return;
+    }
+
     const char *iak_hint = is_iss
         ? "the IssNAAddendum/IssWAAddendum instrument addendum kernel"
         : "the CRISM instrument addendum kernel (crismAddendum001.ti)";
@@ -349,7 +421,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_target, *opt_a, *opt_b, *opt_c;
     struct Option  *opt_sun_x, *opt_sun_y, *opt_sun_z;
     struct Option  *opt_obs_x, *opt_obs_y, *opt_obs_z;
-    struct Option  *opt_instrument, *opt_filter1, *opt_filter2;
+    struct Option  *opt_instrument, *opt_filter1, *opt_filter2, *opt_mirror_dn;
     struct Flag    *flag_inc, *flag_emi, *flag_pha, *flag_lat;
     struct Flag    *flag_lon, *flag_rad, *flag_res, *flag_all;
     struct Flag    *flag_spice, *flag_camera;
@@ -488,7 +560,8 @@ int main(int argc, char *argv[])
     opt_instrument->key         = "instrument";
     opt_instrument->type        = TYPE_STRING;
     opt_instrument->required    = NO;
-    opt_instrument->options     = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC";
+    opt_instrument->options     = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC,"
+                                   "OMEGA_SWIR_C,OMEGA_SWIR_L";
     opt_instrument->description = _("Instrument camera model to use with -c");
 
     opt_filter1 = G_define_option();
@@ -507,6 +580,17 @@ int main(int argc, char *argv[])
     opt_filter2->required    = NO;
     opt_filter2->description = _("ISS_NAC/ISS_WAC: second filter wheel position "
                                   "(e.g. CL2)");
+
+    opt_mirror_dn = G_define_standard_option(G_OPT_R_INPUT);
+    opt_mirror_dn->key         = "mirror_dn";
+    opt_mirror_dn->required    = NO;
+    opt_mirror_dn->label       = _("OMEGA_SWIR_C/OMEGA_SWIR_L: scanning mirror "
+                                    "position raster");
+    opt_mirror_dn->description = _("Per-sample scanning mirror position (DN), "
+                                    "one value per sample/line -- import via "
+                                    "'p.in.pds3 suffix_band=1' on the same QUBE "
+                                    "(see OMEGA_HK.TXT). Required for "
+                                    "OMEGA_SWIR_C/OMEGA_SWIR_L.");
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -588,7 +672,15 @@ int main(int argc, char *argv[])
     }
     if (camera_mode && !opt_instrument->answer)
         G_fatal_error(_("-c requires instrument= (CRISM_VNIR, CRISM_IR, "
-                        "ISS_NAC, or ISS_WAC)."));
+                        "ISS_NAC, ISS_WAC, OMEGA_SWIR_C, or OMEGA_SWIR_L)."));
+
+    int is_omega_instrument = camera_mode && opt_instrument->answer &&
+        (strcmp(opt_instrument->answer, "OMEGA_SWIR_C") == 0 ||
+         strcmp(opt_instrument->answer, "OMEGA_SWIR_L") == 0);
+    if (is_omega_instrument && !opt_mirror_dn->answer)
+        G_fatal_error(_("instrument=%s requires mirror_dn= (the per-sample "
+                        "scanning mirror position raster, imported via "
+                        "'p.in.pds3 suffix_band=1')."), opt_instrument->answer);
 
     /* Projection handling for -s: a real geographic/projected CRS is
      * required (see NOTES) -- an un-georeferenced pixel/line grid
@@ -692,11 +784,30 @@ int main(int argc, char *argv[])
 
         load_pinhole_camera_model(opt_instrument->answer, opt_filter1->answer,
                                    opt_filter2->answer, input, &cam);
-        G_message(_("Camera mode: instrument=%s frame=%s focal_length=%.3f mm "
-                    "pixel_pitch=%.3f mm boresight=(%.1f,%.1f) k1=%g"),
-                   opt_instrument->answer, cam.frame, cam.focal_length,
-                   cam.pixel_pitch, cam.boresight_sample, cam.boresight_line,
-                   cam.k1);
+        if (cam.is_omega)
+            G_message(_("Camera mode: instrument=%s frame=%s "
+                        "mirror_center=%.3f DN mirror_slope=%.7f deg/DN"),
+                       opt_instrument->answer, cam.frame,
+                       cam.mirror_center, cam.mirror_slope);
+        else
+            G_message(_("Camera mode: instrument=%s frame=%s focal_length=%.3f mm "
+                        "pixel_pitch=%.3f mm boresight=(%.1f,%.1f) k1=%g"),
+                       opt_instrument->answer, cam.frame, cam.focal_length,
+                       cam.pixel_pitch, cam.boresight_sample, cam.boresight_line,
+                       cam.k1);
+    }
+
+    /* OMEGA: open the per-sample mirror-position raster (one row per
+     * input line, same column count as the input cube). */
+    int mirror_dn_fd = -1;
+    DCELL *mirror_dn_row = NULL;
+    if (camera_mode && cam.is_omega) {
+        const char *mirror_dn_mapset = G_find_raster(opt_mirror_dn->answer, "");
+        if (!mirror_dn_mapset)
+            G_fatal_error(_("Raster map <%s> (mirror_dn=) not found"),
+                          opt_mirror_dn->answer);
+        mirror_dn_fd = Rast_open_old(opt_mirror_dn->answer, mirror_dn_mapset);
+        mirror_dn_row = Rast_allocate_d_buf();
     }
 
     /* ---------------------------------------------------------------- */
@@ -879,14 +990,40 @@ int main(int argc, char *argv[])
                 dy = (line_1based - cam.boresight_line) * cam.pixel_pitch;
             }
 
-            for (int col = 0; col < ncols; col++) {
-                double sample_1based = col + 1.0;
-                double dx = (sample_1based - cam.boresight_sample) * cam.pixel_pitch;
+            if (cam.is_omega)
+                Rast_get_d_row(mirror_dn_fd, mirror_dn_row, row);
 
-                double r2 = dx * dx + dy * dy;
-                double ux = dx * (1.0 + cam.k1 * r2);
-                double uy = dy * (1.0 + cam.k1 * r2);
-                double dvec[3] = { ux, uy, cam.focal_length };
+            for (int col = 0; col < ncols; col++) {
+                double dvec[3];
+
+                if (cam.is_omega) {
+                    /* OMEGA whiskbroom scanning mirror: the boresight
+                     * (0,0,1) rotated about the detector frame's +Y axis
+                     * by offset_angle = (dn - mirror_center)*mirror_slope
+                     * degrees (MEX_OMEGA_V03.TI's "OMEGA Pixels Geometry"
+                     * section). Rotation about +Y: x'=sin(theta),
+                     * y'=0, z'=cos(theta) for the unit vector (0,0,1). */
+                    double dn = mirror_dn_row[col];
+                    double offset_deg = (dn - cam.mirror_center) * cam.mirror_slope;
+                    double theta = offset_deg * DEG2RAD;
+                    double dvec_det[3] = { sin(theta), 0.0, cos(theta) };
+                    /* cam.frame is already MEX_SPACECRAFT (see
+                     * load_pinhole_camera_model) -- rotate out of the
+                     * detector frame into it here. */
+                    for (int i = 0; i < 3; i++)
+                        dvec[i] = cam.omega_rot[i][0] * dvec_det[0] +
+                                  cam.omega_rot[i][1] * dvec_det[1] +
+                                  cam.omega_rot[i][2] * dvec_det[2];
+                }
+                else {
+                    double sample_1based = col + 1.0;
+                    double dx = (sample_1based - cam.boresight_sample) * cam.pixel_pitch;
+
+                    double r2 = dx * dx + dy * dy;
+                    double ux = dx * (1.0 + cam.k1 * r2);
+                    double uy = dy * (1.0 + cam.k1 * r2);
+                    dvec[0] = ux; dvec[1] = uy; dvec[2] = cam.focal_length;
+                }
 
                 double pt[3], srfvec[3], trgepc;
                 int hit = p_spice_sincpt(camera_method, target_upper, et_row,
@@ -1018,6 +1155,11 @@ int main(int argc, char *argv[])
                    spice_failed_pixels, nrows * ncols);
     if (spice_mode || camera_mode)
         p_spice_clear();
+
+    if (mirror_dn_fd >= 0) {
+        Rast_close(mirror_dn_fd);
+        G_free(mirror_dn_row);
+    }
 
     /* ---------------------------------------------------------------- */
     /* Close and write history                                           */

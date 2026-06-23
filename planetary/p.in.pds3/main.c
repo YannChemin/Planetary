@@ -36,12 +36,14 @@
 static void write_band(PPdsImage *img, int band,
                         const char *mapname, int null_special,
                         const char *title);
+static void write_suffix_band(PPdsImage *img, int suffix_index,
+                               const char *mapname, const char *title);
 
 /* ================================================================== */
 int main(int argc, char *argv[])
 {
     struct GModule *module;
-    struct Option  *opt_input, *opt_output, *opt_object;
+    struct Option  *opt_input, *opt_output, *opt_object, *opt_suffix_band;
     struct Flag    *flag_group, *flag_null;
 
 
@@ -80,6 +82,20 @@ int main(int argc, char *argv[])
                                  "OBS_IMAGE, alongside the default RDN_IMAGE). "
                                  "Default: the first IMAGE/QUBE/SPECTRAL_QUBE "
                                  "(or *_IMAGE/*_QUBE) object found.");
+
+    opt_suffix_band = G_define_option();
+    opt_suffix_band->key         = "suffix_band";
+    opt_suffix_band->type        = TYPE_INTEGER;
+    opt_suffix_band->required    = NO;
+    opt_suffix_band->description = _("Import one QUBE band-suffix ('backplane') "
+                                      "sideplane as its own raster instead of "
+                                      "the real image bands -- per-line "
+                                      "housekeeping/calibration data, not "
+                                      "spectral data (e.g. MEX OMEGA's index 1 "
+                                      "is the real scanning mirror position "
+                                      "needed by p.phocube's OMEGA camera "
+                                      "model; see OMEGA_HK.TXT). 1-based; "
+                                      "output is a single raster named output=.");
 
     flag_group = G_define_flag();
     flag_group->key         = 'g';
@@ -140,6 +156,29 @@ int main(int argc, char *argv[])
         G_warning(_("Current region (%d x %d) does not match PDS image "
                     "(%d x %d). Import will be clipped/padded to region."),
                    region.rows, region.cols, nlines, nsamples);
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* suffix_band=: import one band-suffix sideplane instead, then exit  */
+    /* ---------------------------------------------------------------- */
+    if (opt_suffix_band->answer) {
+        int sfx_idx = atoi(opt_suffix_band->answer) - 1;
+        if (img->suffix_band_items <= 0)
+            G_fatal_error(_("'%s' has no QUBE band-suffix sideplanes "
+                            "(SUFFIX_ITEMS band count is 0)"), input);
+        if (sfx_idx < 0 || sfx_idx >= img->suffix_band_items)
+            G_fatal_error(_("suffix_band=%s out of range: '%s' has %d "
+                            "band-suffix sideplane(s) (1-%d)"),
+                          opt_suffix_band->answer, input,
+                          img->suffix_band_items, img->suffix_band_items);
+        char title[512];
+        snprintf(title, sizeof(title), "PDS3 %s band-suffix sideplane %d/%d",
+                 outbase, sfx_idx + 1, img->suffix_band_items);
+        G_message(_("  Writing band-suffix sideplane %d/%d → %s"),
+                   sfx_idx + 1, img->suffix_band_items, outbase);
+        write_suffix_band(img, sfx_idx, outbase, title);
+        p_pds_close(img);
+        exit(EXIT_SUCCESS);
     }
 
     /* ---------------------------------------------------------------- */
@@ -304,6 +343,63 @@ static void write_band(PPdsImage *img, int band,
     G_free(out_row);
 
     /* Write map title and history. */
+    if (title && *title) {
+        struct Categories cats;
+        Rast_init_cats(title, &cats);
+        Rast_write_cats(mapname, &cats);
+        Rast_free_cats(&cats);
+    }
+
+    struct History hist;
+    Rast_short_history(mapname, "raster", &hist);
+    Rast_command_history(&hist);
+    Rast_write_history(mapname, &hist);
+}
+
+/* ================================================================== */
+/* write_suffix_band: read one QUBE band-suffix sideplane row-by-row, */
+/* write it as a GRASS DCELL raster (raw housekeeping integers --     */
+/* no OFFSET/SCALING_FACTOR, no ISIS special-pixel conversion)        */
+/* ================================================================== */
+static void write_suffix_band(PPdsImage *img, int suffix_index,
+                               const char *mapname, const char *title)
+{
+    int nrows    = img->lines;
+    int ncols    = img->samples;
+    int out_rows = Rast_window_rows();
+    int out_cols = Rast_window_cols();
+
+    int outfd = Rast_open_new(mapname, DCELL_TYPE);
+
+    double  *pds_row = (double *)G_malloc((size_t)ncols * sizeof(double));
+    DCELL   *out_row = Rast_allocate_d_buf();
+
+    for (int row = 0; row < out_rows; row++) {
+        G_percent(row, out_rows, 2);
+
+        if (row < nrows) {
+            if (p_pds_read_band_suffix_row(img, suffix_index, row, pds_row) != 0) {
+                Rast_set_d_null_value(out_row, out_cols);
+            } else {
+                for (int col = 0; col < out_cols; col++) {
+                    if (col < ncols)
+                        out_row[col] = (DCELL)pds_row[col];
+                    else
+                        Rast_set_d_null_value(&out_row[col], 1);
+                }
+            }
+        } else {
+            Rast_set_d_null_value(out_row, out_cols);
+        }
+
+        Rast_put_d_row(outfd, out_row);
+    }
+    G_percent(1, 1, 2);
+
+    Rast_close(outfd);
+    G_free(pds_row);
+    G_free(out_row);
+
     if (title && *title) {
         struct Categories cats;
         Rast_init_cats(title, &cats);

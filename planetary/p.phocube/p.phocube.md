@@ -42,15 +42,15 @@ Three operating modes:
    (`PROJECTION_XY`) — see NOTES. If `line_rate=` was also attached via
    *p.spiceinit*, each row gets its own ephemeris time instead of one
    constant epoch for the whole scene (see "Per-line timing" below).
-3. **Camera mode (`-c`, v1: CRISM only)**: for raw, un-projected
-   pushbroom cubes where `-s` cannot be used at all (no known per-pixel
-   (lon, lat) up front). Requires `instrument=` (`CRISM_VNIR` or
-   `CRISM_IR`). Builds a real per-pixel boresight ray from the
-   instrument's camera model (read from the IK attached via
-   *p.spiceinit*) and intersects it with the target surface via
-   `p_spice_sincpt` instead of assuming a known surface point.
-   **Not yet verified correct against real data — see NOTES. Do not
-   trust its output quantitatively yet.**
+3. **Camera mode (`-c`)**: for raw, un-projected pushbroom/framing/
+   whiskbroom cubes where `-s` cannot be used at all (no known per-pixel
+   (lon, lat) up front). Requires `instrument=` (`CRISM_VNIR`,
+   `CRISM_IR`, `ISS_NAC`, `ISS_WAC`, `OMEGA_SWIR_C`, or `OMEGA_SWIR_L`).
+   Builds a real per-pixel boresight ray from the instrument's camera
+   model (read from the IK/IAK attached via *p.spiceinit*) and
+   intersects it with the target surface via `p_spice_sincpt` instead of
+   assuming a known surface point. Verified correct against real data
+   for all six instruments — see NOTES.
 
 ## NOTES
 
@@ -239,19 +239,60 @@ downloading:
   -180..180 deg longitude coverage and latitudes from -89.6 to +67.9 deg,
   confirming the whole-disk geometry, not just a crash-free run.
 
+#### MEX OMEGA SWIR-C/SWIR-L: a whiskbroom scanning mirror, no IAK needed
+
+`instrument=OMEGA_SWIR_C`/`OMEGA_SWIR_L` add a third, structurally
+different camera shape again: not a pinhole focal-plane map at all, but
+a real scanning-mirror whiskbroom. Unlike CRISM/ISS, **no IAK exists for
+OMEGA** (none on the ISIS3 AWS mirror) -- the whole model comes from the
+real public NAIF/ESA IK (`MEX_OMEGA_V03.TI`'s "OMEGA Pixels Geometry"
+section): each pixel's pointing is the "central" pixel vector
+(boresight, `(0,0,1)` in the detector's own frame) rotated about the
+detector frame's `+Y` axis by
+`offset_angle = (dn_position - MIRROR_CENTER_POSITION) * MIRROR_SLOPE`
+degrees, where `dn_position` is the *real* per-sample scanning-mirror
+position (DN) recorded in the cube's own QUBE band-suffix sideplane --
+not in the regular image bands, so it must be imported separately via
+the new `p.in.pds3 suffix_band=1` option (see that module's docs) and
+passed to `-c` as `mirror_dn=`. `MIRROR_CENTER_POSITION`/`MIRROR_SLOPE`
+are read from the IK under the shared SWIR id (`INS-41420_*`), not the
+per-channel SWIR-C/SWIR-L id, since both InSb arrays share one physical
+mirror.
+
+The real FK (`MEX_V16.TF`) centers `MEX_OMEGA_SWIR_C`/`_SWIR_L`'s frame
+on the `MEX_OMEGA` instrument body (-41400), which has no SPK ephemeris
+of its own (a fixed-mount instrument id, not a tracked body) -- `p.phocube`
+works around this by pre-rotating the ray into `MEX_SPACECRAFT` itself
+(a one-time, time-independent `pxform`, since both are plain fixed-angle
+TKFRAMEs) before calling `sincpt`, since the spacecraft body (-41) does
+have real ephemeris throughout.
+
+VNIR is **not yet supported**: its own per-pixel mirror-DN equivalence
+for synced-acquisition products (where VNIR's sample count is forced to
+match SWIR's, per the EAICD) isn't yet verified -- see `TODO.md`.
+
+Real-data result, verified against a real MEX OMEGA EDR (orbit 100,
+2004-02-10, `ORB0100_0.QUB`) and its own label's known ground-truth
+bounds: 100% pixel hit rate, computed lat/lon bounds
+(-78.135..-70.253 deg lat, 291.477..302.969 deg E lon) match the
+label's own `MINIMUM_LATITUDE`/`MAXIMUM_LATITUDE`/`WESTERNMOST_
+LONGITUDE`/`EASTERNMOST_LONGITUDE` (-78.167/-70.253/291.415/303.019) to
+within ~0.05 deg -- not just crash-free output.
+
 ### Not implemented (out of scope for this version)
 
 See the repo's top-level `TODO.md` for full context. `-c` supports
-CRISM (VNIR and IR detectors) and Cassini ISS (NAC and WAC); any other
-`instrument=` value is a `G_fatal_error`, not a guess -- other
-instruments need their own per-instrument camera-model formula (the
-pinhole focal-plane convention used here is not necessarily how every
-instrument's optics work, e.g. VIMS's whiskbroom scan mirrors -- VIMS's
-own IAK exists but only fixes frame-ID housekeeping, no boresight/focal-
-length, and MEX/OMEGA has no IAK on the mirror at all; both still need
-from-scratch research, not this pinhole convention). Real (non-ellipsoid) DSK
-shape models are supported in `-c` the same way as `-s` (reuses
-`camera_method`, `"DSK/Unprioritized"` when a DSK is attached).
+CRISM (VNIR and IR detectors), Cassini ISS (NAC and WAC), and MEX OMEGA
+(SWIR-C and SWIR-L); any other `instrument=` value is a `G_fatal_error`,
+not a guess -- other instruments need their own per-instrument camera-
+model formula (the pinhole focal-plane convention used for CRISM/ISS is
+not necessarily how every instrument's optics work, and OMEGA's own
+whiskbroom formula doesn't generalize either). MEX OMEGA's VNIR detector
+and Cassini VIMS (whose own IAK exists but only fixes frame-ID
+housekeeping, no boresight/focal-length/mirror geometry) still need
+from-scratch research. Real (non-ellipsoid) DSK shape models are
+supported in `-c` the same way as `-s` (reuses `camera_method`,
+`"DSK/Unprioritized"` when a DSK is attached).
 
 ## EXAMPLES
 
@@ -320,6 +361,28 @@ p.phocube -c -iepntr instrument=ISS_NAC input=iss_frame output=iss_geom \
     filter1=CL1 filter2=CL2
 # filter1=/filter2= optional if the raster's own planetary.json
 # 'filter_name' was set by p.in.archive's OPUS ISS import.
+```
+
+Camera mode, real per-pixel ray for a raw MEX OMEGA QUBE (real kernels,
+verified correct against ORB0100_0.QUB -- see NOTES):
+
+```sh
+p.in.pds3 input=ORB0100_0.QUB output=omega_swirc
+p.in.pds3 input=ORB0100_0.QUB output=omega_mirror_dn suffix_band=1
+g.region raster=omega_swirc.1
+p.spiceinit map=omega_swirc.1 target=MARS observer=-41 \
+    time=2004-02-10T18:08:35.0475 line_rate=0.401002358 \
+    lsk=naif0012.tls sclk=MEX_260522_STEP.TSC \
+    ik=MEX_OMEGA_V03.TI fk=MEX_V16.TF \
+    pck=MARS_IAU2000_V0.TPC,pck00010.tpc \
+    spk=MEX_ROB_040101_041231_003.BSP,de432s.bsp,mar099.bsp \
+    ck=ATNM_MEASURED_040101_050101_V03.BC
+p.phocube -c -tn instrument=OMEGA_SWIR_C input=omega_swirc.1 \
+    output=omega_geom mirror_dn=omega_mirror_dn
+# de432s.bsp + mar099.bsp (real NAIF generic planetary ephemeris
+# kernels) are needed because the real reconstructed-orbit SPK
+# (MEX_ROB_*.BSP) only gives MEX relative to MARS, not all the way to
+# the solar system barycenter that sincpt/ilumin need.
 ```
 
 ## REFERENCES
