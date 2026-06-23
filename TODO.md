@@ -152,20 +152,18 @@ implementer doesn't have to re-discover this):
 | Europa (future) | MISE | Europa Clipper | Imaging spectrometer | not yet archived (mission en route) |
 | Jupiter system (future) | MAJIS | JUICE | Imaging spectrometer | not yet archived (mission en route) |
 
-Status of the original priority list (OMEGA, M3, VIMS): **M3 done**
-(real, verified, working import). **VIMS partially done** -- the
-`vims=` shortcut and a real OPUS-API bug are fixed, but raw `.qub`
-import itself is blocked on the `SUFFIX_ITEMS` gap above. **OMEGA
-investigated, blocked on the same gap**, no CLI option added yet.
-Next real step for either: implement the per-axis `SUFFIX_ITEMS`
-byte-skip in `libs/p_pds` correctly enough to trust on real data (the
-ISIS3 `ReadVimsBIL()` reference above is the right starting point, but
-its byte accounting needs to be re-verified against a real file size
-before trusting it, per this session's experience). Point spectrometers
-(MASCS, NIRS3, OVIRS) are a different shape of product (single spectra,
-not imaging cubes) and may not fit `p.in.archive`'s current
-per-pixel-cube import model without changes -- worth a separate scoping
-pass before starting one.
+Status of the original priority list (OMEGA, M3, VIMS): all **three now
+done** -- real, verified, working raw `.qub`/`.QUB` import for all three
+(M3, VIMS, and OMEGA), once the `SUFFIX_ITEMS` byte-skip gap above was
+fixed (and, for OMEGA specifically, a second real `libs/p_pds` gap found
+later -- the band-suffix row-width mismatch between VIMS's and OMEGA's
+real archives, see "MEX OMEGA SWIR-C/SWIR-L camera model" below).
+OMEGA additionally now has a working `p.phocube -c` camera model
+(SWIR-C/SWIR-L; VNIR still deferred) -- see that section. Point
+spectrometers (MASCS, NIRS3, OVIRS) are a different shape of product
+(single spectra, not imaging cubes) and may not fit `p.in.archive`'s
+current per-pixel-cube import model without changes -- worth a separate
+scoping pass before starting one.
 
 ## 1. Per-line/per-pixel timing in `p.phocube -s`
 
@@ -196,12 +194,13 @@ of fixed flat-field vectors. Extend `-s` to use a real DSK shape model
 (`p_spice_sincpt`) when a DSK kernel has been attached via
 `p.spiceinit`, falling back to the ellipsoid when none is present.
 
-Status: **done**. Added `p_spice_latsrf()` (wraps CSPICE `latsrf_c`) to
-`libs/p_spice` -- maps a known (lon, lat) directly to a real surface
-point with no observer/look-direction ray needed (unlike `sincpt`),
-exactly matching `-s` mode's existing "pixel already has a known
-(lon, lat)" architecture. `p.spiceinit` gained `dsk=`, stored as
-`SPICE_DSK=`; `p.phocube -s` calls `latsrf` with
+Status: **done, including the full incidence/emission/phase
+verification originally blocked**. Added `p_spice_latsrf()` (wraps
+CSPICE `latsrf_c`) to `libs/p_spice` -- maps a known (lon, lat) directly
+to a real surface point with no observer/look-direction ray needed
+(unlike `sincpt`), exactly matching `-s` mode's existing "pixel already
+has a known (lon, lat)" architecture. `p.spiceinit` gained `dsk=`,
+stored as `SPICE_DSK=`; `p.phocube -s` calls `latsrf` with
 `method="DSK/Unprioritized"` per pixel when a DSK was loaded (falls back
 to the ellipsoid for any (lon, lat) outside the DSK's coverage, rather
 than failing the whole run), and then calls `ilumin` with the same
@@ -212,13 +211,27 @@ ellipsoid-vs-DSK `latsrf` comparison at matched (lon, lat) showed up to
 ~1.8 km real divergence (Phobos's well-known irregularity, e.g. the
 Stickney crater); (2) `p.phocube -s -r` produced a real, non-degenerate
 `local_radius` (~9-13 km, stddev far above what a smooth ellipsoid would
-give over the same patch). Full incidence/emission/phase verification on
-PHOBOS itself was blocked only by the lack of a small enough real
-Phobos-ephemeris SPK on this machine (`mar097.bsp`/`mar099.bsp` are
->1GB) -- a kernel-availability limitation, not a code gap; the
-ellipsoid-mode ilumin path is already separately verified (see
-"Per-line timing" above). Regression test:
+give over the same patch). Regression test:
 `test_spice_mode_dsk_shape_differs_from_ellipsoid` in
+`planetary/p.phocube/testsuite/test_pphocube.py`.
+
+Full incidence/emission/phase verification on PHOBOS itself was
+originally blocked only by the lack of a small enough real
+Phobos-ephemeris SPK on this machine (`mar097.bsp`/`mar099.bsp` are
+>1GB) -- a kernel-availability limitation, not a code gap. **Unblocked
+incidentally**: `mar099.bsp` (1.2GB) and `de432s.bsp` (10MB, generic
+planetary ephemeris) were fetched in a later session for the MEX OMEGA
+camera-model work (see below), since OMEGA's own real reconstructed-
+orbit SPK only gives MEX relative to MARS, not all the way to the solar
+system barycenter -- the same chain PHOBOS's real ephemeris needs.
+Verified end-to-end: `p.spiceinit target=PHOBOS observer=EARTH
+spk=de432s.bsp,mar099.bsp dsk=phobos_3_3.bds` + `p.phocube -s -iepr`
+produces a 100% pixel hit rate and physically sane real
+incidence/emission/phase (58.6-138.6/74.6-152.3/16.164 deg over a 30x30
+deg patch -- phase angle barely varies at Earth-Mars range, as expected,
+not a degenerate constant) on the real irregular DSK shape, not the
+ellipsoid. Regression test:
+`test_spice_mode_dsk_real_incidence_emission_phase` in
 `planetary/p.phocube/testsuite/test_pphocube.py`.
 
 ## 3. Real per-pixel camera-model back-projection (CRISM TRDR, raw EDR)
@@ -235,16 +248,20 @@ Needs its own plan: decide whether to extend the existing (currently
 flat-field-only) `p.cam2map`/`p.caminfo`, or add a new
 instrument-specific module (e.g. starting with CRISM).
 
-Status: **implemented, partially verified -- one real conventions bug
-still open**. Decision: extended `p.phocube` (new `-c` flag), not
+Status: **implemented and verified correct against real data for six
+instruments** (`CRISM_VNIR`/`CRISM_IR`, `ISS_NAC`/`ISS_WAC`,
+`OMEGA_SWIR_C`/`OMEGA_SWIR_L` -- see the dedicated sections below for
+ISS and OMEGA). Decision: extended `p.phocube` (new `-c` flag), not
 `p.cam2map` -- research this session found `p.cam2map`'s actual code is
 pure ellipsoid flat-field resampling despite its docs claiming SPICE
 support (same doc/implementation mismatch `-s` mode fixed earlier), and
 `p.phocube` already has the right per-input-pixel backplane shape plus
 (from items 1-2) the kernel-history/line_rate/DSK machinery to reuse.
-`-c` requires `instrument=` (v1: `CRISM_VNIR`/`CRISM_IR` only -- a
-distinct per-instrument undertaking for anything else, as expected) and
-`band=` (defaults to the IK's own reference band). Added
+`-c` requires `instrument=` (v1: `CRISM_VNIR`/`CRISM_IR` only -- each
+further instrument needed its own per-instrument camera-model research,
+as expected) and `band=` (defaults to the IK's own reference band; later
+dropped, see below -- the real geometry turned out band-independent).
+Added
 `p_spice_gdpool_d()` (generic kernel-pool array reader, wraps `gdpool_c`)
 to `libs/p_spice`. Per pixel: cross-track angle from CRISM's own
 documented `INS-74017_CAMERA_COEFF` table

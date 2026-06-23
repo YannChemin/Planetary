@@ -51,6 +51,29 @@ def _find_real_dsk():
     return None
 
 
+def _find_real_dsk_full_ephemeris_kernels():
+    """Locate a real LSK/PCK/DSK plus the *full* SPK barycenter chain
+    (generic planetary ephemeris + the target moon's own satellite
+    ephemeris) needed for real incidence/emission/phase on a DSK target
+    body, not just local_radius (see _find_real_dsk(), which only needs
+    latsrf -- no observer/look-direction ray, hence no full ephemeris
+    chain). Not bundled (mar099.bsp alone is ~1.2GB) -- skips on hosts
+    without a local copy. See RSDATA/Mars/spice_omega/ (de432s.bsp +
+    mar099.bsp, fetched for the OMEGA camera-model work) and
+    RSDATA/Mars/spice_test/phobos_3_3.bds on the dev machine this was
+    verified on."""
+    lsk = glob.glob(os.path.expanduser("~/RSDATA/Mars/spice_omega/naif*.tls"))
+    pck = glob.glob(os.path.expanduser("~/RSDATA/Mars/spice_omega/pck*.tpc"))
+    spk1 = os.path.expanduser("~/RSDATA/Mars/spice_omega/de432s.bsp")
+    spk2 = os.path.expanduser("~/RSDATA/Mars/spice_omega/mar099.bsp")
+    dsk = _find_real_dsk()
+    if not lsk or not pck or not dsk:
+        return None
+    if not os.path.exists(spk1) or not os.path.exists(spk2):
+        return None
+    return {"lsk": lsk[0], "pck": pck[0], "spk1": spk1, "spk2": spk2, "dsk": dsk}
+
+
 def _find_crism_test_kernels():
     """Locate the full real CRISM kernel set + raw FRT cube on this
     machine, used by the -c (camera mode) test below. Not bundled (the
@@ -406,6 +429,63 @@ class TestPphocube(TestCase):
             # vary smoothly -- a real, sizeable stddev is the signature
             # of genuine irregular-shape data, not an ellipsoid fallback.
             self.assertGreater(float(stats["stddev"]), 0.05)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname},{out_prefix}_*", quiet=True)
+
+    def test_spice_mode_dsk_real_incidence_emission_phase(self):
+        """Real-ephemeris incidence/emission/phase on a DSK (non-ellipsoid)
+        target body -- the full chain (target's own SPK ephemeris, not
+        just latsrf's known-(lon,lat)-to-surface-point mapping) that
+        test_spice_mode_dsk_shape_differs_from_ellipsoid above could not
+        exercise (TODO.md item 2: previously blocked only by lacking a
+        real Mars-system satellite ephemeris kernel small enough to keep
+        around -- mar099.bsp, ~1.2GB, fetched in a later session for the
+        OMEGA camera-model work, incidentally unblocks this too). Uses
+        the real PHOBOS DSK shape model + EARTH as observer (full real
+        ephemeris chain: PHOBOS -> MARS BARYCENTER -> SSB via mar099.bsp,
+        EARTH -> EARTH BARYCENTER -> SSB via de432s.bsp). Confirms a 100%
+        pixel hit rate and physically sane, real incidence/emission/phase
+        (not just local_radius) on the real irregular shape, not the
+        ellipsoid approximation."""
+        proj = gs.parse_command("g.proj", flags="g")
+        if proj.get("proj") != "ll":
+            self.skipTest("this test requires a PROJECTION_LL (geographic) "
+                          "location")
+        kernels = _find_real_dsk_full_ephemeris_kernels()
+        if not kernels:
+            self.skipTest("no local LSK/PCK/DSK + de432s.bsp/mar099.bsp "
+                          "found (see _find_real_dsk_full_ephemeris_kernels)")
+
+        mapname = "pphocube_test_dsk_iep_input"
+        self.runModule("g.region", n=15, s=-15, e=30, w=0, res=1)
+        self.runModule("r.mapcalc",
+                       expression=f"{mapname} = 1.0", overwrite=True)
+        self.runModule("p.spiceinit", map=mapname, target="PHOBOS",
+                       observer="EARTH", time="2026-04-22T14:58:39",
+                       lsk=kernels["lsk"], pck=kernels["pck"],
+                       spk=f"{kernels['spk1']},{kernels['spk2']}",
+                       dsk=kernels["dsk"])
+        out_prefix = "pphocube_test_dsk_iep_out"
+        try:
+            module = SimpleModule(
+                "p.phocube", input=mapname, output=out_prefix, flags="siepr")
+            self.assertModule(module)
+
+            inc = gs.parse_command("r.univar", flags="g",
+                                    map=f"{out_prefix}_incidence")
+            pha = gs.parse_command("r.univar", flags="g",
+                                    map=f"{out_prefix}_phase")
+            self.assertEqual(int(inc["null_cells"]), 0,
+                             "expected 100% pixel hit rate (0 NULL)")
+            self.assertGreater(float(inc["min"]), 0)
+            self.assertLess(float(inc["max"]), 180)
+            # Phase angle barely varies across a 30x30 deg patch at
+            # Mars-Earth range -- real, not a stand-in for a missing
+            # computation (a constant 0 or NaN would be the failure
+            # signature here, not a small real spread).
+            self.assertGreater(float(pha["min"]), 0)
+            self.assertLess(float(pha["max"]) - float(pha["min"]), 1.0)
         finally:
             self.runModule("g.remove", flags="f", type="raster",
                            pattern=f"{mapname},{out_prefix}_*", quiet=True)
