@@ -386,14 +386,22 @@ live) confirming presence/absence per the findings above.
 consistency with `p.in.archive`'s `sensor=CASSINI_ISS_WAC` and
 `p.phocube`'s `instrument=` options -- see below.)
 
-**Known gap, recurring**: this machine has a system-wide addon install
-at `/usr/lib/grass/addons/scripts/p.spice.find` (root-owned, ahead of
-`$GRASS_ADDON_BASE=~/.grass8/addons` on `PATH`) that goes stale every
-time the source tree changes and needs a manual `sudo cp
-/usr/local/grass86/scripts/p.spice.find /usr/lib/grass/addons/scripts/p.spice.find`
-to pick it up (done twice this session, including after the `ISS_WAC`
-rename). `p.phocube` does not have this problem (no system-wide addon
-copy found for it).
+**Resolved (later session) -- this was a workflow issue, not a missing
+automation**: `/usr/lib/grass/addons/scripts/p.spice.find` is owned by
+the `grass-planetary-addons` Debian package (confirmed via `dpkg -S`),
+and `/usr/local/grass86/scripts/p.spice.find` is already a symlink into
+it (`postinst` creates this for every `p.*` script). `postinst` also
+already self-heals from a bare `make install`'s stale real files (it
+explicitly deletes any non-symlink `p.*` file in `GISBASE/scripts/`
+before relinking). The staleness this session hit earlier came from
+mixing two install paths -- editing source then `make
+MODULE_TOPDIR=/usr/local/grass86 install` directly (bypassing the
+package) -- instead of going through `dpkg-buildpackage -us -uc -b` +
+`sudo dpkg -i ../grass-planetary-addons_*.deb`, which re-syncs
+everything (including the system-wide addon copy) in one step. No code
+change needed; just use the dpkg build+install workflow consistently
+after this point rather than bare `make install` for anything meant to
+stick.
 
 ### Cassini ISS NAC/WAC camera model added to `p.phocube -c`
 
@@ -493,17 +501,41 @@ existing shortest-span preference is unaffected when there's no real
 edge risk) -- all 22 of `p.spice.find`'s tests pass, including the
 5 live network ones.
 
-**Known, documented gap, not fixed this session**: MEX's real CK
+**Fixed (later session)**: MEX's real CK
 (`ATNM_MEASURED_YYMMDD_YYMMDD_VNN.BC`) and SPK
-(`MEX_ROB_YYYYMMDD_YYYYMMDD_NNN.BSP`) filename conventions do not match
-any existing `_file_date_range()` regex in `p.spice.find` (date not at
-filename start for the CK; the SPK uses 8-digit years). Automated kernel
-selection for MEX CK/SPK currently fails/returns `None` -- the OMEGA
-verification below used manually-identified, directly-`curl`'d kernels
-instead. A new `SPACECRAFT["MEX"]` entry was added (id `-41`, body
-`Mars`, `pck=["pck00010.tpc"]`) but `sclk`/`ik`/`fk` were left `None`
-since MEX ships a single un-dated SCLK/IK/FK (no date-range picking
-needed) -- not yet re-synced to the system-wide addon copy.
+(`MEX_ROB_YYMMDD_YYMMDD_NNN.BSP`) filename conventions don't have their
+date pair at the start of the filename like every other supported
+mission, so no existing `_file_date_range()` regex matched them.
+Fixed by adding `_RE_YYMMDD_YYMMDD_ANYWHERE` (`re.search`, tried last,
+after the start-anchored patterns) to find a `YYMMDD_YYMMDD` pair
+anywhere in the name. A second, previously-unknown bug was found and
+fixed at the same time: every extension/prefix check in the module
+(`_best_ck`, `_best_spk`, `_latest_file`) was case-sensitive
+lowercase-only (e.g. `f.endswith(".bc")`), which silently broke MEX
+entirely regardless of the regex fix -- MEX's whole real archive uses
+uppercase filenames/extensions (`.TSC`, `.TI`, `.TF`, `.BC`, `.BSP`),
+unlike CASSINI/MRO's lowercase convention. All three functions are now
+case-insensitive; verified this doesn't change CASSINI/MRO selection
+(regression test `test_cassini_lowercase_unaffected_by_case_fix`).
+
+Filled in `SPACECRAFT["MEX"]["fk"] = "MEX_V*"` (was `None`) and added
+an `INSTRUMENT["OMEGA_SWIR_C"/"OMEGA_SWIR_L"]` entry
+(`ik: "MEX_OMEGA_V03.TI"`) so `instrument=` auto-selects OMEGA's real
+public IK. `sclk`/`ik` stay `None` at the `SPACECRAFT` level (MEX ships
+a single un-dated SCLK; IK is per-instrument).
+
+Verified end-to-end live: `p.spice.find spacecraft=MEX
+instrument=OMEGA_SWIR_C time=2004-02-10T18:08:35
+kernels=lsk,sclk,ik,fk,pck,spk,ck -l` now auto-selects all 7 real
+kernels used in the OMEGA verification above (`naif0012.tls`,
+`MEX_260522_STEP.TSC`, `MEX_OMEGA_V03.TI`, `MEX_V16.TF`,
+`PCK00010.TPC`, `MEX_ROB_040101_041231_003.BSP`,
+`ATNM_MEASURED_040101_050101_V03.BC`) -- previously these had to be
+hand-`curl`'d one by one. Added 8 offline unit tests and a
+`TestNetworkMex` live-network test class (5 tests) to
+`p.spice.find`'s test suite; all 35 tests pass (19 offline, 16
+network), including the pre-existing CASSINI/IAK ones (confirmed
+unaffected).
 
 ### MEX OMEGA SWIR-C/SWIR-L camera model added to `p.phocube -c`
 
