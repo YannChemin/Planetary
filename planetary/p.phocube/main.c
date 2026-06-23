@@ -163,28 +163,27 @@ static void uppercase_copy(char *dst, size_t n, const char *src)
 /* ------------------------------------------------------------------ */
 /* Camera mode (-c): CRISM-specific instrument camera model            */
 /*                                                                      */
-/* CRISM (VNIR detector -74017 / IR detector -74018) is a pushbroom    */
-/* imaging spectrometer: the cross-track (slit) angle of a given       */
-/* (band, sample) pixel relative to the instrument boresight is given  */
-/* by a real, documented linear model from the IK itself --            */
-/* "line_of_sight_angle = a0(band) + a1(band)*line_sample" -- read     */
-/* directly from NAIF's mro_crism_v10.ti. Geometry is computed once at */
-/* one reference band for the whole cube (the real CRISM DDR           */
-/* convention -- per-band "keystone" variation is tiny), not per band. */
+/* CRISM (VNIR detector -74017 / IR detector -74018) is modeled the    */
+/* same way ISIS3's own CrismCamera does: a standard pinhole focal-     */
+/* plane map, band-independent (ISIS3's CrismCamera::SetBand() is a    */
+/* documented no-op). The boresight/pixel-pitch/focal-length values    */
+/* are NOT in the public NAIF IK (mro_crism_v10.ti) -- they live in     */
+/* ISIS3's separately-distributed instrument addendum kernel,          */
+/* crismAddendum001.ti (fetched from the ISIS3 AWS data mirror:        */
+/* https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/mro/      */
+/* kernels/iak/crismAddendum001.ti). That file must be attached         */
+/* alongside mro_crism_v10.ti via p.spiceinit's ik= option.             */
 /* ------------------------------------------------------------------ */
-#define CRISM_MAX_CAMERA_COEFF_VALS 1500  /* >= 480 bands * 3 columns */
-
 typedef struct {
     int    naif_id;
     char   frame[64];
-    double boresight[3];
-    double slit_dir[3];
-    double a0, a1;     /* camera-model coefficients for the chosen band */
-    int    band;
+    double boresight_sample;
+    double boresight_line;
+    double pixel_pitch;
+    double focal_length;
 } CrismCameraModel;
 
-static void load_crism_camera_model(const char *instrument, int band_opt,
-                                     int have_band_opt, CrismCameraModel *cam)
+static void load_crism_camera_model(const char *instrument, CrismCameraModel *cam)
 {
     memset(cam, 0, sizeof(*cam));
 
@@ -203,68 +202,28 @@ static void load_crism_camera_model(const char *instrument, int band_opt,
     char varname[80];
     int n;
 
-    snprintf(varname, sizeof(varname), "INS%d_BORESIGHT", cam->naif_id);
-    if (p_spice_gdpool_d(varname, 0, 3, &n, cam->boresight) < 0 || n != 3)
+    snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->pixel_pitch) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
-                        "IK -- has the right CRISM instrument kernel been "
-                        "attached via p.spiceinit's ik= option?"), varname);
+                        "IK -- has the CRISM instrument addendum kernel "
+                        "(crismAddendum001.ti) been attached via "
+                        "p.spiceinit's ik= option, in addition to "
+                        "mro_crism_v10.ti?"), varname);
 
-    snprintf(varname, sizeof(varname), "INS%d_SLIT_DIRECTION", cam->naif_id);
-    if (p_spice_gdpool_d(varname, 0, 3, &n, cam->slit_dir) < 0 || n != 3)
+    snprintf(varname, sizeof(varname), "INS%d_FOCAL_LENGTH", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                        varname);
 
-    if (have_band_opt)
-        cam->band = band_opt;
-    else {
-        double refband;
-        snprintf(varname, sizeof(varname), "INS%d_REFERENCE_BAND", cam->naif_id);
-        if (p_spice_gdpool_d(varname, 0, 1, &n, &refband) < 0 || n != 1)
-            G_fatal_error(_("Camera mode (-c): could not read %s from the "
-                            "loaded IK, and band= was not given."), varname);
-        cam->band = (int)refband;
-    }
-
-    double coeff[CRISM_MAX_CAMERA_COEFF_VALS];
-    snprintf(varname, sizeof(varname), "INS%d_CAMERA_COEFF", cam->naif_id);
-    if (p_spice_gdpool_d(varname, 0, CRISM_MAX_CAMERA_COEFF_VALS, &n, coeff) < 0)
+    snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_SAMPLE", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_sample) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                        varname);
 
-    int found = 0;
-    for (int i = 0; i + 2 < n; i += 3) {
-        if ((int)coeff[i] == cam->band) {
-            cam->a0 = coeff[i + 1];
-            cam->a1 = coeff[i + 2];
-            found = 1;
-            break;
-        }
-    }
-    if (!found)
-        G_fatal_error(_("Camera mode (-c): band %d not found in %s "
-                        "(valid range is whatever the loaded IK defines)."),
-                       cam->band, varname);
-}
-
-/* Rodrigues' rotation formula: rotate vector v by angle theta (radians)
- * about unit axis (normalised internally). Pure vector math -- no
- * CSPICE call needed, the axis/vector are already in the same frame. */
-static void rodrigues_rotate(const double v[3], const double axis_in[3],
-                              double theta, double out[3])
-{
-    double axis[3] = { axis_in[0], axis_in[1], axis_in[2] };
-    double alen = sqrt(axis[0]*axis[0] + axis[1]*axis[1] + axis[2]*axis[2]);
-    if (alen > 0) { axis[0] /= alen; axis[1] /= alen; axis[2] /= alen; }
-
-    double c = cos(theta), s = sin(theta);
-    double dot = v[0]*axis[0] + v[1]*axis[1] + v[2]*axis[2];
-    double cross[3] = {
-        axis[1]*v[2] - axis[2]*v[1],
-        axis[2]*v[0] - axis[0]*v[2],
-        axis[0]*v[1] - axis[1]*v[0]
-    };
-    for (int i = 0; i < 3; i++)
-        out[i] = v[i]*c + cross[i]*s + axis[i]*dot*(1.0 - c);
+    snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_LINE", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_line) < 0 || n != 1)
+        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                       varname);
 }
 
 /* ------------------------------------------------------------------ */
@@ -288,7 +247,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_target, *opt_a, *opt_b, *opt_c;
     struct Option  *opt_sun_x, *opt_sun_y, *opt_sun_z;
     struct Option  *opt_obs_x, *opt_obs_y, *opt_obs_z;
-    struct Option  *opt_instrument, *opt_cam_band;
+    struct Option  *opt_instrument;
     struct Flag    *flag_inc, *flag_emi, *flag_pha, *flag_lat;
     struct Flag    *flag_lon, *flag_rad, *flag_res, *flag_all;
     struct Flag    *flag_spice, *flag_camera;
@@ -429,16 +388,6 @@ int main(int argc, char *argv[])
     opt_instrument->required    = NO;
     opt_instrument->options     = "CRISM_VNIR,CRISM_IR";
     opt_instrument->description = _("Instrument camera model to use with -c (v1: CRISM only)");
-
-    opt_cam_band = G_define_option();
-    opt_cam_band->key         = "band";
-    opt_cam_band->type        = TYPE_INTEGER;
-    opt_cam_band->required    = NO;
-    opt_cam_band->description = _("Detector band index for -c's camera-model angle lookup "
-                                   "(default: the instrument's own IK reference band, e.g. "
-                                   "223 for CRISM VNIR / 247 for CRISM IR -- geometry is "
-                                   "computed once at this band for the whole cube, matching "
-                                   "the real CRISM DDR convention, not per-band)");
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -617,12 +566,11 @@ int main(int argc, char *argv[])
         if (spice_info.have_dsk)
             camera_method = "DSK/Unprioritized";
 
-        load_crism_camera_model(opt_instrument->answer,
-                                opt_cam_band->answer ? atoi(opt_cam_band->answer) : 0,
-                                opt_cam_band->answer != NULL, &cam);
-        G_message(_("Camera mode: instrument=%s frame=%s band=%d "
-                    "(a0=%.9f a1=%.9f rad)"),
-                   opt_instrument->answer, cam.frame, cam.band, cam.a0, cam.a1);
+        load_crism_camera_model(opt_instrument->answer, &cam);
+        G_message(_("Camera mode: instrument=%s frame=%s focal_length=%.3f mm "
+                    "pixel_pitch=%.3f mm boresight_sample=%.1f"),
+                   opt_instrument->answer, cam.frame, cam.focal_length,
+                   cam.pixel_pitch, cam.boresight_sample);
     }
 
     /* ---------------------------------------------------------------- */
@@ -781,21 +729,22 @@ int main(int argc, char *argv[])
             }
         }
         else if (camera_mode) {
-            /* Camera mode: build a real per-pixel boresight ray from the
-             * CRISM camera model (cross-track angle = a0 + a1*sample,
-             * rotated about the slit direction) and intersect it with
-             * the target surface via sincpt -- row/col here are real
-             * (line, sample) indices into the raw cube, not coordinates;
-             * the surface point (and hence lat/lon) is *found*, not
-             * known in advance, unlike -s mode. */
+            /* Camera mode: build a real per-pixel look vector from the
+             * CRISM pinhole focal-plane map (same convention as ISIS3's
+             * CrismCamera: dx = (sample - boresight_sample)*pixel_pitch,
+             * dz = focal_length, in the camera frame's own X/Z axes) and
+             * intersect it with the target surface via sincpt -- row/col
+             * here are real (line, sample) indices into the raw cube,
+             * not coordinates; the surface point (and hence lat/lon) is
+             * *found*, not known in advance, unlike -s mode. */
             double et_row = et;
             if (spice_info.have_line_rate)
                 et_row = et + (row - (nrows - 1) / 2.0) * spice_info.line_rate;
 
             for (int col = 0; col < ncols; col++) {
-                double theta = cam.a0 + cam.a1 * col;
-                double dvec[3];
-                rodrigues_rotate(cam.boresight, cam.slit_dir, theta, dvec);
+                double sample_1based = col + 1.0;
+                double dx = (sample_1based - cam.boresight_sample) * cam.pixel_pitch;
+                double dvec[3] = { dx, 0.0, cam.focal_length };
 
                 double pt[3], srfvec[3], trgepc;
                 int hit = p_spice_sincpt(camera_method, target_upper, et_row,

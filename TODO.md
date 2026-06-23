@@ -285,28 +285,92 @@ surfaced one real open question:
   using the real `START_TIME=2007-01-05T01:26:56.855` and real
   `FRAME_RATE=3.75 Hz` (`line_rate=1/3.75`) read directly from the
   product's own PDS label.
-- **Open issue**: applying the real `CAMERA_COEFF` per-sample rotation
-  (a0=-1.146 rad, a1=0.00352 rad/sample for VNIR reference band 223) on
-  top of that already-correct pointing pushes every sample's ray off the
-  planet (0/960 pixels hit). The magnitude is the red flag:
-  `CAMERA_COEFF`'s ~13 deg swing across 640 samples is far larger than
-  the IK's own declared FOV envelope
-  (`FOV_CROSS_ANGLE=0.0185 rad ~= 1.06 deg` half-angle), so either the
-  per-sample angle isn't meant to be applied as a simple rotation of the
-  raw `BORESIGHT` vector the way this v1 does, or there's a missing
-  reference subtraction/offset. ISIS3's actual current `CrismCamera.cpp`
-  doesn't use `CAMERA_COEFF` at all -- it builds the focal-plane mapping
-  from `INS-74017_BORESIGHT_LINE`/`_SAMPLE` + a generic
-  `CameraFocalPlaneMap`/pinhole model instead (those keywords aren't in
-  the public NAIF IK `mro_crism_v10.ti`; ISIS3 must source them from its
-  own separately-distributed data area, not its git source tree).
-  **Next step**: switch the per-sample angle formula to the simpler
-  pinhole convention (`angle = atan((sample - boresight_sample) *
-  pixel_pitch / focal_length)`) matching ISIS3's real, current,
-  production CRISM camera model, instead of the legacy `CAMERA_COEFF`
-  table this v1 used.
+- **Resolved**: the real `CAMERA_COEFF`-based rotation (a0=-1.146 rad,
+  a1=0.00352 rad/sample for VNIR reference band 223) pushed every
+  sample's ray off the planet (0/960 pixels hit) -- a ~13 deg swing
+  across 640 samples, far larger than the IK's own declared FOV envelope
+  (`FOV_CROSS_ANGLE=0.0185 rad ~= 1.06 deg` half-angle). ISIS3's actual
+  current `CrismCamera.cpp` doesn't use `CAMERA_COEFF` at all -- it
+  builds the focal-plane mapping from `INS-74017_BORESIGHT_LINE`/
+  `_SAMPLE` + a generic pinhole model instead. Those keywords (plus
+  `PIXEL_PITCH`/`FOCAL_LENGTH`) aren't in the public NAIF IK
+  `mro_crism_v10.ti` -- they live in ISIS3's separately-distributed
+  instrument addendum kernel. Found it by reading `isis/scripts/
+  downloadIsisData` and `isis/config/rclone.conf` in the ISIS3 source
+  tree: the `mro_usgs` rclone remote is a public AWS S3 bucket
+  (`asc-isisdata`), browsable over plain HTTPS without any AWS
+  credentials (`https://asc-isisdata.s3.us-west-2.amazonaws.com/
+  ?list-type=2&prefix=usgs_data/mro/kernels/iak/`), which lists
+  `crismAddendum001.ti` directly:
+  `https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/mro/
+  kernels/iak/crismAddendum001.ti`. Real values for both detectors:
+  `PIXEL_PITCH=0.027` mm, `FOCAL_LENGTH=441.0` mm,
+  `BORESIGHT_SAMPLE=320.0`, `BORESIGHT_LINE=0.0`. Switched `p.phocube`'s
+  `load_crism_camera_model()`/ray-construction to the real pinhole
+  formula (`dx = (sample - boresight_sample) * pixel_pitch`, ray =
+  `(dx, 0, focal_length)`), dropped the now-unused `CAMERA_COEFF`
+  lookup, `band=` option, and `rodrigues_rotate()` helper entirely
+  (ISIS3's own `CrismCamera::SetBand()` is a documented no-op -- the
+  real geometry is band-independent). Verified end-to-end against
+  FRT00003BFB with `crismAddendum001.ti` attached via `p.spiceinit`'s
+  `ik=`: 100% of pixels hit the planet (0/960 NULL), computed lat/lon
+  (~22.149N, ~342.05E) matches Mawrth Vallis's known location (~22.4N,
+  341E) almost exactly, and incidence/emission/phase (~52.6/69.7/78.8
+  deg) are physically sane for this real targeted MRO observation.
 
-Until that's resolved, `-c` is real, crash-free, and exercises the right
-kernels/frames/timing, but its per-sample cross-track angle is not yet
-verified correct against real data -- do not trust its output
-quantitatively yet. Flagged explicitly in `p.phocube.md`.
+`-c` is now verified correct against real data, not just crash-free.
+Flagged as such in `p.phocube.md`.
+
+### ISIS3 AWS data mirror (asc-isisdata) -- fully indexed; unblocks plan items 2 and 4
+
+Indexed the bucket's full `usgs_data/<mission>/kernels/iak/` listing for
+all 35 missions it carries (apollo15/16/17, base, cassini,
+chandrayaan1/2, clementine1, dawn, galileo, hayabusa/2, juno, kaguya,
+kplo, legacy_base, lo, lro, mariner10, mer, messenger, mex, mgs, mro,
+msl, near, newhorizons, odyssey, osirisrex, rolo, rosetta, smart1, tgo,
+viking1/2, voyager1/2). Notable findings for this repo's own
+instruments/roadmap:
+
+- **Cassini ISS NAC/WAC** (`IssNAAddendum005.ti`/`IssWAAddendum005.ti`):
+  real `BORESIGHT_LINE`/`BORESIGHT_SAMPLE` + per-filter
+  `*_FOCAL_LENGTH` values -- a genuine, ready-to-use pinhole camera
+  model, confirming plan item 2 (Cassini ISS framing camera) is the
+  easiest remaining instrument, same pinhole convention as CRISM.
+- **Cassini VIMS** (`vimsAddendum04.ti`): exists, but only fixes
+  `CK_FRAME_ID`/`NAIF_BODY_CODE` housekeeping (a real, documented
+  discrepancy in the public VIMS IK's frame ID assignment) -- **no**
+  `BORESIGHT`/`FOCAL_LENGTH` values. Confirms plan item 4 (VIMS) still
+  needs its own from-scratch 2-D scan-mirror research; this mirror
+  doesn't shortcut it.
+- **MEX/OMEGA**: no IAK at all on this mirror (`mex/kernels/iak/` only
+  has `hrscAddendum*`/`hrscsrcAddendum*`, for HRSC, not OMEGA).
+  Confirms plan item 3 (OMEGA) needs its own from-scratch research too,
+  not a borrowed ISIS3 convention.
+- Many other instruments not yet in `p.in.archive`/`p.phocube` also have
+  ready IAKs here if/when added: HiRISE/CTX/MARCI (MRO), MOC (MGS),
+  THEMIS (Odyssey), LRO NAC (`lro_instrumentAddendum_v05.ti`), MDIS
+  (MESSENGER), Dawn FC/VIR, New Horizons LORRI/MVIC/LEISA, OSIRIS-REx
+  OCAMS/TAGCAMS, Rosetta OSIRIS NAC/WAC/VIRTIS, TGO CaSSIS, Kaguya
+  TC/MI, Hayabusa/2 AMICA/NIRS/ONC, Galileo SSI, Clementine, Apollo
+  Metric/Pan, Viking, Voyager, Mariner10, Lunar Orbiter.
+
+Wired this into `p.spice.find`: new `kernels=...,iak` fetch type (S3
+REST `list-type=2` XML listing, no AWS credentials needed over plain
+HTTPS), `AWS_MISSION_DIR` mapping (NAIF dir -> bucket mission slug;
+currently MRO/CASSINI/LRO/MESSENGER -- not every NAIF mission has a
+slug here, e.g. VEX/Venus Express does not), and `iak_prefix` entries in
+`INSTRUMENT` for `CRISM`, `ISS_NAC`, `ISS_WA`, `VIMS`. Verified live:
+`-l` lists the correct latest file for all four, and a real download of
+`crismAddendum001.ti` round-trips correctly. Added
+`TestNetworkIak` to `p.spice.find`'s test suite (5 tests, all passing
+live) confirming presence/absence per the findings above.
+
+**Known gap, not yet fixed**: this machine has a system-wide addon
+install at `/usr/lib/grass/addons/scripts/p.spice.find` (root-owned,
+ahead of `$GRASS_ADDON_BASE=~/.grass8/addons` on `PATH`) that is now
+stale relative to the source tree and `/usr/local/grass86/scripts/`
+(the `make install` target used during this session). Needs `sudo cp
+/usr/local/grass86/scripts/p.spice.find /usr/lib/grass/addons/scripts/p.spice.find`
+(or removing/fixing that system install so `PATH` resolves the
+`GRASS_ADDON_BASE` copy instead) to pick up this change for normal
+`p.spice.find` invocations outside this dev session.

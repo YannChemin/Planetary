@@ -172,30 +172,41 @@ real, smoothly-varying incidence/emission/phase when driven by the
 altitude and a genuine ~60 deg off-nadir CRISM gimbal angle, consistent
 with a real targeted "FRT" observation).
 
-What's **not yet verified**: applying CRISM's own documented per-sample
-`CAMERA_COEFF` cross-track angle (`a0(band) + a1(band)*sample`, read
-from the real NAIF IK) on top of that already-correct pointing pushes
-every sample off the planet. The coefficient's ~13 deg swing across 640
-samples is far larger than the IK's own declared FOV envelope
-(`FOV_CROSS_ANGLE` ~= 1.06 deg half-angle), which is the real, unresolved
-inconsistency -- not a guess. ISIS3's actual current `CrismCamera.cpp`
-doesn't use `CAMERA_COEFF` at all; it builds the focal-plane mapping
-from `BORESIGHT_LINE`/`BORESIGHT_SAMPLE` + a generic pinhole camera
-model instead (keywords not present in the public NAIF IK used here).
-Until this is resolved, treat `-c`'s output as unverified -- the
-plumbing (kernel loading, real timing, frame resolution, intercept,
-illumination) is confirmed real and crash-free, but the per-sample
-angle convention is not yet confirmed correct. See `TODO.md` for the
-full real-data trace and the planned fix (switch to the simpler pinhole
-formula).
+**Now verified correct**, end to end, against the real FRT00003BFB
+data: `-c` uses the same focal-plane pinhole convention ISIS3's current
+`CrismCamera.cpp` actually uses -- `dx = (sample - BORESIGHT_SAMPLE) *
+PIXEL_PITCH`, ray = `(dx, 0, FOCAL_LENGTH)` in the camera frame -- not
+the `CAMERA_COEFF` table (which gave a cross-track swing ~6x larger
+than the IK's own declared FOV and pushed every ray off-planet; ISIS3
+itself never uses `CAMERA_COEFF` for ray geometry either --
+`CrismCamera::SetBand()` is a documented no-op). The catch:
+`BORESIGHT_SAMPLE`/`BORESIGHT_LINE`/`PIXEL_PITCH`/`FOCAL_LENGTH` are
+**not** in the public NAIF IK (`mro_crism_v10.ti`) -- they live in
+ISIS3's separately-distributed instrument addendum kernel,
+`crismAddendum001.ti`. Fetch it from the ISIS3 AWS data mirror and
+attach it via `p.spiceinit`'s `ik=` *in addition to* `mro_crism_v10.ti`:
+
+```sh
+curl -O https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/mro/kernels/iak/crismAddendum001.ti
+p.spiceinit ... ik=mro_crism_v10.ti,crismAddendum001.ti ...
+```
+
+Real-data result on FRT00003BFB (VNIR, 15x64 px): 100% of pixels hit
+the planet (0 NULL), `lat`~22.149 deg, `lon`~-17.95 deg (i.e. ~342.05
+deg E) -- matching Mawrth Vallis's known location (~22.4N, 341E) almost
+exactly; `incidence`~52.6 deg, `emission`~69.7 deg, `phase`~78.8 deg,
+all physically sane for a real targeted MRO observation. `band=` was
+removed from `-c`'s options -- the real geometry is band-independent
+(matching ISIS3), so there was nothing left for it to select.
 
 ### Not implemented (out of scope for this version)
 
 See the repo's top-level `TODO.md` for full context. `-c` v1 supports
 only CRISM (VNIR and IR detectors); any other `instrument=` value is a
 `G_fatal_error`, not a guess -- other instruments need their own
-per-instrument camera-model formula (CRISM's `CAMERA_COEFF` convention
-is specific to CRISM, not a general pattern). Real (non-ellipsoid) DSK
+per-instrument camera-model formula (the pinhole focal-plane convention
+used here is not necessarily how every instrument's optics work, e.g.
+VIMS's whiskbroom scan mirrors). Real (non-ellipsoid) DSK
 shape models are supported in `-c` the same way as `-s` (reuses
 `camera_method`, `"DSK/Unprioritized"` when a DSK is attached).
 
@@ -235,14 +246,16 @@ p.phocube -s -iepr input=phobos_img output=phobos_geom
 # now comes from the real shape model, not a smooth ellipsoid.
 ```
 
-Camera mode, real per-pixel ray for a raw CRISM cube (real kernels --
-see NOTES, output not yet verified correct):
+Camera mode, real per-pixel ray for a raw CRISM cube (real kernels,
+verified correct against FRT00003BFB -- see NOTES):
 
 ```sh
+curl -O https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/mro/kernels/iak/crismAddendum001.ti
 p.spiceinit map=crism_frt target=MARS observer=MRO \
     time=2007-01-05T01:26:56.855 line_rate=0.266667 \
     lsk=naif0012.tls pck=pck00011.tpc sclk=MRO_SCLKSCET.00119.tsc \
-    sclk=MRO_SCLKSCET.00119.65536.tsc fk=mro_v17.tf ik=mro_crism_v10.ti \
+    sclk=MRO_SCLKSCET.00119.65536.tsc fk=mro_v17.tf \
+    ik=mro_crism_v10.ti,crismAddendum001.ti \
     spk=mro_psp2.bsp spk=mar063.bsp \
     ck=mro_sc_psp_070102_070108.bc ck=mro_crm_psp_070101_070131.bc
 p.phocube -c -iepntr instrument=CRISM_VNIR input=crism_frt output=crism_geom

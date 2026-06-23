@@ -25,7 +25,7 @@ p.spice.find spacecraft=CASSINI time="2004-07-01T03:11:40" [-l] [-f] [-m]
 |-----------|-------------|
 | `spacecraft` | Spacecraft name (CASSINI, MRO, LRO, …) |
 | `time` | UTC time of interest, ISO 8601 |
-| `kernels` | Comma-separated types: `lsk,sclk,ik,fk,pck,spk,ck` (default: all) |
+| `kernels` | Comma-separated types: `lsk,sclk,ik,fk,pck,spk,ck,iak` (default: all but `iak`) |
 | `dest` | Root download directory (default: `$HOME/RSDATA/<Body>/kernels`) |
 | `ck_type` | CK preference: `ra` reconstructed-actual (default), `ca_ISS`, `pa` predict |
 | `-l` | List matching filenames without downloading |
@@ -53,6 +53,36 @@ This downloads:
 | CK   | 04183_04185ra.bc | Reconstructed pointing, DOY 183–185 |
 
 And writes `~/RSDATA/Saturn/kernels/cassini_2004183.tm`.
+
+### Instrument addendum kernels (IAK) -- camera-model parameters
+
+Some instruments' camera models (e.g. `p.phocube`'s `-c` CRISM mode)
+need `BORESIGHT_LINE`/`BORESIGHT_SAMPLE`/`PIXEL_PITCH`/`FOCAL_LENGTH`
+values that are **not** real SPICE/NAIF kernels and are never on
+naif.jpl.nasa.gov -- they're an ISIS3-specific concept distributed
+separately, from ISIS3's own public AWS data mirror
+(`asc-isisdata`, found by reading `isis/scripts/downloadIsisData` and
+`isis/config/rclone.conf` in the ISIS3 source tree). `kernels=...,iak`
+fetches them directly, for any `instrument=` that has a known IAK:
+
+```bash
+p.spice.find spacecraft=MRO instrument=CRISM \
+    time="2007-01-05T01:26:56" kernels=iak
+# → spice/iak/crismAddendum001.ti
+
+p.spice.find spacecraft=CASSINI instrument=ISS_NAC \
+    time="2004-07-01T03:11:40" kernels=iak
+# → spice/iak/IssNAAddendum005.ti
+```
+
+Known `instrument=` values with an IAK: `CRISM` (MRO), `ISS_NAC`/
+`ISS_WA` (CASSINI, real BORESIGHT/FOCAL_LENGTH per filter -- a pinhole
+camera model), `VIMS` (CASSINI, but only `CK_FRAME_ID`/`NAIF_BODY_CODE`
+housekeeping fixes -- no boresight/focal-length; VIMS's real geometry is
+a 2-D scan-mirror mapping, not a pinhole, so no `p.phocube` camera model
+uses it yet). MEX/OMEGA has **no** IAK on this mirror -- its camera
+model would need its own from-scratch research, not a borrowed ISIS3
+convention. See `TODO.md`.
 
 ## Saturn ring imaging pipelines
 

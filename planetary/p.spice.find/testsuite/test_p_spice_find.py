@@ -171,3 +171,60 @@ class TestNetworkCassiniSOI:
         result = _mod._latest_file(files, ".tf", "cas_v*")
         assert result is not None
         assert result.startswith("cas_v") and result.endswith(".tf")
+
+
+def _aws_isis_reachable():
+    try:
+        import urllib.request
+        urllib.request.urlopen(_mod.AWS_ISIS_DATA, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.network
+@pytest.mark.skipif(not _aws_isis_reachable(),
+                     reason="ISIS3 AWS data mirror not reachable")
+class TestNetworkIak:
+    """Verify live IAK discovery on the ISIS3 AWS data mirror (asc-isisdata
+    S3 bucket) -- this is the only source for instrument addendum kernels
+    (BORESIGHT/PIXEL_PITCH/FOCAL_LENGTH), never on naif.jpl.nasa.gov. See
+    TODO.md for how this was found and why p.phocube's -c (camera mode)
+    needs it."""
+
+    def _ls(self, prefix):
+        return _mod._list_s3_dir(prefix, timeout=30)
+
+    def test_crism_iak_present(self):
+        files = self._ls("usgs_data/mro/kernels/iak/")
+        matches = sorted(f for f in files
+                          if f.startswith("crismAddendum") and f.endswith(".ti"))
+        assert matches, "No crismAddendum*.ti found"
+        assert matches[-1] == "crismAddendum001.ti"
+
+    def test_iss_nac_iak_present(self):
+        files = self._ls("usgs_data/cassini/kernels/iak/")
+        matches = sorted(f for f in files
+                          if f.startswith("IssNAAddendum") and f.endswith(".ti"))
+        assert matches, "No IssNAAddendum*.ti found"
+
+    def test_iss_wa_iak_present(self):
+        files = self._ls("usgs_data/cassini/kernels/iak/")
+        matches = sorted(f for f in files
+                          if f.startswith("IssWAAddendum") and f.endswith(".ti"))
+        assert matches, "No IssWAAddendum*.ti found"
+
+    def test_vims_iak_present(self):
+        files = self._ls("usgs_data/cassini/kernels/iak/")
+        matches = sorted(f for f in files
+                          if f.startswith("vimsAddendum") and f.endswith(".ti"))
+        assert matches, "No vimsAddendum*.ti found"
+
+    def test_mex_omega_iak_absent(self):
+        """Regression/documentation test: OMEGA has no IAK on this mirror
+        (unlike CRISM/ISS/VIMS) -- confirms the plan's note that OMEGA's
+        camera model needs its own from-scratch research, not a borrowed
+        ISIS3 pinhole convention."""
+        files = self._ls("usgs_data/mex/kernels/iak/")
+        matches = [f for f in files if "omega" in f.lower()]
+        assert not matches, f"Unexpected OMEGA IAK found: {matches}"

@@ -28,7 +28,7 @@
 # % key: instrument
 # % type: string
 # % label: Instrument name, for instruments needing extra kernels beyond the spacecraft default
-# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK) and the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK) that CRISM's cross-track pointing needs, in addition to the regular spacecraft kernels.
+# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK), the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK), and (with kernels=...,iak) the crismAddendum IAK that CRISM's camera model needs. ISS_NAC, ISS_WA (CASSINI) -- fetches the IssNAAddendum/IssWAAddendum IAK (with kernels=...,iak) that their pinhole camera models need.
 # % required: no
 # %end
 
@@ -43,7 +43,7 @@
 # % key: kernels
 # % type: string
 # % label: Comma-separated kernel types to fetch
-# % description: Supported: lsk,sclk,ik,fk,pck,spk,ck
+# % description: Supported: lsk,sclk,ik,fk,pck,spk,ck,iak. iak (instrument addendum kernel: BORESIGHT/PIXEL_PITCH/FOCAL_LENGTH for camera models) is NOT a real SPICE kernel type and is never on naif.jpl.nasa.gov -- it is fetched from the ISIS3 project's own public AWS data mirror instead (see -l output for the exact source URL).
 # % answer: lsk,sclk,ik,fk,pck,spk,ck
 # % required: no
 # %end
@@ -104,6 +104,26 @@ import p_spice
 # NAIF server root
 # ---------------------------------------------------------------------------
 NAIF_ROOT = "https://naif.jpl.nasa.gov/pub/naif"
+
+# ---------------------------------------------------------------------------
+# ISIS3 project's own public AWS data mirror: the only source for instrument
+# addendum kernels (IAK -- BORESIGHT_LINE/SAMPLE, PIXEL_PITCH, FOCAL_LENGTH;
+# an ISIS3 concept, not a NAIF/SPICE one, so never on naif.jpl.nasa.gov).
+# Found by reading ISIS3's own isis/scripts/downloadIsisData and
+# isis/config/rclone.conf: the "<mission>_usgs" rclone remotes are aliases
+# for this bucket, browsable over plain HTTPS with no AWS credentials.
+# ---------------------------------------------------------------------------
+AWS_ISIS_DATA = "https://asc-isisdata.s3.us-west-2.amazonaws.com"
+
+# Map a SPACECRAFT["dir"] (NAIF directory name) to this bucket's mission
+# slug. Confirmed live by listing the bucket's usgs_data/ prefix -- not
+# every NAIF mission has a slug here (e.g. Venus Express/VEX does not).
+AWS_MISSION_DIR = {
+    "MRO":        "mro",
+    "CASSINI":    "cassini",
+    "LRO":        "lro",
+    "MESSENGER":  "messenger",
+}
 
 # ---------------------------------------------------------------------------
 # Spacecraft database: name -> (NAIF-ID, body/mission-dir, SCLK-glob-hint,
@@ -174,6 +194,26 @@ INSTRUMENT = {
         "ik":              "mro_crism_v10.ti",
         "extra_ck_prefix": "mro_crm_",
         "extra_sclk_substr": ".65536.",
+        "iak_prefix":      "crismAddendum",
+    },
+    "ISS_NAC": {
+        "spacecraft":      "CASSINI",
+        "ik":              "cas_iss_v10.ti",
+        "iak_prefix":      "IssNAAddendum",
+    },
+    "ISS_WA": {
+        "spacecraft":      "CASSINI",
+        "ik":              "cas_iss_v10.ti",
+        "iak_prefix":      "IssWAAddendum",
+    },
+    "VIMS": {
+        "spacecraft":      "CASSINI",
+        "ik":              "cas_vims_v*",
+        # NOTE: vimsAddendum*.ti only fixes CK_FRAME_ID/NAIF_BODY_CODE
+        # housekeeping, not BORESIGHT/FOCAL_LENGTH -- VIMS's real per-pixel
+        # geometry is a 2-D scan-mirror mapping, not a pinhole; no camera
+        # model uses this yet (see TODO.md).
+        "iak_prefix":      "vimsAddendum",
     },
 }
 
@@ -257,6 +297,21 @@ def _list_dir(url, timeout=30):
         if name and "?" not in name and not name.startswith(".."):
             files.append(name)
     return files
+
+
+_RE_S3_KEY = re.compile(r"<Key>([^<]+)</Key>")
+
+
+def _list_s3_dir(prefix, timeout=30):
+    """Return list of bare filenames under an asc-isisdata S3 prefix.
+
+    Uses the public, unauthenticated S3 REST list API (XML), not rclone --
+    no credentials needed for this bucket over plain HTTPS."""
+    url = f"{AWS_ISIS_DATA}/?list-type=2&prefix={prefix}"
+    req = urllib.request.Request(url, headers={"User-Agent": "p.spice.find/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        body = r.read().decode("utf-8", errors="replace")
+    return [k.split("/")[-1] for k in _RE_S3_KEY.findall(body) if k.split("/")[-1]]
 
 
 def _download(url, dst, timeout, force):
@@ -538,6 +593,37 @@ def main():
             downloaded.append(p)
         else:
             gs.warning("No IK (.ti) found.")
+
+    # ── IAK (instrument addendum kernel -- ISIS3's AWS mirror, not NAIF) ──
+    if "iak" in ktypes:
+        if not instr or not instr.get("iak_prefix"):
+            gs.warning("iak requested but no instrument= IAK is known for "
+                       f"this spacecraft/instrument (known: "
+                       f"{', '.join(sorted(INSTRUMENT.keys()))}).")
+        elif sc_name not in AWS_MISSION_DIR:
+            gs.warning(f"iak requested but spacecraft={sc_name} has no "
+                       "known mission slug on the ISIS3 AWS mirror.")
+        else:
+            gs.message("Finding IAK (ISIS3 AWS mirror) …")
+            aws_prefix = f"usgs_data/{AWS_MISSION_DIR[sc_name]}/kernels/iak/"
+            files = _list_s3_dir(aws_prefix, timeout)
+            matches = sorted(f for f in files
+                              if f.startswith(instr["iak_prefix"])
+                              and f.endswith(".ti"))
+            fn = matches[-1] if matches else None
+            if fn:
+                url = f"{AWS_ISIS_DATA}/{aws_prefix}{fn}"
+                out_dir = os.path.join(dest, "iak")
+                os.makedirs(out_dir, exist_ok=True)
+                dst = os.path.join(out_dir, fn)
+                if flag_list:
+                    gs.message(f"  [iak] {fn}  ({url})")
+                else:
+                    _download(url, dst, timeout, flag_force)
+                downloaded.append(dst)
+            else:
+                gs.warning(f"No IAK matching '{instr['iak_prefix']}*' found "
+                           f"under {AWS_ISIS_DATA}/{aws_prefix}")
 
     # ── FK ────────────────────────────────────────────────────────────────
     if "fk" in ktypes:

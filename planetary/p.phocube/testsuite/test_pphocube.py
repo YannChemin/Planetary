@@ -51,6 +51,44 @@ def _find_real_dsk():
     return None
 
 
+def _find_crism_test_kernels():
+    """Locate the full real CRISM kernel set + raw FRT cube on this
+    machine, used by the -c (camera mode) test below. Not bundled (the
+    CK/SPK alone are tens of MB) -- skips on hosts without a local copy.
+    See RSDATA/Mars/spice_test/ and RSDATA/Mars/FRT00003BFB_*  on the dev
+    machine this was verified on. crismAddendum001.ti is the real ISIS3
+    instrument addendum kernel (BORESIGHT_SAMPLE/PIXEL_PITCH/
+    FOCAL_LENGTH -- not in the public NAIF IK), fetched from
+    https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/mro/
+    kernels/iak/crismAddendum001.ti (see TODO.md)."""
+    d = os.path.expanduser("~/RSDATA/Mars/spice_test")
+    lbl = os.path.expanduser(
+        "~/RSDATA/Mars/FRT00003BFB_01_IF156S_TRR3.LBL")
+    needed = {
+        "spk1": "mar063.bsp", "spk2": "mro_psp2.bsp",
+        "ck1": "mro_crm_psp_070101_070131.bc",
+        "ck2": "mro_sc_psp_070102_070108.bc",
+        "sclk1": "MRO_SCLKSCET.00119.tsc",
+        "sclk2": "MRO_SCLKSCET.00119.65536.tsc",
+        "fk": "mro_v17.tf", "ik1": "mro_crism_v10.ti",
+        "ik2": "crismAddendum001.ti",
+    }
+    paths = {k: os.path.join(d, v) for k, v in needed.items()}
+    lsk_pck_dirs = [d, os.path.expanduser("~/RSDATA/Moon/spice_test"),
+                    os.path.expanduser("~/RSDATA/Saturn/kernels/lsk"),
+                    os.path.expanduser("~/RSDATA/Saturn/kernels/pck")]
+    lsk = [f for dd in lsk_pck_dirs for f in glob.glob(os.path.join(dd, "naif*.tls"))]
+    pck = [f for dd in lsk_pck_dirs for f in glob.glob(os.path.join(dd, "pck*.tpc"))]
+    if not lsk or not pck or not os.path.exists(lbl):
+        return None
+    if not all(os.path.exists(p) for p in paths.values()):
+        return None
+    paths["lsk"] = lsk[0]
+    paths["pck"] = pck[0]
+    paths["lbl"] = lbl
+    return paths
+
+
 class TestPphocube(TestCase):
     """Test p.phocube module.
 
@@ -326,6 +364,66 @@ class TestPphocube(TestCase):
         # and a working ISIS3 environment; tests will be extended once a
         # reference data fixture is established.
         self.skipTest("Full ISIS3 cross-validation requires reference data fixture")
+
+    def test_camera_mode_requires_instrument(self):
+        """-c without instrument= must G_fatal_error, not guess."""
+        mapname = "pphocube_test_cam_noinstr"
+        self.runModule("r.mapcalc",
+                       expression=f"{mapname} = 1.0", overwrite=True)
+        try:
+            module = SimpleModule(
+                "p.phocube", input=mapname, output="pphocube_test_cam_out",
+                flags="ci")
+            self.assertModuleFail(module, msg="expected G_fatal_error")
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           name=mapname, quiet=True)
+
+    def test_camera_mode_real_crism_geometry(self):
+        """Real-kernel correctness check for -c: the real FRT00003BFB
+        CRISM observation, real MRO/CRISM kernels (including the
+        crismAddendum001.ti instrument addendum kernel -- see
+        _find_crism_test_kernels and TODO.md), in a PROJECTION_XY
+        (un-georeferenced pixel/line) location. Confirms the full
+        pinhole-camera-model -> sincpt/ilumin pipeline produces a 100%
+        pixel hit rate and lat/lon matching Mawrth Vallis's known
+        location (~22.4N, 341E), not just crash-free output."""
+        kernels = _find_crism_test_kernels()
+        if not kernels:
+            self.skipTest("no local CRISM test kernel set found "
+                          "(see _find_crism_test_kernels)")
+
+        mapname = "pphocube_test_crism"
+        out_prefix = "pphocube_test_crism_out"
+        self.runModule("p.in.pds3", input=kernels["lbl"], output=mapname,
+                       overwrite=True, quiet=True)
+        self.runModule("g.region", raster=f"{mapname}.1")
+        self.runModule(
+            "p.spiceinit", map=f"{mapname}.1", target="MARS",
+            observer="MRO", time="2007-01-05T01:26:56.855",
+            spk=f"{kernels['spk1']},{kernels['spk2']}",
+            ck=f"{kernels['ck1']},{kernels['ck2']}",
+            sclk=f"{kernels['sclk1']},{kernels['sclk2']}",
+            fk=kernels["fk"], ik=f"{kernels['ik1']},{kernels['ik2']}",
+            pck=kernels["pck"], lsk=kernels["lsk"])
+        try:
+            module = SimpleModule(
+                "p.phocube", flags="cietn", input=f"{mapname}.1",
+                output=out_prefix, instrument="CRISM_VNIR", target="MARS")
+            self.assertModule(module)
+
+            lat = gs.parse_command("r.univar", flags="g",
+                                   map=f"{out_prefix}_lat")
+            lon = gs.parse_command("r.univar", flags="g",
+                                   map=f"{out_prefix}_lon")
+            self.assertEqual(int(lat["null_cells"]), 0,
+                             "expected 100% pixel hit rate (0 NULL)")
+            self.assertAlmostEqual(float(lat["mean"]), 22.149, delta=0.05)
+            self.assertAlmostEqual(float(lon["mean"]), -17.95, delta=0.1)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname}.*,{out_prefix}_*",
+                           quiet=True)
 
 
 if __name__ == "__main__":

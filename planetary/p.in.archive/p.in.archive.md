@@ -75,6 +75,17 @@ to the appropriate GRASS importer:
 
 ## NOTES
 
+### Raw instrument cubes (`crism=`/`m3=`/`vims=`/`omega=`) need an unprojected project
+
+These four import **raw, non-georeferenced pixel/line instrument-frame
+cubes** (that's the whole reason `p.phocube`/`p.spiceinit` exist -- to
+attach real geometry to them afterwards), not map-projected products.
+Their automatic region pre-sizing fails with `Illegal latitude for
+North` if run inside a geographic (lat/lon) GRASS project -- use an
+unprojected one, e.g. `grass --tmp-project XY --exec p.in.archive
+crism=... output=...` for ad-hoc use. `cog=`/`doi=`/`lid=`/`search=`
+products are unaffected (they're already map-projected).
+
 ### Spatial pre-filtering from the active GRASS region
 
 On startup *p.in.archive* reads the current GRASS computational
