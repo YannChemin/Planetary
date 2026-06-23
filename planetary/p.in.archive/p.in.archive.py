@@ -687,6 +687,25 @@ def _pds3_label_field(lbl_path, key):
     return None
 
 
+_RE_FILTER_NAME = re.compile(r'FILTER_NAME\s*=\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)')
+
+
+def _pds3_filter_pair(lbl_path):
+    """Parse a Cassini ISS-style 'FILTER_NAME = ("CL1","CL2")' 2-tuple from
+    a PDS3 label. Returns "F1/F2" (matching PlanetaryMetadata.filter_name's
+    documented convention) or None. p.phocube's -c camera model needs both
+    filter names to look up the right INS-<id>_<F1>_<F2>_FOCAL_LENGTH key
+    in the real IAK (no single focal length is correct for ISS -- it
+    varies per filter combination)."""
+    try:
+        with open(lbl_path, "r", errors="ignore") as fh:
+            text = fh.read()
+    except OSError:
+        return None
+    m = _RE_FILTER_NAME.search(text)
+    return f"{m.group(1)}/{m.group(2)}" if m else None
+
+
 def _attach_crism_spice(local_lbl, map_band1, body_slug):
     """Discover and attach real NAIF SPICE kernels for a just-imported CRISM
     TRDR cube, so p.phocube -c can run without further manual setup.
@@ -1756,6 +1775,15 @@ def main():
             if tgt_key:
                 _body_val = str(rows[0].get(tgt_key, _body_val or "")).upper() or _body_val
 
+        # ISS NAC/WAC's p.phocube -c camera model needs the real filter
+        # pair (no single focal length is correct -- it varies per filter
+        # combination, e.g. INS-82360_CL1_CL2_FOCAL_LENGTH) -- read it
+        # from the real label, same convention p_meta.filter_name already
+        # documents ("F1/F2").
+        _filter_val = None
+        if _sensor in ("CASSINI_ISS_NAC", "CASSINI_ISS_WAC") and lbl_fname:
+            _filter_val = _pds3_filter_pair(lbl_fname)
+
         # p.in.pds3 already wrote planetary.json for this map (generic
         # sensor/mission from the label itself); write_planetary_metadata()
         # is create-only and would silently skip here, so update the
@@ -1763,9 +1791,10 @@ def main():
         _meta_target = f"{opt_output}.1" if ext == ".qub" else opt_output
         if p_meta.PlanetaryMetadata.exists(_meta_target):
             meta = p_meta.PlanetaryMetadata.load(_meta_target)
-            if _sensor:    meta.sensor = _sensor
+            if _sensor:     meta.sensor = _sensor
             meta.mission = "CASSINI"
-            if _body_val: meta.body = _body_val
+            if _body_val:   meta.body = _body_val
+            if _filter_val: meta.filter_name = _filter_val
             meta.pds_product_id = opus_id
             meta.source_file = dl_url
             meta.add_history_entry(" ".join(sys.argv))
@@ -1779,6 +1808,7 @@ def main():
                 sensor=_sensor,
                 mission="CASSINI",
                 body=_body_val,
+                filter_name=_filter_val,
                 pds_product_id=opus_id,
                 source_file=dl_url,
             )

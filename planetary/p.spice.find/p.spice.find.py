@@ -28,7 +28,7 @@
 # % key: instrument
 # % type: string
 # % label: Instrument name, for instruments needing extra kernels beyond the spacecraft default
-# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK), the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK), and (with kernels=...,iak) the crismAddendum IAK that CRISM's camera model needs. ISS_NAC, ISS_WA (CASSINI) -- fetches the IssNAAddendum/IssWAAddendum IAK (with kernels=...,iak) that their pinhole camera models need.
+# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK), the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK), and (with kernels=...,iak) the crismAddendum IAK that CRISM's camera model needs. ISS_NAC, ISS_WAC (CASSINI) -- fetches the IssNAAddendum/IssWAAddendum IAK (with kernels=...,iak) that their pinhole camera models need.
 # % required: no
 # %end
 
@@ -201,7 +201,7 @@ INSTRUMENT = {
         "ik":              "cas_iss_v10.ti",
         "iak_prefix":      "IssNAAddendum",
     },
-    "ISS_WA": {
+    "ISS_WAC": {
         "spacecraft":      "CASSINI",
         "ik":              "cas_iss_v10.ti",
         "iak_prefix":      "IssWAAddendum",

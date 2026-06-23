@@ -155,7 +155,7 @@ real divergence from the ellipsoid approximation — Phobos's well-known
 large-scale irregularity (e.g. the Stickney crater). All four are covered
 by regression tests in `testsuite/test_pphocube.py`.
 
-### Camera mode (`-c`): real, but not yet verified correct
+### Camera mode (`-c`): CRISM and Cassini ISS NAC/WAC, both verified correct
 
 `-c` reuses the same real `sincpt`/`ilumin` calls already verified
 correct by `-s` mode (above), driven by a real per-pixel ray instead of

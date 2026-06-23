@@ -161,18 +161,37 @@ static void uppercase_copy(char *dst, size_t n, const char *src)
 }
 
 /* ------------------------------------------------------------------ */
-/* Camera mode (-c): CRISM-specific instrument camera model            */
+/* Camera mode (-c): pinhole instrument camera models                  */
 /*                                                                      */
-/* CRISM (VNIR detector -74017 / IR detector -74018) is modeled the    */
-/* same way ISIS3's own CrismCamera does: a standard pinhole focal-     */
-/* plane map, band-independent (ISIS3's CrismCamera::SetBand() is a    */
-/* documented no-op). The boresight/pixel-pitch/focal-length values    */
-/* are NOT in the public NAIF IK (mro_crism_v10.ti) -- they live in     */
-/* ISIS3's separately-distributed instrument addendum kernel,          */
-/* crismAddendum001.ti (fetched from the ISIS3 AWS data mirror:        */
-/* https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/mro/      */
-/* kernels/iak/crismAddendum001.ti). That file must be attached         */
-/* alongside mro_crism_v10.ti via p.spiceinit's ik= option.             */
+/* CRISM (VNIR detector -74017 / IR detector -74018) and Cassini ISS    */
+/* (NAC -82360 / WAC -82361) are both modeled as a standard pinhole     */
+/* focal-plane map, the same way ISIS3's own camera classes do. The     */
+/* boresight/pixel-pitch/focal-length/distortion values are NOT in the */
+/* public NAIF IK -- they live in ISIS3's separately-distributed        */
+/* instrument addendum kernels (fetched from the ISIS3 AWS data        */
+/* mirror, see p.spice.find's kernels=...,iak), which must be attached  */
+/* alongside the regular IK via p.spiceinit's ik= option:               */
+/*   CRISM_VNIR/CRISM_IR : crismAddendum001.ti                          */
+/*   ISS_NAC             : IssNAAddendum005.ti                          */
+/*   ISS_WAC             : IssWAAddendum005.ti                          */
+/*                                                                      */
+/* CRISM is 1-D (cross-track sample only, boresight_line/K1 stay 0) --  */
+/* per-line pointing comes from the gimbal CK over time instead. ISS is */
+/* a real 2-D framing camera with a single static boresight per frame   */
+/* and genuine radial lens distortion (K1, ISIS3's own                  */
+/* RadialDistortionMap convention: ux=dx*(1+K1*r2), uy=dy*(1+K1*r2)).    */
+/* ISS's focal length also varies per filter-pair (FOCAL_LENGTH is not  */
+/* one IK keyword but dozens, keyed "INS<id>_<F1>_<F2>_FOCAL_LENGTH" --  */
+/* filter1_opt/filter2_opt come from -c's filter1=/filter2= or, when     */
+/* unset, the raster's own p_meta "filter_name" sidecar field (set by   */
+/* p.in.archive's OPUS ISS import), falling back to the IAK's own       */
+/* DEFAULT_FOCAL_LENGTH (its comment: "not being used... but was left   */
+/* in") with a warning if neither is available -- a real, IAK-          */
+/* documented fallback, unlike CRISM's discredited CAMERA_COEFF guess.  */
+/* ISS also requires the IAK's own custom frame (e.g.                   */
+/* CASSINI_ISS_NAC_USGS, a 180-degree fix for a real, documented gap in */
+/* NAIF's own cas_v*.tf), not the bare NAIF frame -- resolvable once the */
+/* IAK is furnsh'd via ik=, same mechanism as its other keywords.       */
 /* ------------------------------------------------------------------ */
 typedef struct {
     int    naif_id;
@@ -181,11 +200,22 @@ typedef struct {
     double boresight_line;
     double pixel_pitch;
     double focal_length;
-} CrismCameraModel;
+    double k1;
+    int    is_framing;  /* 1: line is a real focal-plane offset (ISS).
+                          * 0: line is time, not focal-plane geometry
+                          * (CRISM) -- per-line pointing instead comes
+                          * from the gimbal CK; dy must stay 0. */
+} PinholeCameraModel;
 
-static void load_crism_camera_model(const char *instrument, CrismCameraModel *cam)
+static void load_pinhole_camera_model(const char *instrument,
+                                       const char *filter1_opt,
+                                       const char *filter2_opt,
+                                       const char *input_map,
+                                       PinholeCameraModel *cam)
 {
     memset(cam, 0, sizeof(*cam));
+
+    int is_iss = 0;
 
     if (strcmp(instrument, "CRISM_VNIR") == 0) {
         cam->naif_id = -74017;
@@ -195,25 +225,35 @@ static void load_crism_camera_model(const char *instrument, CrismCameraModel *ca
         cam->naif_id = -74018;
         snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_IR");
     }
+    else if (strcmp(instrument, "ISS_NAC") == 0) {
+        cam->naif_id = -82360;
+        snprintf(cam->frame, sizeof(cam->frame), "CASSINI_ISS_NAC_USGS");
+        is_iss = 1;
+        cam->is_framing = 1;
+    }
+    else if (strcmp(instrument, "ISS_WAC") == 0) {
+        cam->naif_id = -82361;
+        snprintf(cam->frame, sizeof(cam->frame), "CASSINI_ISS_WAC_USGS");
+        is_iss = 1;
+        cam->is_framing = 1;
+    }
     else
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
-                        "(v1 supports only CRISM_VNIR, CRISM_IR)."), instrument);
+                        "(supports CRISM_VNIR, CRISM_IR, ISS_NAC, ISS_WAC)."),
+                       instrument);
 
     char varname[80];
     int n;
+    const char *iak_hint = is_iss
+        ? "the IssNAAddendum/IssWAAddendum instrument addendum kernel"
+        : "the CRISM instrument addendum kernel (crismAddendum001.ti)";
 
     snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->pixel_pitch) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
-                        "IK -- has the CRISM instrument addendum kernel "
-                        "(crismAddendum001.ti) been attached via "
-                        "p.spiceinit's ik= option, in addition to "
-                        "mro_crism_v10.ti?"), varname);
-
-    snprintf(varname, sizeof(varname), "INS%d_FOCAL_LENGTH", cam->naif_id);
-    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
-        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
-                       varname);
+                        "IK -- has %s been attached via p.spiceinit's ik= "
+                        "option, in addition to the regular IK?"),
+                       varname, iak_hint);
 
     snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_SAMPLE", cam->naif_id);
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_sample) < 0 || n != 1)
@@ -224,6 +264,68 @@ static void load_crism_camera_model(const char *instrument, CrismCameraModel *ca
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_line) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                        varname);
+
+    if (!is_iss) {
+        snprintf(varname, sizeof(varname), "INS%d_FOCAL_LENGTH", cam->naif_id);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                           varname);
+        return;
+    }
+
+    /* ISS: real radial distortion, always present. */
+    snprintf(varname, sizeof(varname), "INS%d_K1", cam->naif_id);
+    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->k1) < 0 || n != 1)
+        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                       varname);
+
+    /* ISS: focal length varies per filter pair -- resolve filter1/filter2
+     * from -c's own options, else the raster's p_meta sidecar, else fall
+     * back to the IAK's own DEFAULT_FOCAL_LENGTH (documented fallback). */
+    char f1[32] = "", f2[32] = "";
+    if (filter1_opt) snprintf(f1, sizeof(f1), "%s", filter1_opt);
+    if (filter2_opt) snprintf(f2, sizeof(f2), "%s", filter2_opt);
+
+    if (!f1[0] || !f2[0]) {
+        char filt_buf[64];
+        if (p_meta_read_string_field(input_map, "raster", "filter_name",
+                                      filt_buf, sizeof(filt_buf)) == 0) {
+            char *slash = strchr(filt_buf, '/');
+            if (slash) {
+                *slash = '\0';
+                snprintf(f1, sizeof(f1), "%s", filt_buf);
+                snprintf(f2, sizeof(f2), "%s", slash + 1);
+            }
+        }
+    }
+
+    int got_focal = 0;
+    if (f1[0] && f2[0]) {
+        snprintf(varname, sizeof(varname), "INS%d_%s_%s_FOCAL_LENGTH",
+                 cam->naif_id, f1, f2);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) == 0 && n == 1)
+            got_focal = 1;
+        else
+            G_warning(_("Camera mode (-c): %s not found in the loaded IAK "
+                        "(wrong filter order? real keys are label order, "
+                        "e.g. CL1_CL2 not CL2_CL1) -- falling back to "
+                        "DEFAULT_FOCAL_LENGTH."), varname);
+    }
+    if (!got_focal) {
+        snprintf(varname, sizeof(varname), "INS%d_DEFAULT_FOCAL_LENGTH", cam->naif_id);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): no usable FOCAL_LENGTH found "
+                            "(no filter1=/filter2=, no 'filter_name' in the "
+                            "raster's planetary.json, and %s missing too)."),
+                           varname);
+        if (!f1[0] || !f2[0])
+            G_warning(_("Camera mode (-c): no filter1=/filter2= given and no "
+                        "'filter_name' in this raster's planetary.json -- "
+                        "using %s (the IAK's own comment: 'not being used... "
+                        "but was left in' -- real images always have a known "
+                        "filter pair; pass filter1=/filter2= for an accurate "
+                        "result)."), varname);
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -247,7 +349,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_target, *opt_a, *opt_b, *opt_c;
     struct Option  *opt_sun_x, *opt_sun_y, *opt_sun_z;
     struct Option  *opt_obs_x, *opt_obs_y, *opt_obs_z;
-    struct Option  *opt_instrument;
+    struct Option  *opt_instrument, *opt_filter1, *opt_filter2;
     struct Flag    *flag_inc, *flag_emi, *flag_pha, *flag_lat;
     struct Flag    *flag_lon, *flag_rad, *flag_res, *flag_all;
     struct Flag    *flag_spice, *flag_camera;
@@ -386,8 +488,25 @@ int main(int argc, char *argv[])
     opt_instrument->key         = "instrument";
     opt_instrument->type        = TYPE_STRING;
     opt_instrument->required    = NO;
-    opt_instrument->options     = "CRISM_VNIR,CRISM_IR";
-    opt_instrument->description = _("Instrument camera model to use with -c (v1: CRISM only)");
+    opt_instrument->options     = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC";
+    opt_instrument->description = _("Instrument camera model to use with -c");
+
+    opt_filter1 = G_define_option();
+    opt_filter1->key         = "filter1";
+    opt_filter1->type        = TYPE_STRING;
+    opt_filter1->required    = NO;
+    opt_filter1->description = _("ISS_NAC/ISS_WAC: first filter wheel position "
+                                  "(e.g. CL1) -- focal length varies per filter "
+                                  "pair; default: read from the raster's own "
+                                  "planetary.json 'filter_name', set by "
+                                  "p.in.archive's OPUS ISS import");
+
+    opt_filter2 = G_define_option();
+    opt_filter2->key         = "filter2";
+    opt_filter2->type        = TYPE_STRING;
+    opt_filter2->required    = NO;
+    opt_filter2->description = _("ISS_NAC/ISS_WAC: second filter wheel position "
+                                  "(e.g. CL2)");
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -461,10 +580,15 @@ int main(int argc, char *argv[])
                 opt_instrument->answer = "CRISM_VNIR";
             else if (strcmp(sensor_buf, "MRO_CRISM_IR") == 0)
                 opt_instrument->answer = "CRISM_IR";
+            else if (strcmp(sensor_buf, "CASSINI_ISS_NAC") == 0)
+                opt_instrument->answer = "ISS_NAC";
+            else if (strcmp(sensor_buf, "CASSINI_ISS_WAC") == 0)
+                opt_instrument->answer = "ISS_WAC";
         }
     }
     if (camera_mode && !opt_instrument->answer)
-        G_fatal_error(_("-c requires instrument= (v1: CRISM_VNIR or CRISM_IR)."));
+        G_fatal_error(_("-c requires instrument= (CRISM_VNIR, CRISM_IR, "
+                        "ISS_NAC, or ISS_WAC)."));
 
     /* Projection handling for -s: a real geographic/projected CRS is
      * required (see NOTES) -- an un-georeferenced pixel/line grid
@@ -539,7 +663,7 @@ int main(int argc, char *argv[])
     /* No projection/region-CRS handling needed -- row/col are just       */
     /* (line, sample) indices into the camera model, not coordinates.     */
     /* ---------------------------------------------------------------- */
-    CrismCameraModel cam;
+    PinholeCameraModel cam;
     const char *camera_method = "Ellipsoid";
 
     if (camera_mode) {
@@ -566,11 +690,13 @@ int main(int argc, char *argv[])
         if (spice_info.have_dsk)
             camera_method = "DSK/Unprioritized";
 
-        load_crism_camera_model(opt_instrument->answer, &cam);
+        load_pinhole_camera_model(opt_instrument->answer, opt_filter1->answer,
+                                   opt_filter2->answer, input, &cam);
         G_message(_("Camera mode: instrument=%s frame=%s focal_length=%.3f mm "
-                    "pixel_pitch=%.3f mm boresight_sample=%.1f"),
+                    "pixel_pitch=%.3f mm boresight=(%.1f,%.1f) k1=%g"),
                    opt_instrument->answer, cam.frame, cam.focal_length,
-                   cam.pixel_pitch, cam.boresight_sample);
+                   cam.pixel_pitch, cam.boresight_sample, cam.boresight_line,
+                   cam.k1);
     }
 
     /* ---------------------------------------------------------------- */
@@ -730,21 +856,37 @@ int main(int argc, char *argv[])
         }
         else if (camera_mode) {
             /* Camera mode: build a real per-pixel look vector from the
-             * CRISM pinhole focal-plane map (same convention as ISIS3's
-             * CrismCamera: dx = (sample - boresight_sample)*pixel_pitch,
-             * dz = focal_length, in the camera frame's own X/Z axes) and
-             * intersect it with the target surface via sincpt -- row/col
-             * here are real (line, sample) indices into the raw cube,
-             * not coordinates; the surface point (and hence lat/lon) is
-             * *found*, not known in advance, unlike -s mode. */
+             * instrument's pinhole focal-plane map (same convention as
+             * ISIS3's own camera classes: dx = (sample -
+             * boresight_sample)*pixel_pitch, dy = (line -
+             * boresight_line)*pixel_pitch, dz = focal_length, in the
+             * camera frame's own X/Y/Z axes -- CRISM stays 1-D since its
+             * boresight_line/k1 are 0 and per-line pointing instead comes
+             * from the gimbal CK over time; ISS is a real 2-D framing
+             * camera with one static pointing per frame plus genuine
+             * radial distortion) and intersect it with the target surface
+             * via sincpt -- row/col here are real (line, sample) indices
+             * into the raw cube, not coordinates; the surface point (and
+             * hence lat/lon) is *found*, not known in advance, unlike -s
+             * mode. */
             double et_row = et;
             if (spice_info.have_line_rate)
                 et_row = et + (row - (nrows - 1) / 2.0) * spice_info.line_rate;
 
+            double dy = 0.0;
+            if (cam.is_framing) {
+                double line_1based = row + 1.0;
+                dy = (line_1based - cam.boresight_line) * cam.pixel_pitch;
+            }
+
             for (int col = 0; col < ncols; col++) {
                 double sample_1based = col + 1.0;
                 double dx = (sample_1based - cam.boresight_sample) * cam.pixel_pitch;
-                double dvec[3] = { dx, 0.0, cam.focal_length };
+
+                double r2 = dx * dx + dy * dy;
+                double ux = dx * (1.0 + cam.k1 * r2);
+                double uy = dy * (1.0 + cam.k1 * r2);
+                double dvec[3] = { ux, uy, cam.focal_length };
 
                 double pt[3], srfvec[3], trgepc;
                 int hit = p_spice_sincpt(camera_method, target_upper, et_row,

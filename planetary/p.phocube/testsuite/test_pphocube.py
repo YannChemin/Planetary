@@ -89,6 +89,39 @@ def _find_crism_test_kernels():
     return paths
 
 
+def _find_iss_test_kernels():
+    """Locate the real Cassini ISS kernel set + raw NAC/WAC frames on this
+    machine, used by the -c (camera mode) ISS tests below. Not bundled
+    (the CK/SPK are several MB) -- skips on hosts without a local copy.
+    See RSDATA/Saturn/spice_test/ and RSDATA/Misc/N1466182140_1_CALIB.*
+    /W1466182067_1_CALIB.* on the dev machine this was verified on.
+    IssNAAddendum005.ti/IssWAAddendum005.ti are the real ISIS3 instrument
+    addendum kernels (BORESIGHT/PIXEL_PITCH/FOCAL_LENGTH/K1 -- not in the
+    public NAIF IK), fetched via p.spice.find's kernels=...,iak (see
+    TODO.md)."""
+    d = os.path.expanduser("~/RSDATA/Saturn/spice_test")
+    nac_lbl = os.path.expanduser("~/RSDATA/Misc/N1466182140_1_CALIB.LBL")
+    wac_lbl = os.path.expanduser("~/RSDATA/Misc/W1466182067_1_CALIB.LBL")
+    needed = {
+        "lsk": "naif0012.tls", "sclk": "cas00172.tsc",
+        "ik": "cas_iss_v10.ti", "iak_nac": "IssNAAddendum005.ti",
+        "iak_wac": "IssWAAddendum005.ti", "fk": "cas_v43.tf",
+        "pck": "cpck_rock_21Jan2011_merged.tpc",
+        "spk": "040615AP_SCPSE_04167_04186.bsp",
+        "ck": "04168_04171ra.bc",
+    }
+    paths = {k: os.path.join(d, v) for k, v in needed.items()}
+    pck2 = glob.glob(os.path.expanduser("~/RSDATA/Saturn/kernels/pck/pck0001*.tpc"))
+    if not pck2 or not os.path.exists(nac_lbl) or not os.path.exists(wac_lbl):
+        return None
+    if not all(os.path.exists(p) for p in paths.values()):
+        return None
+    paths["pck2"] = pck2[0]
+    paths["nac_lbl"] = nac_lbl
+    paths["wac_lbl"] = wac_lbl
+    return paths
+
+
 class TestPphocube(TestCase):
     """Test p.phocube module.
 
@@ -424,6 +457,97 @@ class TestPphocube(TestCase):
             self.runModule("g.remove", flags="f", type="raster",
                            pattern=f"{mapname}.*,{out_prefix}_*",
                            quiet=True)
+
+    def test_camera_mode_real_iss_nac_geometry(self):
+        """Real-kernel correctness check for -c ISS_NAC: a real Cassini
+        ISS NAC frame of Saturn (co-iss-n1466182140, 2004-06-17, filter
+        P0/CB2 -- not in the IAK, exercises the documented
+        DEFAULT_FOCAL_LENGTH fallback too) confirmed via OPUS's own
+        SURFACEGEOsaturn_rangetobody1 field to have Saturn's surface in
+        view. Confirms the full pinhole+K1-distortion+per-filter-focal-
+        length -> sincpt/ilumin pipeline produces a 100% pixel hit rate
+        and physically sane geometry (southern hemisphere, moderate
+        emission/incidence), not just crash-free output."""
+        kernels = _find_iss_test_kernels()
+        if not kernels:
+            self.skipTest("no local Cassini ISS test kernel set found "
+                          "(see _find_iss_test_kernels)")
+
+        mapname = "pphocube_test_iss_nac"
+        out_prefix = "pphocube_test_iss_nac_out"
+        # p.in.pds3 clips/pads to whatever region is currently active
+        # (only a trivial 1x1/0x0 region triggers its own auto-resize-to-
+        # image-dims) -- setUpClass leaves a fixed 10x10 region active,
+        # so reset to 1x1 first, then to the real imported size after.
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        self.runModule("p.in.pds3", input=kernels["nac_lbl"], output=mapname,
+                       overwrite=True, quiet=True)
+        self.runModule("g.region", raster=mapname)
+        self.runModule(
+            "p.spiceinit", map=mapname, target="SATURN", observer="CASSINI",
+            time="2004-169T16:24:48.262",
+            lsk=kernels["lsk"], sclk=kernels["sclk"],
+            ik=f"{kernels['ik']},{kernels['iak_nac']}", fk=kernels["fk"],
+            pck=f"{kernels['pck']},{kernels['pck2']}", spk=kernels["spk"],
+            ck=kernels["ck"])
+        try:
+            module = SimpleModule(
+                "p.phocube", flags="cietn", input=mapname, output=out_prefix,
+                instrument="ISS_NAC", target="SATURN",
+                filter1="P0", filter2="CB2")
+            self.assertModule(module)
+
+            lat = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lat")
+            self.assertEqual(int(lat["null_cells"]), 0,
+                             "expected 100% pixel hit rate (0 NULL)")
+            self.assertLess(float(lat["max"]), 0,
+                            "expected this frame to view Saturn's southern "
+                            "hemisphere only")
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname},{out_prefix}_*", quiet=True)
+
+    def test_camera_mode_real_iss_wac_geometry(self):
+        """Real-kernel correctness check for -c ISS_WAC: a real Cassini
+        ISS WAC frame of Saturn (co-iss-w1466182067, same observation
+        sequence as the NAC test above, filter CB2/IRP0 -- exercises the
+        exact-filter-match path, not the fallback). WAC's wide FOV should
+        capture the *whole* disk at this 8.29M km range -- confirms a
+        small (~4%) but nonzero hit fraction with full -180..180 deg
+        longitude coverage, not just crash-free output."""
+        kernels = _find_iss_test_kernels()
+        if not kernels:
+            self.skipTest("no local Cassini ISS test kernel set found "
+                          "(see _find_iss_test_kernels)")
+
+        mapname = "pphocube_test_iss_wac"
+        out_prefix = "pphocube_test_iss_wac_out"
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        self.runModule("p.in.pds3", input=kernels["wac_lbl"], output=mapname,
+                       overwrite=True, quiet=True)
+        self.runModule("g.region", raster=mapname)
+        self.runModule(
+            "p.spiceinit", map=mapname, target="SATURN", observer="CASSINI",
+            time="2004-169T16:23:39.198",
+            lsk=kernels["lsk"], sclk=kernels["sclk"],
+            ik=f"{kernels['ik']},{kernels['iak_wac']}", fk=kernels["fk"],
+            pck=f"{kernels['pck']},{kernels['pck2']}", spk=kernels["spk"],
+            ck=kernels["ck"])
+        try:
+            module = SimpleModule(
+                "p.phocube", flags="cietn", input=mapname, output=out_prefix,
+                instrument="ISS_WAC", target="SATURN",
+                filter1="CB2", filter2="IRP0")
+            self.assertModule(module)
+
+            lon = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lon")
+            self.assertGreater(int(lon["n"]), 0,
+                               "expected at least some pixels to hit Saturn's disk")
+            self.assertLess(float(lon["min"]), -170)
+            self.assertGreater(float(lon["max"]), 170)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname},{out_prefix}_*", quiet=True)
 
 
 if __name__ == "__main__":
