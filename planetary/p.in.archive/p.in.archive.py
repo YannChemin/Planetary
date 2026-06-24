@@ -706,6 +706,43 @@ def _pds3_filter_pair(lbl_path):
     return f"{m.group(1)}/{m.group(2)}" if m else None
 
 
+_RE_SAMPLING_MODE_ID = re.compile(
+    r'SAMPLING_MODE_ID\s*=\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)')
+_RE_VIMS_INT_FIELD = {
+    "x_offset":    re.compile(r'X_OFFSET\s*=\s*(-?\d+)'),
+    "z_offset":    re.compile(r'Z_OFFSET\s*=\s*(-?\d+)'),
+    "swath_width": re.compile(r'SWATH_WIDTH\s*=\s*(-?\d+)'),
+    "swath_length": re.compile(r'SWATH_LENGTH\s*=\s*(-?\d+)'),
+}
+
+
+def _pds3_vims_geometry(lbl_path):
+    """Parse VIMS's real per-cube camera-model geometry fields from a PDS3
+    label: SAMPLING_MODE_ID = ("<IR mode>","<visible mode>") plus the
+    shared X_OFFSET/Z_OFFSET/SWATH_WIDTH/SWATH_LENGTH (confirmed against
+    ISIS3's own vims2isis/main.cpp::TranslateVimsLabels(), which assigns
+    SAMPLING_MODE_ID[0] to IR and [1] to VIS). p.phocube -c
+    instrument=VIMS_IR/VIMS_VIS needs these -- they are real per-cube
+    Instrument-group label values, not SPICE kernel data (see TODO.md).
+    Returns a dict (missing fields omitted) or {} if the label can't be
+    read."""
+    try:
+        with open(lbl_path, "r", errors="ignore") as fh:
+            text = fh.read()
+    except OSError:
+        return {}
+    out = {}
+    m = _RE_SAMPLING_MODE_ID.search(text)
+    if m:
+        out["sampling_mode_ir"] = m.group(1)
+        out["sampling_mode_vis"] = m.group(2)
+    for field, pattern in _RE_VIMS_INT_FIELD.items():
+        m = pattern.search(text)
+        if m:
+            out[field] = int(m.group(1))
+    return out
+
+
 def _attach_crism_spice(local_lbl, map_band1, body_slug):
     """Discover and attach real NAIF SPICE kernels for a just-imported CRISM
     TRDR cube, so p.phocube -c can run without further manual setup.
@@ -1784,6 +1821,14 @@ def main():
         if _sensor in ("CASSINI_ISS_NAC", "CASSINI_ISS_WAC") and lbl_fname:
             _filter_val = _pds3_filter_pair(lbl_fname)
 
+        # VIMS's p.phocube -c instrument=VIMS_IR/VIMS_VIS camera model
+        # needs the real per-cube SamplingMode/XOffset/ZOffset/SwathWidth/
+        # SwathLength -- none of these live in any SPICE kernel, only the
+        # PDS3 label's Instrument group (see TODO.md).
+        _vims_geom = {}
+        if _sensor == "CASSINI_VIMS" and lbl_fname:
+            _vims_geom = _pds3_vims_geometry(lbl_fname)
+
         # p.in.pds3 already wrote planetary.json for this map (generic
         # sensor/mission from the label itself); write_planetary_metadata()
         # is create-only and would silently skip here, so update the
@@ -1795,6 +1840,8 @@ def main():
             meta.mission = "CASSINI"
             if _body_val:   meta.body = _body_val
             if _filter_val: meta.filter_name = _filter_val
+            for k, v in _vims_geom.items():
+                setattr(meta, k, v)
             meta.pds_product_id = opus_id
             meta.source_file = dl_url
             meta.add_history_entry(" ".join(sys.argv))
@@ -1809,6 +1856,7 @@ def main():
                 mission="CASSINI",
                 body=_body_val,
                 filter_name=_filter_val,
+                **_vims_geom,
                 pds_product_id=opus_id,
                 source_file=dl_url,
             )

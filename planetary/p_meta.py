@@ -100,6 +100,18 @@ class PlanetaryMetadata:
     projection: str | None = None     # ring-plane projection mode: radlong|polar
     filter_name: str | None = None    # ISS filter combination, e.g. "CL1/CL2", "RED/GRN"
 
+    # VIMS camera-model geometry (p.phocube -c instrument=VIMS_IR/VIMS_VIS
+    # needs these; they're real PDS3 label Instrument-group fields, not
+    # SPICE kernel values -- see TODO.md). sampling_mode_ir/_vis come from
+    # the label's SAMPLING_MODE_ID 2-tuple (IR, then visible); x_offset/
+    # z_offset/swath_width/swath_length are shared by both channels.
+    sampling_mode_ir: str | None = None
+    sampling_mode_vis: str | None = None
+    x_offset: int | None = None
+    z_offset: int | None = None
+    swath_width: int | None = None
+    swath_length: int | None = None
+
     # --- provenance ---
     processing_history: list[dict[str, Any]] = field(default_factory=list)
     extended_metadata: dict[str, Any] = field(default_factory=dict)
@@ -154,6 +166,18 @@ class PlanetaryMetadata:
             block["projection"] = self.projection
         if self.filter_name:
             block["filter_name"] = self.filter_name
+        if self.sampling_mode_ir:
+            block["sampling_mode_ir"] = self.sampling_mode_ir
+        if self.sampling_mode_vis:
+            block["sampling_mode_vis"] = self.sampling_mode_vis
+        # Written as strings (not bare JSON numbers): p_meta_read_string_field()
+        # on the C side is a minimal quoted-string-only scanner, not a real
+        # JSON parser -- see libs/p_meta/p_meta.c.
+        for key, val in (("x_offset", self.x_offset), ("z_offset", self.z_offset),
+                         ("swath_width", self.swath_width),
+                         ("swath_length", self.swath_length)):
+            if val is not None:
+                block[key] = str(val)
         return block
 
     def _build_bands(self) -> dict[str, Any]:
@@ -251,6 +275,12 @@ class PlanetaryMetadata:
         meta.spice_kernels = planetary.get("spice_kernels")
         meta.projection = planetary.get("projection")
         meta.filter_name = planetary.get("filter_name")
+        meta.sampling_mode_ir = planetary.get("sampling_mode_ir")
+        meta.sampling_mode_vis = planetary.get("sampling_mode_vis")
+        meta.x_offset = int(planetary["x_offset"]) if "x_offset" in planetary else None
+        meta.z_offset = int(planetary["z_offset"]) if "z_offset" in planetary else None
+        meta.swath_width = int(planetary["swath_width"]) if "swath_width" in planetary else None
+        meta.swath_length = int(planetary["swath_length"]) if "swath_length" in planetary else None
         return meta
 
 

@@ -218,10 +218,13 @@ INSTRUMENT = {
     "VIMS": {
         "spacecraft":      "CASSINI",
         "ik":              "cas_vims_v*",
-        # NOTE: vimsAddendum*.ti only fixes CK_FRAME_ID/NAIF_BODY_CODE
-        # housekeeping, not BORESIGHT/FOCAL_LENGTH -- VIMS's real per-pixel
-        # geometry is a 2-D scan-mirror mapping, not a pinhole; no camera
-        # model uses this yet (see TODO.md).
+        # vimsAddendum*.ti doesn't add BORESIGHT/FOCAL_LENGTH (VIMS's real
+        # geometry is a 2-axis angular scan, not a pinhole -- p.phocube -c
+        # instrument=VIMS_IR/VIMS_VIS ports ISIS3's own VimsGroundMap
+        # formula directly instead). It IS still required: it fixes a
+        # real, documented VIMS_IR/VIMS_V NAIF ID swap bug between the
+        # public IK and the public FK (see TODO.md) -- always fetch it
+        # via kernels=...,iak alongside ik=/fk=.
         "iak_prefix":      "vimsAddendum",
     },
     "OMEGA_SWIR_C": {
