@@ -112,7 +112,7 @@ class TestPcam2map(TestCase):
             ck=kernels["ck"])
         try:
             fwd = SimpleModule(
-                "p.phocube", flags="cn", input=mapname, output=fwd_prefix,
+                "p.phocube", flags="ctn", input=mapname, output=fwd_prefix,
                 instrument="ISS_NAC", target="SATURN",
                 filter1="P0", filter2="CB2")
             self.assertModule(fwd)
