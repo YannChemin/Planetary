@@ -298,6 +298,7 @@ typedef struct {
 static void load_pinhole_camera_model(const char *instrument,
                                        const char *input_map,
                                        const CameraOverrides *ov,
+                                       int image_cols, int image_rows,
                                        PinholeCameraModel *cam)
 {
     memset(cam, 0, sizeof(*cam));
@@ -512,6 +513,37 @@ static void load_pinhole_camera_model(const char *instrument,
                            varname);
         return;
     }
+
+    /* ISS: BORESIGHT_SAMPLE/LINE and PIXEL_PITCH in the IK/IAK are given in
+     * the full-resolution (1x1) detector frame (1024x1024), but real
+     * images are often acquired SUMMED/binned (e.g. INSTRUMENT_MODE_ID=
+     * "SUM2" -> 512x512) -- using the raw IK values directly against a
+     * summed image's own pixel coordinates silently shifts every ray off
+     * by the summing factor. Detect it by comparing the IK's own full-
+     * frame INS<id>_PIXEL_SAMPLES/PIXEL_LINES to this image's actual
+     * dimensions (more robust than parsing INSTRUMENT_MODE_ID text). */
+    double pixel_samples_full = 0.0, pixel_lines_full = 0.0;
+    snprintf(varname, sizeof(varname), "INS%d_PIXEL_SAMPLES", cam->naif_id);
+    int have_ps = (p_spice_gdpool_d(varname, 0, 1, &n, &pixel_samples_full) == 0 && n == 1);
+    snprintf(varname, sizeof(varname), "INS%d_PIXEL_LINES", cam->naif_id);
+    int have_pl = (p_spice_gdpool_d(varname, 0, 1, &n, &pixel_lines_full) == 0 && n == 1);
+
+    double summing_s = 1.0, summing_l = 1.0;
+    if (have_ps && image_cols > 0)
+        summing_s = pixel_samples_full / (double)image_cols;
+    if (have_pl && image_rows > 0)
+        summing_l = pixel_lines_full / (double)image_rows;
+
+    if (summing_s != 1.0 || summing_l != 1.0) {
+        G_message(_("Camera mode (-c): detected summing/binning factor "
+                    "%.0fx%.0f (IK full frame %.0fx%.0f vs image %dx%d) -- "
+                    "adjusting boresight and pixel pitch accordingly."),
+                   summing_s, summing_l, pixel_samples_full, pixel_lines_full,
+                   image_cols, image_rows);
+        cam->boresight_sample = (cam->boresight_sample - 1.0) / summing_s + 1.0;
+        cam->boresight_line   = (cam->boresight_line   - 1.0) / summing_l + 1.0;
+    }
+    cam->pixel_pitch *= (summing_s + summing_l) / 2.0;
 
     /* ISS: real radial distortion, always present. */
     snprintf(varname, sizeof(varname), "INS%d_K1", cam->naif_id);
@@ -971,6 +1003,11 @@ int main(int argc, char *argv[])
     /* No projection/region-CRS handling needed -- row/col are just       */
     /* (line, sample) indices into the camera model, not coordinates.     */
     /* ---------------------------------------------------------------- */
+    struct Cell_head region;
+    G_get_window(&region);
+    int nrows = region.rows;
+    int ncols = region.cols;
+
     PinholeCameraModel cam;
     const char *camera_method = "Ellipsoid";
 
@@ -1008,7 +1045,7 @@ int main(int argc, char *argv[])
             .swath_length = opt_vims_swath_length->answer,
         };
         load_pinhole_camera_model(opt_instrument->answer, input,
-                                   &cam_overrides, &cam);
+                                   &cam_overrides, ncols, nrows, &cam);
         if (cam.is_omega)
             G_message(_("Camera mode: instrument=%s frame=%s "
                         "mirror_center=%.3f DN mirror_slope=%.7f deg/DN"),
@@ -1052,13 +1089,8 @@ int main(int argc, char *argv[])
                        a_km, b_km, c_km);
 
     /* ---------------------------------------------------------------- */
-    /* Get region and compute pixel coordinates → lat/lon                */
+    /* Compute pixel coordinates → lat/lon                                */
     /* ---------------------------------------------------------------- */
-    struct Cell_head region;
-    G_get_window(&region);
-    int nrows = region.rows;
-    int ncols = region.cols;
-
     G_message(_("Computing backplanes for %d x %d pixels ..."), nrows, ncols);
     G_message(_("  Ellipsoid: a=%.3f  b=%.3f  c=%.3f km"), a_km, b_km, c_km);
     if (spice_mode || camera_mode) {

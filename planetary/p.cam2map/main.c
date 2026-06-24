@@ -104,6 +104,7 @@ typedef struct {
 static void load_iss_camera_model(const char *instrument,
                                    const char *input_map,
                                    const char *filter1, const char *filter2,
+                                   int image_cols, int image_rows,
                                    IssCameraModel *cam)
 {
     memset(cam, 0, sizeof(*cam));
@@ -147,6 +148,41 @@ static void load_iss_camera_model(const char *instrument,
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->k1) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                        varname);
+
+    /* BORESIGHT_SAMPLE/LINE and PIXEL_PITCH in the IK/IAK are given in the
+     * full-resolution (1x1) detector frame (e.g. 1024x1024 for ISS NAC/
+     * WAC), but real images are often acquired in a SUMMED (binned) mode
+     * (e.g. INSTRUMENT_MODE_ID="SUM2" -> 512x512) -- using the raw IK
+     * values directly against a summed image's own pixel coordinates
+     * silently misplaces every ray by the summing factor (confirmed via
+     * a real SUM2 Cassini ISS NAC frame: produced a 0% back-projection
+     * hit rate even at the frame's own forward-computed centre lat/lon).
+     * Detect the summing factor by comparing the IK's own full-frame
+     * PIXEL_SAMPLES/PIXEL_LINES to this image's actual dimensions --
+     * more robust than parsing INSTRUMENT_MODE_ID text, and needs no
+     * extra metadata plumbing. */
+    double pixel_samples_full = 0.0, pixel_lines_full = 0.0;
+    snprintf(varname, sizeof(varname), "INS%d_PIXEL_SAMPLES", cam->naif_id);
+    int have_ps = (p_spice_gdpool_d(varname, 0, 1, &n, &pixel_samples_full) == 0 && n == 1);
+    snprintf(varname, sizeof(varname), "INS%d_PIXEL_LINES", cam->naif_id);
+    int have_pl = (p_spice_gdpool_d(varname, 0, 1, &n, &pixel_lines_full) == 0 && n == 1);
+
+    double summing_s = 1.0, summing_l = 1.0;
+    if (have_ps && image_cols > 0)
+        summing_s = pixel_samples_full / (double)image_cols;
+    if (have_pl && image_rows > 0)
+        summing_l = pixel_lines_full / (double)image_rows;
+
+    if (summing_s != 1.0 || summing_l != 1.0) {
+        G_message(_("Camera mode (-c): detected summing/binning factor "
+                    "%.0fx%.0f (IK full frame %.0fx%.0f vs image %dx%d) -- "
+                    "adjusting boresight and pixel pitch accordingly."),
+                   summing_s, summing_l, pixel_samples_full, pixel_lines_full,
+                   image_cols, image_rows);
+        cam->boresight_sample = (cam->boresight_sample - 1.0) / summing_s + 1.0;
+        cam->boresight_line   = (cam->boresight_line   - 1.0) / summing_l + 1.0;
+    }
+    cam->pixel_pitch *= (summing_s + summing_l) / 2.0;
 
     /* Focal length varies per filter pair -- resolve filter1/filter2 from
      * -c's own options, else the raster's p_meta sidecar, else fall back
@@ -464,7 +500,8 @@ int main(int argc, char *argv[])
         snprintf(fixref, sizeof(fixref), "IAU_%s", target_upper);
 
         load_iss_camera_model(opt_instrument->answer, opt_input->answer,
-                               opt_filter1->answer, opt_filter2->answer, &cam);
+                               opt_filter1->answer, opt_filter2->answer,
+                               in_cols, in_rows, &cam);
 
         G_message(_("Camera mode (-c): instrument=%s target=%s observer=%s "
                     "time=%s (et=%.6f)"), opt_instrument->answer, target_upper,
