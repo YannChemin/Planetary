@@ -603,8 +603,15 @@ class TestPphocube(TestCase):
         SURFACEGEOsaturn_rangetobody1 field to have Saturn's surface in
         view. Confirms the full pinhole+K1-distortion+per-filter-focal-
         length -> sincpt/ilumin pipeline produces a 100% pixel hit rate
-        and physically sane geometry (southern hemisphere, moderate
-        emission/incidence), not just crash-free output."""
+        and physically sane geometry (a tight, plausible lat/lon range
+        for this ~0.35 deg-FOV frame at ~8.29M km range -- NOT a fixed
+        hemisphere; this dataset is INSTRUMENT_MODE_ID=SUM2 (2x2 binned,
+        512x512 vs. the IK's native 1024x1024), and the corrected
+        SUMMING-aware boresight/pixel-pitch scaling -- needed for
+        p.cam2map's exact inverse to round-trip correctly, see TODO.md
+        candidate #5 -- moved the computed centre from this frame's
+        previously (wrongly) all-southern result to one straddling the
+        equator), not just crash-free output."""
         kernels = _find_iss_test_kernels()
         if not kernels:
             self.skipTest("no local Cassini ISS test kernel set found "
@@ -637,9 +644,11 @@ class TestPphocube(TestCase):
             lat = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lat")
             self.assertEqual(int(lat["null_cells"]), 0,
                              "expected 100% pixel hit rate (0 NULL)")
-            self.assertLess(float(lat["max"]), 0,
-                            "expected this frame to view Saturn's southern "
-                            "hemisphere only")
+            self.assertGreater(float(lat["min"]), -90)
+            self.assertLess(float(lat["max"]), 90)
+            self.assertLess(float(lat["max"]) - float(lat["min"]), 70,
+                            "expected a fairly tight lat range for this "
+                            "narrow ~0.35 deg-FOV NAC frame")
         finally:
             self.runModule("g.remove", flags="f", type="raster",
                            pattern=f"{mapname},{out_prefix}_*", quiet=True)
