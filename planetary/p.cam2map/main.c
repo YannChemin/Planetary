@@ -405,12 +405,15 @@ int main(int argc, char *argv[])
     G_message(_("Input: %d x %d -> Output: %d x %d"),
                in_rows, in_cols, out_rows, out_cols);
 
-    /* Rast_get_d_row() resamples against the CURRENTLY ACTIVE window, not
-     * the raster's own native grid -- the active window must be set to
-     * the input's own region (in_region) while reading it (for an exact,
-     * unresampled native-pixel read), then switched to the real output
-     * region (out_region) before Rast_open_new()/writing below. */
-    G_set_window(&in_region);
+    /* Rast_get_d_row()/Rast_put_d_row() resample against the raster
+     * library's OWN window cache (R__.rd_window/wr_window), which is
+     * distinct from the GIS library's G__.window and is only synced by
+     * Rast_set_window() (G_set_window() alone leaves it stale at
+     * whatever it was lazily initialised to on the first raster open).
+     * So: Rast_set_window(&in_region) for an exact, unresampled native-
+     * pixel read of the input, then Rast_set_window(&out_region) before
+     * Rast_open_new()/writing below. */
+    Rast_set_window(&in_region);
     int fd_in = Rast_open_old(opt_input->answer, input_mapset);
     DCELL **in_data = (DCELL **)G_malloc((size_t)in_rows * sizeof(DCELL *));
     DCELL *in_buf = Rast_allocate_d_buf();
@@ -421,7 +424,7 @@ int main(int argc, char *argv[])
     }
     Rast_close(fd_in);
     G_free(in_buf);
-    G_set_window(&out_region);
+    Rast_set_window(&out_region);
 
     /* Camera mode (-c) setup: real target/observer/time/kernels from the
      * input's own p.spiceinit history, plus the ISS pinhole camera model.
