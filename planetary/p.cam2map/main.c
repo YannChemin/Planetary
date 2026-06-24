@@ -555,15 +555,46 @@ int main(int argc, char *argv[])
                         double ray[3] = { spoint[0] + pos[0],
                                            spoint[1] + pos[1],
                                            spoint[2] + pos[2] };
-                        double rot[3][3];
-                        if (p_spice_pxform(fixref, cam.frame, et, rot) < 0) {
+                        /* spkpos_c's own docs: for a "received radiation"
+                         * abcorr (LT+S here) and a non-inertial output
+                         * frame, "the orientation of the frame is
+                         * evaluated at et-ltcent" -- so pos's components
+                         * are expressed in fixref AS ORIENTED AT (et-lt),
+                         * not at et. spoint's body-fixed components are
+                         * epoch-independent (Ellipsoid latsrf has no time-
+                         * varying shape), so ray = spoint+pos is valid in
+                         * fixref-at-(et-lt) axes. The camera frame's own
+                         * orientation, however, is the spacecraft's real
+                         * orientation at the RECEPTION epoch et (no light-
+                         * time offset for the observer's own frame). A
+                         * single pxform(fixref, cam.frame, ONE_epoch) call
+                         * cannot represent this two-epoch rotation -- go
+                         * through the (epoch-independent) inertial J2000
+                         * frame as an intermediate, each leg evaluated at
+                         * its own correct epoch. Ignoring this (single
+                         * epoch et for both) was confirmed, via a real
+                         * 8.29M km Cassini-Saturn observation (lt~27.6s,
+                         * Saturn's ~0.26 deg/27.6s rotation), to misplace
+                         * every ray by ~0.25 deg -- comparable to the
+                         * NAC's entire ~0.35 deg FOV. */
+                        double rot_fix2j2000[3][3], rot_j2000_2cam[3][3];
+                        if (p_spice_pxform(fixref, "J2000", et - lt,
+                                            rot_fix2j2000) < 0 ||
+                            p_spice_pxform("J2000", cam.frame, et,
+                                            rot_j2000_2cam) < 0) {
                             have_pixel = 0;
                         }
                         else {
+                            double inertial[3];
+                            for (int i = 0; i < 3; i++)
+                                inertial[i] = rot_fix2j2000[i][0]*ray[0] +
+                                              rot_fix2j2000[i][1]*ray[1] +
+                                              rot_fix2j2000[i][2]*ray[2];
                             double dvec[3];
                             for (int i = 0; i < 3; i++)
-                                dvec[i] = rot[i][0]*ray[0] + rot[i][1]*ray[1] +
-                                          rot[i][2]*ray[2];
+                                dvec[i] = rot_j2000_2cam[i][0]*inertial[0] +
+                                          rot_j2000_2cam[i][1]*inertial[1] +
+                                          rot_j2000_2cam[i][2]*inertial[2];
 
                             if (dvec[2] <= 0.0) {
                                 /* Point is behind the camera (or exactly
