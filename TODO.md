@@ -254,11 +254,13 @@ instruments** (`CRISM_VNIR`/`CRISM_IR`, `ISS_NAC`/`ISS_WAC`,
 the dedicated sections below for ISS, OMEGA, and VIMS). Decision:
 extended `p.phocube`
 (new `-c` flag), not
-`p.cam2map` -- research this session found `p.cam2map`'s actual code is
-pure ellipsoid flat-field resampling despite its docs claiming SPICE
-support (same doc/implementation mismatch `-s` mode fixed earlier), and
+`p.cam2map` -- research found `p.cam2map`'s actual code was pure
+ellipsoid flat-field resampling despite its docs claiming SPICE support
+(same doc/implementation mismatch `-s` mode fixed earlier), and
 `p.phocube` already has the right per-input-pixel backplane shape plus
 (from items 1-2) the kernel-history/line_rate/DSK machinery to reuse.
+`p.cam2map` itself was later given a real camera-model **back**-
+projection (`-c`, ISS_NAC/ISS_WAC only) -- see "Candidate #5" below.
 `-c` requires `instrument=` (v1: `CRISM_VNIR`/`CRISM_IR` only -- each
 further instrument needed its own per-instrument camera-model research,
 as expected) and `band=` (defaults to the IK's own reference band; later
@@ -764,3 +766,110 @@ output. Added `test_camera_mode_real_vims_ir_geometry`/
 combined), with the bounds above frozen as the regression baseline;
 real kernels + cube cached at `~/RSDATA/Saturn/spice_vims/` and
 `~/RSDATA/Misc/v1799424623_1.{qub,lbl}`.
+
+### Candidate #5: `p.cam2map`/`p.caminfo` doc/implementation mismatch -- full rebuild
+
+`p.cam2map` and `p.caminfo` both had docs claiming real SPICE camera
+geometry (named map projections, incidence/emission/phase, footprint
+vectors) but their actual code was pure ellipsoid flat-field lat-lon
+remapping -- no `p_spice` calls at all. User explicitly chose the "full
+rebuild: real camera-model back-projection in `p.cam2map`" option (not
+just fixing docs, not just adding SPICE angles to `p.caminfo`, which
+remains untouched/still mismatched -- a future candidate if wanted).
+
+**Design**: new `-c` flag on `p.cam2map` reuses `p.phocube -c`'s exact
+ISS_NAC/ISS_WAC pinhole+K1-distortion+per-filter-focal-length camera
+model (read from the same real ISIS3 IAK). For each OUTPUT pixel (real
+lat/lon), the algebraic inverse of `p.phocube`'s forward ray
+construction recovers the input (sample, line): `latsrf_c` gets the
+body-fixed surface point; `spkpos_c(target=BODY, et, fixref, "LT+S",
+observer=SPACECRAFT)` gives `-spacecraft_pos_in_fixref`; ray =
+spoint+pos; rotate into the camera frame; scale to focal_length; invert
+the K1 radial distortion via 5 fixed-point iterations; sample/line from
+boresight+dx|dy/pixel_pitch. CRISM/OMEGA/VIMS are explicitly **not**
+supported -- their time/sample-varying pointing needs a 1-D/2-D
+root-search inverse, not a closed-form one.
+
+**Architectural fix**: a real `PROJECTION_LL` GRASS location
+hard-enforces +-90 deg latitude at the C library level, making it
+impossible to import a raw camera image taller than 180 rows (a typical
+raw frame, whose native region treats row index as a coordinate) into
+the same location as a real-CRS output -- and this GRASS version has no
+public cross-location raster-read API. Resolution: run `-c` in a
+`PROJECTION_XY` location (matching this project's own established
+convention -- every camera-mode real-data test in `p.phocube`'s test
+suite already does this), with the output region's bounds interpreted
+directly as real lat/lon degrees by this module's own code.
+
+**Three real bugs found and fixed during verification against a real
+Cassini ISS NAC frame of Saturn** (`N1466182140_1_CALIB`,
+`INSTRUMENT_MODE_ID=SUM2`, 2004-06-17, filter P0/CB2):
+
+1. `Rast_get_d_row()`/`Rast_put_d_row()` resample against the raster
+   library's own window cache (`R__.rd_window`/`wr_window`), which is
+   **distinct** from the GIS library's `G__.window` and is only synced
+   by `Rast_set_window()` -- `G_set_window()` alone leaves it stale at
+   whatever it was lazily initialised to on the first raster open. This
+   caused a `malloc(): corrupted top size` crash in `Rast_put_d_row`
+   (the output file's header was sized from the wrong, stale window).
+   Fixed: use `Rast_set_window()`, not `G_set_window()`, when switching
+   between the input's native region and a different output region in
+   one process -- a pattern novel to `p.cam2map` (`p.phocube` never
+   resamples between two different regions in one run).
+2. **Missing SUMMING/binning correction**: `BORESIGHT_SAMPLE`/
+   `BORESIGHT_LINE`/`PIXEL_PITCH` in the IK/IAK are given for the
+   detector's full (1x1) resolution (1024x1024 for ISS NAC/WAC), but
+   this real test frame is 2x2-binned (512x512,
+   `INSTRUMENT_MODE_ID=SUM2`) -- using the raw IK values directly
+   against the binned image's own pixel coordinates silently misplaced
+   every ray by the summing factor (confirmed: a 0% back-projection hit
+   rate even at the frame's own forward-computed centre lat/lon). Fixed
+   in **both** `p.cam2map` and `p.phocube` (this is a real,
+   previously-undetected bug in `p.phocube`'s own established ISS
+   camera model too -- its existing test only checked hit-rate and
+   hemisphere sign, neither of which is sensitive to this offset) by
+   detecting the summing factor automatically: compare the IK's own
+   full-frame `INS<id>_PIXEL_SAMPLES`/`PIXEL_LINES` to the image's
+   actual dimensions, then rescale `boresight_sample`/`boresight_line`/
+   `pixel_pitch` accordingly. No new CLI option needed.
+   `test_camera_mode_real_iss_nac_geometry` in `p.phocube`'s test suite
+   was updated: its old `assertLess(lat_max, 0)` ("southern hemisphere
+   only") assumption was itself a symptom of this bug and is no longer
+   true with the corrected geometry (now correctly straddles the
+   equator) -- replaced with a tighter, still-meaningful check (lat
+   range within +-90 deg and a fairly narrow span, consistent with this
+   frame's ~0.35 deg FOV).
+3. **Missing light-time epoch handling in the inverse rotation**:
+   `spkpos_c`'s own docs state that for a "received radiation" abcorr
+   (`"LT+S"`) and a non-inertial output frame, the frame's orientation
+   is evaluated at `et-lt`, not `et`. The original inverse used a
+   single `pxform(fixref, camera_frame, et)` call for both legs, which
+   silently assumed `fixref`'s orientation at `et` (not `et-lt`) --
+   wrong by Saturn's own rotation over the one-way light time (~27.6 s
+   at this frame's ~8.29M km range; ~0.26 deg of Saturn rotation,
+   comparable to the NAC's entire ~0.35 deg FOV). Fixed: decompose the
+   rotation through the (epoch-independent) inertial J2000 frame as an
+   intermediate, with each leg evaluated at its own correct epoch
+   (`pxform(fixref, "J2000", et-lt)` then `pxform("J2000", camera_frame,
+   et)`) -- confirmed via a direct round-trip check (forward
+   centre-pixel lat/lon -> `-c` back-projection on a tiny 1x1 deg region
+   at that exact lat/lon) that this recovers the original (sample,
+   line) almost exactly (within ~1 pixel) once both fixes were in
+   place.
+
+**Verified**: 100% round-trip hit rate at the frame's own forward
+centre pixel; 57.4% hit rate (non-degenerate, real disk-shaped coverage)
+over the frame's full forward lat/lon extent. Added
+`test_camera_mode_real_iss_nac_round_trip` to `p.cam2map`'s test suite
+(passing); real kernels + cube reused from `p.phocube`'s own ISS
+fixture (`_find_iss_test_kernels()`, `~/RSDATA/Saturn/spice_test/` and
+`~/RSDATA/Misc/N1466182140_1_CALIB.*`).
+
+Rewrote `p.cam2map.md` to remove the false `projection=`/`res=`/
+`clon=`/8-named-projections/`p_projection_planet` claims and document
+the real `-c` ISS_NAC/ISS_WAC back-projection feature, the
+`PROJECTION_XY` convention, and the summing/light-time handling.
+`p.caminfo`'s own separate doc/code mismatch (claims incidence/
+emission/phase + footprint vector output, code has neither) was **not**
+touched this session -- still open if wanted later. Real cartographic
+map-projection support (beyond plain lat/lon) also remains unbuilt.

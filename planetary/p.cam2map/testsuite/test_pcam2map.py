@@ -131,6 +131,15 @@ class TestPcam2map(TestCase):
             row_vals = list(vals.keys())[0].split("|")
             centre_lat, centre_lon = float(row_vals[-2]), float(row_vals[-1])
 
+            # r.univar computes stats over the CURRENTLY ACTIVE region --
+            # fwd_prefix_lat/lon's own native grid is still the raw
+            # (line, sample) pixel grid (region was set via "g.region
+            # raster=mapname" above), so grab the frame's whole forward
+            # lat/lon extent now, before switching the region to real
+            # lat/lon degrees for the round-trip check below.
+            lat = gs.parse_command("r.univar", flags="g", map=f"{fwd_prefix}_lat")
+            lon = gs.parse_command("r.univar", flags="g", map=f"{fwd_prefix}_lon")
+
             res = 0.01
             self.runModule(
                 "g.region",
@@ -150,8 +159,6 @@ class TestPcam2map(TestCase):
             # Larger region covering this frame's whole forward lat/lon
             # extent should yield a real, non-degenerate (mostly-hit, not
             # 0%/100%) reprojected map.
-            lat = gs.parse_command("r.univar", flags="g", map=f"{fwd_prefix}_lat")
-            lon = gs.parse_command("r.univar", flags="g", map=f"{fwd_prefix}_lon")
             self.runModule(
                 "g.region", n=lat["max"], s=lat["min"],
                 e=lon["max"], w=lon["min"], res=0.1)
