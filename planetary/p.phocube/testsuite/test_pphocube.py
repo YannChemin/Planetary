@@ -174,6 +174,34 @@ def _find_omega_test_kernels():
     return paths
 
 
+def _find_vims_test_kernels():
+    """Locate the real Cassini VIMS kernel set + raw QUBE on this machine,
+    used by the -c (camera mode) VIMS_IR/VIMS_VIS tests below. Unlike
+    CRISM/ISS, no IAK adds BORESIGHT/FOCAL_LENGTH for VIMS -- its real
+    geometry is a 2-axis angular scan (ISIS3's own VimsGroundMap formula,
+    ported directly), and the IAK (vimsAddendum04.ti) is only needed to
+    fix a real, documented VIMS_IR/VIMS_V NAIF ID swap between the public
+    IK and FK. See RSDATA/Saturn/spice_vims/ and
+    RSDATA/Misc/v1799424623_1.{qub,lbl} on the dev machine this was
+    verified on (T-108 Titan flyby, 2015-01-08)."""
+    d = os.path.expanduser("~/RSDATA/Saturn/spice_vims")
+    cube = os.path.expanduser("~/RSDATA/Misc/v1799424623_1.lbl")
+    needed = {
+        "lsk": "lsk/naif0012.tls", "sclk": "sclk/cas00172.tsc",
+        "ik": "ik/cas_vims_v06.ti", "iak": "iak/vimsAddendum04.ti",
+        "fk": "fk/cas_v43.tf",
+        "pck1": "pck/cpck_rock_21Jan2011_merged.tpc",
+        "pck2": "pck/pck00010.tpc",
+        "spk": "spk/150108AP_SCPSE_14365_15016.bsp",
+        "ck": "ck/15008_15013ra.bc",
+    }
+    paths = {k: os.path.join(d, v) for k, v in needed.items()}
+    if not os.path.exists(cube) or not all(os.path.exists(p) for p in paths.values()):
+        return None
+    paths["cube"] = cube
+    return paths
+
+
 class TestPphocube(TestCase):
     """Test p.phocube module.
 
@@ -718,6 +746,68 @@ class TestPphocube(TestCase):
             self.runModule("g.remove", flags="f", type="raster",
                            pattern=f"{band_prefix}.*,{mirror_map},{out_prefix}_*",
                            quiet=True)
+
+    def _camera_mode_real_vims(self, instrument, expect_lat_max, expect_lat_min,
+                                expect_lon_max, expect_lon_min):
+        """Shared body for the VIMS_IR/VIMS_VIS real-kernel checks below."""
+        kernels = _find_vims_test_kernels()
+        if not kernels:
+            self.skipTest("no local Cassini VIMS test kernel set found "
+                          "(see _find_vims_test_kernels)")
+
+        band_prefix = f"pphocube_test_vims_{instrument.lower()}_in"
+        out_prefix = f"pphocube_test_vims_{instrument.lower()}_out"
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        self.runModule("p.in.pds3", flags="g", input=kernels["cube"],
+                       output=band_prefix, overwrite=True, quiet=True)
+        self.runModule("g.region", raster=f"{band_prefix}.1")
+        self.runModule(
+            "p.spiceinit", map=f"{band_prefix}.1", target="TITAN",
+            observer="CASSINI", time="2015-008T15:09:40.135",
+            lsk=kernels["lsk"], sclk=kernels["sclk"],
+            ik=f"{kernels['ik']},{kernels['iak']}", fk=kernels["fk"],
+            pck=f"{kernels['pck1']},{kernels['pck2']}",
+            spk=kernels["spk"], ck=kernels["ck"])
+        try:
+            module = SimpleModule(
+                "p.phocube", flags="ctn", input=f"{band_prefix}.1",
+                output=out_prefix, instrument=instrument,
+                sampling_mode="HI-RES" if instrument == "VIMS_IR" else "NORMAL",
+                x_offset=11, z_offset=25, swath_width=38, swath_length=18)
+            self.assertModule(module)
+
+            lat = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lat")
+            lon = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lon")
+            self.assertLess(int(lat["null_cells"]), 684,
+                            "expected at least some pixels to hit Titan's disk")
+            self.assertAlmostEqual(float(lat["max"]), expect_lat_max, delta=0.5)
+            self.assertAlmostEqual(float(lat["min"]), expect_lat_min, delta=0.5)
+            self.assertAlmostEqual(float(lon["max"]), expect_lon_max, delta=0.5)
+            self.assertAlmostEqual(float(lon["min"]), expect_lon_min, delta=0.5)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{band_prefix}.*,{out_prefix}_*", quiet=True)
+
+    def test_camera_mode_real_vims_ir_geometry(self):
+        """Real-kernel correctness check for -c VIMS_IR: a real Cassini
+        VIMS cube from the T-108 Titan flyby (2015-01-08,
+        v1799424623_1.qub) confirms the 2-axis angular scan model (ported
+        directly from ISIS3's VimsGroundMap::LookDirection() -- no IAK
+        adds a boresight/pixel-pitch model for VIMS, unlike CRISM/ISS)
+        against this run's own verified real-data result: a real,
+        physically sane, smoothly-varying disk patch of Titan, not a
+        degenerate all-NULL or all-identical output. Bounds frozen from
+        the first verified run (see TODO.md)."""
+        self._camera_mode_real_vims("VIMS_IR", 68.09, -65.23, 104.54, -62.32)
+
+    def test_camera_mode_real_vims_vis_geometry(self):
+        """VIS-channel equivalent of test_camera_mode_real_vims_ir_geometry
+        -- same cube, same epoch, different (co-boresighted) channel.
+        Confirms VIS's geometry lands on an overlapping (not identical --
+        different boresight/pixel-pitch/SamplingMode) patch of Titan's
+        disk, as physically expected for two co-mounted, simultaneously-
+        acquired channels of the same real observation."""
+        self._camera_mode_real_vims("VIMS_VIS", 74.68, -64.93, 92.88, -30.36)
 
 
 if __name__ == "__main__":

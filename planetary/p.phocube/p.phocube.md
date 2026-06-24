@@ -279,20 +279,69 @@ label's own `MINIMUM_LATITUDE`/`MAXIMUM_LATITUDE`/`WESTERNMOST_
 LONGITUDE`/`EASTERNMOST_LONGITUDE` (-78.167/-70.253/291.415/303.019) to
 within ~0.05 deg -- not just crash-free output.
 
+#### Cassini VIMS_IR/VIMS_VIS: a real 2-axis angular scan, ported from ISIS3
+
+`instrument=VIMS_IR`/`VIMS_VIS` add a fourth camera shape: a genuine
+2-axis angular scan, not a focal-plane-mm pinhole at all. Neither the
+public NAIF IK (`cas_vims_v06.ti`, which only gives the overall FOV
+envelope and a 64x64 nominal pixel grid) nor the IAK (`vimsAddendum04.ti`,
+which only fixes a real, documented `CASSINI_VIMS_IR`/`_V` NAIF ID swap
+between the public IK and FK -- confirmed from the IAK's own comment)
+contains a boresight/pixel-pitch model. The real formula was ported
+directly from ISIS3's own `VimsGroundMap::LookDirection()`
+(`isis/src/cassini/objs/VimsCamera/VimsGroundMap.cpp`):
+
+```
+x = sample + camSampOffset;  y = line + camLineOffset
+theta = pi/2 - (y - yBore) * yPixSize
+phi   = -pi/2 + (x - xBore) * xPixSize
+v = ( sin(theta)*cos(phi), cos(theta), -sin(theta)*sin(phi) )
+```
+
+`xPixSize`/`yPixSize`/`xBore`/`yBore` and the integer `camSampOffset`/
+`camLineOffset` (note: truncating integer division on purpose, matching
+ISIS3's own `int` arithmetic exactly) depend on channel (IR/VIS) and
+`SamplingMode` (NORMAL/HI-RES) -- both real per-cube values, not kernel
+data, that live only in the PDS3 label's Instrument group
+(`SAMPLING_MODE_ID` -- a 2-tuple, `(IR mode, visible mode)` --, plus
+`X_OFFSET`/`Z_OFFSET`/`SWATH_WIDTH`/`SWATH_LENGTH`, shared by both
+channels). `p.in.archive`'s `vims=`/`opus=` import now writes all of
+these into the raster's own `planetary.json` automatically; `-c` reads
+them from there, or via the `sampling_mode=`/`x_offset=`/`z_offset=`/
+`swath_width=`/`swath_length=` CLI overrides when importing by some
+other path. `cam.frame` is the plain NAIF frame (`CASSINI_VIMS_IR`/
+`CASSINI_VIMS_V`) -- both have real ephemeris (`FRAME_-8237{0,1}_CENTER
+= -82`, the orbiter itself), no `pxform` workaround needed (unlike
+OMEGA's `-41400` instrument-body issue).
+
+Real-data result, verified against a real Cassini VIMS cube from the
+T-108 Titan flyby (2015-01-08, `v1799424623_1.qub`, IR channel HI-RES,
+VIS channel NORMAL, both swaths sharing `X_OFFSET=11 Z_OFFSET=25
+SWATH_WIDTH=38 SWATH_LENGTH=18`): both channels land on real,
+physically sane, smoothly-varying, overlapping patches of Titan's disk
+(IR: lat -65.2..68.1 deg, lon -62.3..104.5 deg; VIS: lat -64.9..74.7 deg,
+lon -30.4..92.9 deg -- overlapping but not identical, exactly as
+expected for two co-mounted, simultaneously-acquired channels with
+different boresight/pixel-pitch/SamplingMode), with real incidence
+(9.5-106.7 deg) and emission (7.6-76.4 deg) -- not a degenerate
+all-NULL or all-identical output. Both channels' `r.univar` lat/lon
+bounds are locked in as a regression test
+(`test_camera_mode_real_vims_ir_geometry`/`_vis_geometry`).
+
 ### Not implemented (out of scope for this version)
 
 See the repo's top-level `TODO.md` for full context. `-c` supports
-CRISM (VNIR and IR detectors), Cassini ISS (NAC and WAC), and MEX OMEGA
-(SWIR-C and SWIR-L); any other `instrument=` value is a `G_fatal_error`,
-not a guess -- other instruments need their own per-instrument camera-
-model formula (the pinhole focal-plane convention used for CRISM/ISS is
-not necessarily how every instrument's optics work, and OMEGA's own
-whiskbroom formula doesn't generalize either). MEX OMEGA's VNIR detector
-and Cassini VIMS (whose own IAK exists but only fixes frame-ID
-housekeeping, no boresight/focal-length/mirror geometry) still need
-from-scratch research. Real (non-ellipsoid) DSK shape models are
-supported in `-c` the same way as `-s` (reuses `camera_method`,
-`"DSK/Unprioritized"` when a DSK is attached).
+CRISM (VNIR and IR detectors), Cassini ISS (NAC and WAC), MEX OMEGA
+(SWIR-C and SWIR-L), and Cassini VIMS (IR and VIS channels); any other
+`instrument=` value is a `G_fatal_error`, not a guess -- other
+instruments need their own per-instrument camera-model formula (the
+pinhole focal-plane convention used for CRISM/ISS is not necessarily
+how every instrument's optics work, and neither OMEGA's whiskbroom nor
+VIMS's 2-axis angular scan formula generalizes either). MEX OMEGA's
+VNIR detector still needs its own from-scratch research (see above).
+Real (non-ellipsoid) DSK shape models are supported in `-c` the same
+way as `-s` (reuses `camera_method`, `"DSK/Unprioritized"` when a DSK
+is attached).
 
 ## EXAMPLES
 
@@ -383,6 +432,23 @@ p.phocube -c -tn instrument=OMEGA_SWIR_C input=omega_swirc.1 \
 # kernels) are needed because the real reconstructed-orbit SPK
 # (MEX_ROB_*.BSP) only gives MEX relative to MARS, not all the way to
 # the solar system barycenter that sincpt/ilumin need.
+```
+
+Camera mode, real per-pixel ray for a raw Cassini VIMS QUBE (real
+kernels, verified correct against `v1799424623_1.qub` -- see NOTES):
+
+```sh
+p.in.archive vims=v1799424623_1 output=vims_test
+# vims= already writes sampling_mode_ir/_vis, x_offset, z_offset,
+# swath_width, swath_length into vims_test.1's planetary.json.
+p.spiceinit map=vims_test.1 target=TITAN observer=CASSINI \
+    time=2015-008T15:09:40.135 \
+    lsk=naif0012.tls sclk=cas00172.tsc \
+    ik=cas_vims_v06.ti,vimsAddendum04.ti fk=cas_v43.tf \
+    pck=cpck_rock_21Jan2011_merged.tpc,pck00010.tpc \
+    spk=150108AP_SCPSE_14365_15016.bsp ck=15008_15013ra.bc
+p.phocube -c -tn instrument=VIMS_IR input=vims_test.1 output=vims_ir_geom
+p.phocube -c -tn instrument=VIMS_VIS input=vims_test.1 output=vims_vis_geom
 ```
 
 ## REFERENCES

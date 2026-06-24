@@ -248,10 +248,11 @@ Needs its own plan: decide whether to extend the existing (currently
 flat-field-only) `p.cam2map`/`p.caminfo`, or add a new
 instrument-specific module (e.g. starting with CRISM).
 
-Status: **implemented and verified correct against real data for six
+Status: **implemented and verified correct against real data for eight
 instruments** (`CRISM_VNIR`/`CRISM_IR`, `ISS_NAC`/`ISS_WAC`,
-`OMEGA_SWIR_C`/`OMEGA_SWIR_L` -- see the dedicated sections below for
-ISS and OMEGA). Decision: extended `p.phocube` (new `-c` flag), not
+`OMEGA_SWIR_C`/`OMEGA_SWIR_L`, `VIMS_IR`/`VIMS_VIS` -- see the dedicated
+sections below for ISS, OMEGA, and VIMS). Decision: extended `p.phocube`
+(new `-c` flag), not
 `p.cam2map` -- research this session found `p.cam2map`'s actual code is
 pure ellipsoid flat-field resampling despite its docs claiming SPICE
 support (same doc/implementation mismatch `-s` mode fixed earlier), and
@@ -635,3 +636,112 @@ empirical sign-flipping was needed. Added
 `test_camera_mode_real_omega_swir_c_geometry` to `p.phocube`'s test
 suite (passing, ~5s); real kernels + cube cached at
 `~/RSDATA/Mars/spice_omega/` and `~/RSDATA/Mars/ORB0100_0.QUB`.
+
+### Cassini VIMS_IR/VIMS_VIS camera model added to `p.phocube -c`
+
+Following plan item 4 (`calm-spinning-pearl` plan -- VIMS was deferred
+there since its IAK, `vimsAddendum04.ti`, only fixes
+`CK_FRAME_ID`/`NAIF_BODY_CODE` housekeeping, no boresight/focal-length).
+Revisited from scratch by reading ISIS3's own `VimsCamera`/
+`VimsGroundMap` source (`$HOME/dev/ISIS3/isis/src/cassini/objs/
+VimsCamera/`, per this repo's global CLAUDE.md instruction to search
+`$HOME/dev/` for third-party source before guessing):
+
+- **A fourth, structurally different camera shape**: not a focal-plane
+  mm pinhole at all (unlike CRISM/ISS), and not OMEGA's whiskbroom
+  either -- a real 2-axis angular scan, output directly as a unit look
+  vector in spherical terms. Ported verbatim from
+  `VimsGroundMap::LookDirection()`:
+  `x = sample + camSampOffset; y = line + camLineOffset; theta = pi/2 -
+  (y-yBore)*yPixSize; phi = -pi/2 + (x-xBore)*xPixSize; v = (sin(theta)
+  *cos(phi), cos(theta), -sin(theta)*sin(phi))`. `xPixSize`/`yPixSize`/
+  `xBore`/`yBore` and the *integer* `camSampOffset`/`camLineOffset`
+  (truncating division reproduced exactly, matching ISIS3's own `int`
+  arithmetic) depend on channel (IR/VIS) x SamplingMode (NORMAL/HI-RES)
+  -- 4 real, hardcoded combinations confirmed straight from
+  `VimsCamera.cpp`'s constructor and `VimsGroundMap.cpp`'s `Init()`.
+- **Confirmed neither the public IK nor the IAK has a usable boresight
+  model**: `cas_vims_v06.ti` only gives the overall FOV envelope
+  (`FOV_REF_ANGLE`/`FOV_CROSS_ANGLE` = 0.9167 deg half-angle) and a
+  nominal 64x64 pixel grid (`FOV_CENTER_PIXEL = (31.5, 31.5)`) -- no
+  per-pixel angle formula like OMEGA's `MIRROR_SLOPE`.
+- **A real, documented VIMS_IR/VIMS_V NAIF ID swap bug, confirmed
+  directly from the IAK's own comment**: the public IK assigns
+  `CASSINI_VIMS_IR=-82370`/`CASSINI_VIMS_V=-82371`; the public FK
+  (`cas_v43.tf`) assigns the *opposite* (`CASSINI_VIMS_V=-82370`/
+  `CASSINI_VIMS_IR=-82371`) in its actual `FRAME_-8237{0,1}_NAME`
+  definitions (confirmed by reading both real kernels directly, not
+  just an early naming-table comment in the FK that turned out to be a
+  red herring from an earlier ID scheme). `vimsAddendum04.ti`'s own
+  comment: "There is also a problem within the cassini ik kernels where
+  VIMS_IR has code (-82370) and VIMS_V has code (-82371)... a
+  discrepency within the kernels and until resolved we will be using
+  the parallel array definition below" -- i.e. the IAK is the
+  authority: `CASSINI_VIMS_V=-82370`, `CASSINI_VIMS_IR=-82371` (matching
+  the FK's actual definitions). `p.phocube` uses these corrected IDs;
+  `ik=cas_vims_v06.ti,vimsAddendum04.ti` (both, in that order) is
+  required for `instrument=VIMS_IR`/`VIMS_VIS` to resolve correctly.
+- **New per-cube metadata fields, not from any kernel**: VIMS's real
+  `SamplingMode`/`XOffset`/`ZOffset`/`SwathWidth`/`SwathLength` live
+  only in the PDS3 label's Instrument group
+  (`SAMPLING_MODE_ID = ("<IR mode>","<visible mode>")` -- confirmed
+  index order against ISIS3's own `vims2isis/main.cpp::
+  TranslateVimsLabels()` --, plus `X_OFFSET`/`Z_OFFSET`/`SWATH_WIDTH`/
+  `SWATH_LENGTH`, shared by both channels). Added
+  `sampling_mode_ir`/`sampling_mode_vis`/`x_offset`/`z_offset`/
+  `swath_width`/`swath_length` fields to `p_meta.PlanetaryMetadata`
+  (written as JSON strings, even the ints -- `p_meta_read_string_field()`
+  on the C side is a minimal quoted-string-only scanner, not a real
+  JSON parser), a new `_pds3_vims_geometry()` regex parser in
+  `p.in.archive.py` (mirrors `_pds3_filter_pair()`'s existing pattern
+  for ISS), wired into the OPUS `vims=`/`opus=` import's existing
+  load-update-save metadata block. `p.phocube -c` reads them back via
+  `p_meta_read_string_field()`, or via new `sampling_mode=`/`x_offset=`/
+  `z_offset=`/`swath_width=`/`swath_length=` CLI overrides when
+  importing by some other path (mirrors ISS's `filter1=`/`filter2=`
+  pattern).
+- `cam.frame` is the plain NAIF frame (`CASSINI_VIMS_IR`/
+  `CASSINI_VIMS_V`) -- both have real ephemeris (`FRAME_-8237{0,1}
+  _CENTER = -82`, the orbiter itself, not a fixed-mount instrument body)
+  -- no `pxform` workaround needed, unlike OMEGA's `-41400` issue.
+
+Renamed the camera-overrides parameter list into a `CameraOverrides`
+struct (`filter1`/`filter2`/`sampling_mode`/`x_offset`/`z_offset`/
+`swath_width`/`swath_length`) in `p.phocube/main.c`, since
+`load_pinhole_camera_model()`'s positional-argument list was growing
+unwieldy with VIMS's five new override fields on top of ISS's two.
+
+**Verified end-to-end against a real Cassini VIMS cube**
+(`v1799424623_1.qub`, the T-108 Titan flyby, 2015-01-08T15:09:40.135;
+real kernels fetched via `p.spice.find spacecraft=CASSINI
+instrument=VIMS kernels=lsk,sclk,ik,fk,pck,spk,ck,iak` --
+`naif0012.tls`, `cas00172.tsc`, `cas_vims_v06.ti`, `vimsAddendum04.ti`,
+`cas_v43.tf`, `cpck_rock_21Jan2011_merged.tpc` + `pck00010.tpc` (needed
+separately -- the mission-dir PCK doesn't carry Titan's `BODY606_RADII`),
+`150108AP_SCPSE_14365_15016.bsp`, `15008_15013ra.bc`). IR channel
+(HI-RES) and VIS channel (NORMAL), same swath
+(`X_OFFSET=11 Z_OFFSET=25 SWATH_WIDTH=38 SWATH_LENGTH=18`): both land
+on real, physically sane, smoothly-varying, *overlapping* (not
+identical -- different boresight/pixel-pitch/SamplingMode, exactly as
+expected for two co-mounted, simultaneously-acquired channels) patches
+of Titan's disk:
+
+| | IR (HI-RES) | VIS (NORMAL) |
+|---|---|---|
+| lat range | -65.23 .. 68.09 deg | -64.93 .. 74.68 deg |
+| lon range | -62.32 .. 104.54 deg | -30.36 .. 92.88 deg |
+| incidence | 9.5 .. 106.7 deg | -- |
+| emission | 7.6 .. 76.4 deg | -- |
+| pixel hit rate | 50/684 (~7.3%) | 22/684 (~3.2%) |
+
+The real label has no precomputed footprint geometry to check against
+(unlike OMEGA's `MAXIMUM_LATITUDE` etc.), so there's no independent
+ground truth here -- but the smooth, continuous, disk-shaped (not
+scattered/random) non-NULL pattern, the physically sane incidence/
+emission ranges, and the overlapping-but-distinct IR/VIS coverage are
+all real, falsifiable signs of a correct model, not just crash-free
+output. Added `test_camera_mode_real_vims_ir_geometry`/
+`_vis_geometry` to `p.phocube`'s test suite (both passing, ~5s
+combined), with the bounds above frozen as the regression baseline;
+real kernels + cube cached at `~/RSDATA/Saturn/spice_vims/` and
+`~/RSDATA/Misc/v1799424623_1.{qub,lbl}`.
