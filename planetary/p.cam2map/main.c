@@ -393,7 +393,6 @@ int main(int argc, char *argv[])
     if (!input_mapset)
         G_fatal_error(_("Raster map <%s> not found"), opt_input->answer);
 
-    int fd_in = Rast_open_old(opt_input->answer, input_mapset);
     struct Cell_head in_region, out_region;
     Rast_get_cellhd(opt_input->answer, input_mapset, &in_region);
     G_get_window(&out_region);
@@ -406,6 +405,13 @@ int main(int argc, char *argv[])
     G_message(_("Input: %d x %d -> Output: %d x %d"),
                in_rows, in_cols, out_rows, out_cols);
 
+    /* Rast_get_d_row() resamples against the CURRENTLY ACTIVE window, not
+     * the raster's own native grid -- the active window must be set to
+     * the input's own region (in_region) while reading it (for an exact,
+     * unresampled native-pixel read), then switched to the real output
+     * region (out_region) before Rast_open_new()/writing below. */
+    G_set_window(&in_region);
+    int fd_in = Rast_open_old(opt_input->answer, input_mapset);
     DCELL **in_data = (DCELL **)G_malloc((size_t)in_rows * sizeof(DCELL *));
     DCELL *in_buf = Rast_allocate_d_buf();
     for (int r = 0; r < in_rows; r++) {
@@ -415,6 +421,7 @@ int main(int argc, char *argv[])
     }
     Rast_close(fd_in);
     G_free(in_buf);
+    G_set_window(&out_region);
 
     /* Camera mode (-c) setup: real target/observer/time/kernels from the
      * input's own p.spiceinit history, plus the ISS pinhole camera model.
