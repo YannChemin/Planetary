@@ -266,6 +266,61 @@ int p_spice_sincpt(const char *method,
                     double srfvec[3]);
 
 /*!
+ * \brief Sub-observer point: the point on target nearest the observer.
+ *
+ * Wraps CSPICE subpnt_c() with NEAR POINT/ELLIPSOID or
+ * NADIR/DSK/UNPRIORITIZED computation method (selected via \a method,
+ * same "Ellipsoid"/"DSK/Unprioritized" convention as p_spice_sincpt()/
+ * p_spice_latsrf() elsewhere in this library -- this function maps that
+ * to the longer subpnt_c method strings internally).
+ *
+ * \param method    "Ellipsoid" or "DSK/Unprioritized"
+ * \param target    target body name
+ * \param et        observer's epoch
+ * \param fixref    body-fixed frame name
+ * \param abcorr    aberration correction (e.g. "LT+S")
+ * \param observer  observer body name
+ * \param spoint    output: sub-observer point in fixref [km]
+ * \param trgepc    output: target epoch -- NOT optional, see p_spice_sincpt()
+ * \param srfvec    output: vector from observer to spoint [km] -- NOT
+ *                  optional, see p_spice_sincpt()
+ * \return 0 on success, -1 on CSPICE error
+ */
+int p_spice_subpnt(const char *method,
+                    const char *target, double et,
+                    const char *fixref, const char *abcorr,
+                    const char *observer,
+                    double spoint[3], double *trgepc,
+                    double srfvec[3]);
+
+/*!
+ * \brief Sub-solar point: the point on target nearest the Sun, as seen
+ * from the given observer.
+ *
+ * Wraps CSPICE subslr_c(). Same method-string convention as
+ * p_spice_subpnt().
+ *
+ * \param method    "Ellipsoid" or "DSK/Unprioritized"
+ * \param target    target body name
+ * \param et        observer's epoch
+ * \param fixref    body-fixed frame name
+ * \param abcorr    aberration correction (e.g. "LT+S")
+ * \param observer  observer body name (defines the light-time/aberration
+ *                  correction direction, per CSPICE's own convention)
+ * \param spoint    output: sub-solar point in fixref [km]
+ * \param trgepc    output: target epoch -- NOT optional, see p_spice_sincpt()
+ * \param srfvec    output: vector from observer to spoint [km] -- NOT
+ *                  optional, see p_spice_sincpt()
+ * \return 0 on success, -1 on CSPICE error
+ */
+int p_spice_subslr(const char *method,
+                    const char *target, double et,
+                    const char *fixref, const char *abcorr,
+                    const char *observer,
+                    double spoint[3], double *trgepc,
+                    double srfvec[3]);
+
+/*!
  * \brief Map a known body-fixed (lon, lat) to a real surface point.
  *
  * Wraps CSPICE latsrf_c(). Unlike p_spice_sincpt(), this needs no

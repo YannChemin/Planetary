@@ -271,6 +271,51 @@ int p_spice_sincpt(const char *method,
     return found ? 1 : 0;
 }
 
+/* subpnt_c/subslr_c take longer method strings than sincpt_c/latsrf_c --
+ * map this library's simple "Ellipsoid"/"DSK/Unprioritized" convention
+ * (shared with p_spice_sincpt()/p_spice_latsrf()) onto them. Near point
+ * (not Intercept) is used for the ellipsoid sub-observer/sub-solar point,
+ * matching common usage (closest point, not the body-centre ray
+ * intercept) for nearly-spherical bodies. */
+static const char *subpoint_method_string(const char *method)
+{
+    if (strcmp(method, "DSK/Unprioritized") == 0)
+        return "Nadir/DSK/Unprioritized";
+    return "Near point: ellipsoid";
+}
+
+int p_spice_subpnt(const char *method,
+                    const char *target, double et,
+                    const char *fixref, const char *abcorr,
+                    const char *observer,
+                    double spoint[3], double *trgepc,
+                    double srfvec[3])
+{
+    if (!method || !target || !fixref || !abcorr || !observer ||
+        !spoint || !trgepc || !srfvec) return -1;
+
+    subpnt_c(subpoint_method_string(method), target, (SpiceDouble)et,
+             fixref, abcorr, observer, spoint, trgepc, srfvec);
+
+    return cspice_check("subpnt");
+}
+
+int p_spice_subslr(const char *method,
+                    const char *target, double et,
+                    const char *fixref, const char *abcorr,
+                    const char *observer,
+                    double spoint[3], double *trgepc,
+                    double srfvec[3])
+{
+    if (!method || !target || !fixref || !abcorr || !observer ||
+        !spoint || !trgepc || !srfvec) return -1;
+
+    subslr_c(subpoint_method_string(method), target, (SpiceDouble)et,
+             fixref, abcorr, observer, spoint, trgepc, srfvec);
+
+    return cspice_check("subslr");
+}
+
 /* ================================================================== */
 /* Lat/lon -> body-fixed surface point (no ray-casting/observer)        */
 /* ================================================================== */
