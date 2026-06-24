@@ -532,6 +532,11 @@ int main(int argc, char *argv[])
                                 /* Point is behind the camera (or exactly
                                  * edge-on) -- cannot be imaged. */
                                 have_pixel = 0;
+                                if (getenv("PCAM2MAP_DEBUG"))
+                                    fprintf(stderr, "DBG REJECT lat=%.4f lon=%.4f spoint=(%.3f,%.3f,%.3f) pos=(%.3f,%.3f,%.3f) ray=(%.3f,%.3f,%.3f) dvec=(%.3f,%.3f,%.3f)\n",
+                                        lat_deg, lon_deg, spoint[0],spoint[1],spoint[2],
+                                        pos[0],pos[1],pos[2], ray[0],ray[1],ray[2],
+                                        dvec[0],dvec[1],dvec[2]);
                             }
                             else {
                                 double t = cam.focal_length / dvec[2];
@@ -547,6 +552,14 @@ int main(int argc, char *argv[])
                                 double line_1based   = cam.boresight_line   + dy / cam.pixel_pitch;
                                 in_col_f = sample_1based - 1.0;
                                 in_row_f = line_1based   - 1.0;
+                                if (getenv("PCAM2MAP_DEBUG"))
+                                    fprintf(stderr, "DBG lat=%.4f lon=%.4f spoint=(%.3f,%.3f,%.3f) pos=(%.3f,%.3f,%.3f) ray=(%.3f,%.3f,%.3f) dvec=(%.3f,%.3f,%.3f) ux=%.6f uy=%.6f sample=%.3f line=%.3f bore_s=%.3f bore_l=%.3f pitch=%.6f focal=%.6f\n",
+                                        lat_deg, lon_deg, spoint[0],spoint[1],spoint[2],
+                                        pos[0],pos[1],pos[2], ray[0],ray[1],ray[2],
+                                        dvec[0],dvec[1],dvec[2], ux,uy,
+                                        sample_1based, line_1based,
+                                        cam.boresight_sample, cam.boresight_line,
+                                        cam.pixel_pitch, cam.focal_length);
                             }
                         }
                     }
