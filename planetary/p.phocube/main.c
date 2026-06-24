@@ -208,19 +208,22 @@ static void uppercase_copy(char *dst, size_t n, const char *src)
 /* per sample within it). MIRROR_CENTER_POSITION/MIRROR_SLOPE are read   */
 /* from the IK under the shared SWIR id (-41420), not the per-channel   */
 /* SWIR-C/SWIR-L id, since both channels share one physical mirror.     */
-/* VNIR is deferred (see TODO.md): its own per-pixel mirror-DN           */
-/* equivalence for synced-acquisition products isn't yet verified.       */
+/* OMEGA_VNIR (synced-acquisition only -- see the comment in            */
+/* load_pinhole_camera_model()) reuses this identical mirror_dn/        */
+/* offset_angle formula, just rotated out of its own MEX_OMEGA_VNIR     */
+/* detector frame instead of SWIR's -- confirmed against a real cube    */
+/* whose VIS channel shares SWIR's 64-sample line width exactly.        */
 /*                                                                      */
-/* The real FK (MEX_V16.TF) centers MEX_OMEGA_SWIR_C/_SWIR_L's frame on */
-/* the MEX_OMEGA instrument body (-41400), which has no SPK ephemeris   */
-/* of its own (a fixed-mount instrument id, not a tracked body) -- */
-/* sincpt's dref handling needs that center body's state regardless of  */
-/* aberration correction. Since both are plain fixed-angle TKFRAMEs     */
-/* relative to MEX_SPACECRAFT (SWIR-L via SWIR-C), the fix is to        */
-/* pre-rotate dvec into MEX_SPACECRAFT ourselves (a one-time, time-     */
-/* independent pxform -- TK frames have no light-time dependency) and   */
-/* pass dref="MEX_SPACECRAFT" to sincpt instead, since -41 (the          */
-/* spacecraft) has real ephemeris throughout. */
+/* The real FK (MEX_V16.TF) centers MEX_OMEGA_SWIR_C/_SWIR_L/_VNIR's     */
+/* frame on the MEX_OMEGA instrument body (-41400), which has no SPK    */
+/* ephemeris of its own (a fixed-mount instrument id, not a tracked     */
+/* body) -- sincpt's dref handling needs that center body's state       */
+/* regardless of aberration correction. Since all three are plain       */
+/* fixed-angle TKFRAMEs relative to MEX_SPACECRAFT (SWIR-L and VNIR via  */
+/* SWIR-C), the fix is to pre-rotate dvec into MEX_SPACECRAFT ourselves  */
+/* (a one-time, time-independent pxform -- TK frames have no light-time */
+/* dependency) and pass dref="MEX_SPACECRAFT" to sincpt instead, since   */
+/* -41 (the spacecraft) has real ephemeris throughout.                  */
 /*                                                                      */
 /* Cassini VIMS_IR/VIMS_VIS are a fourth shape: a real 2-axis angular    */
 /* scanning model (IR: true 2-axis scanning mirror, "whiskbroom";       */
@@ -309,6 +312,26 @@ static void load_pinhole_camera_model(const char *instrument,
     else if (strcmp(instrument, "OMEGA_SWIR_L") == 0) {
         cam->naif_id = -41422;
         snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_SWIR_L");
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "OMEGA_VNIR") == 0) {
+        /* Synced-acquisition VNIR (the only kind p.in.pds3/p.in.archive
+         * currently import -- confirmed against a real cube,
+         * ORB0100_0.QUB: CHANNEL_ID=(IRC,IRL,VIS), CORE_ITEMS sample=64,
+         * identical to SWIR-C/SWIR-L's sample count, not VNIR's native
+         * 384/128-pixel pushbroom width) shares the SWIR mirror's real
+         * per-line/per-sample telemetry one-for-one: at each mirror
+         * step the same physical sweep that builds one SWIR sample also
+         * yields one VNIR sample, so the identical
+         * offset_angle=(dn-MIRROR_CENTER_POSITION)*MIRROR_SLOPE formula
+         * applies, just rotated out of MEX_OMEGA_VNIR's own detector
+         * frame (a fixed TKFRAME relative to MEX_OMEGA_SWIR_C, per
+         * MEX_V16.TF) instead of SWIR's. The native-resolution,
+         * unsynced 128-pixel VNIR pushbroom mode (MEX_OMEGA_V03.TI's
+         * INS-41410_PIXEL_DN calibration table) is a different,
+         * currently non-importable product type -- not implemented. */
+        cam->naif_id = -41410;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_VNIR");
         cam->is_omega = 1;
     }
     else if (strcmp(instrument, "CRISM_VNIR") == 0) {
@@ -428,7 +451,8 @@ static void load_pinhole_camera_model(const char *instrument,
     else
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
                         "(supports CRISM_VNIR, CRISM_IR, ISS_NAC, ISS_WAC, "
-                        "OMEGA_SWIR_C, OMEGA_SWIR_L, VIMS_IR, VIMS_VIS)."),
+                        "OMEGA_SWIR_C, OMEGA_SWIR_L, OMEGA_VNIR, VIMS_IR, "
+                        "VIMS_VIS)."),
                        instrument);
 
     char varname[80];
@@ -707,7 +731,8 @@ int main(int argc, char *argv[])
     opt_instrument->type        = TYPE_STRING;
     opt_instrument->required    = NO;
     opt_instrument->options     = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC,"
-                                   "OMEGA_SWIR_C,OMEGA_SWIR_L,VIMS_IR,VIMS_VIS";
+                                   "OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,"
+                                   "VIMS_IR,VIMS_VIS";
     opt_instrument->description = _("Instrument camera model to use with -c");
 
     opt_filter1 = G_define_option();
@@ -730,8 +755,8 @@ int main(int argc, char *argv[])
     opt_mirror_dn = G_define_standard_option(G_OPT_R_INPUT);
     opt_mirror_dn->key         = "mirror_dn";
     opt_mirror_dn->required    = NO;
-    opt_mirror_dn->label       = _("OMEGA_SWIR_C/OMEGA_SWIR_L: scanning mirror "
-                                    "position raster");
+    opt_mirror_dn->label       = _("OMEGA_SWIR_C/OMEGA_SWIR_L/OMEGA_VNIR: "
+                                    "scanning mirror position raster");
     opt_mirror_dn->description = _("Per-sample scanning mirror position (DN), "
                                     "one value per sample/line -- import via "
                                     "'p.in.pds3 suffix_band=1' on the same QUBE "
@@ -862,11 +887,12 @@ int main(int argc, char *argv[])
     if (camera_mode && !opt_instrument->answer)
         G_fatal_error(_("-c requires instrument= (CRISM_VNIR, CRISM_IR, "
                         "ISS_NAC, ISS_WAC, OMEGA_SWIR_C, OMEGA_SWIR_L, "
-                        "VIMS_IR, or VIMS_VIS)."));
+                        "OMEGA_VNIR, VIMS_IR, or VIMS_VIS)."));
 
     int is_omega_instrument = camera_mode && opt_instrument->answer &&
         (strcmp(opt_instrument->answer, "OMEGA_SWIR_C") == 0 ||
-         strcmp(opt_instrument->answer, "OMEGA_SWIR_L") == 0);
+         strcmp(opt_instrument->answer, "OMEGA_SWIR_L") == 0 ||
+         strcmp(opt_instrument->answer, "OMEGA_VNIR") == 0);
     if (is_omega_instrument && !opt_mirror_dn->answer)
         G_fatal_error(_("instrument=%s requires mirror_dn= (the per-sample "
                         "scanning mirror position raster, imported via "

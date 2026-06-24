@@ -45,7 +45,8 @@ Three operating modes:
 3. **Camera mode (`-c`)**: for raw, un-projected pushbroom/framing/
    whiskbroom cubes where `-s` cannot be used at all (no known per-pixel
    (lon, lat) up front). Requires `instrument=` (`CRISM_VNIR`,
-   `CRISM_IR`, `ISS_NAC`, `ISS_WAC`, `OMEGA_SWIR_C`, or `OMEGA_SWIR_L`).
+   `CRISM_IR`, `ISS_NAC`, `ISS_WAC`, `OMEGA_SWIR_C`, `OMEGA_SWIR_L`,
+   `OMEGA_VNIR`, `VIMS_IR`, or `VIMS_VIS`).
    Builds a real per-pixel boresight ray from the instrument's camera
    model (read from the IK/IAK attached via *p.spiceinit*) and
    intersects it with the target surface via `p_spice_sincpt` instead of
@@ -267,9 +268,20 @@ works around this by pre-rotating the ray into `MEX_SPACECRAFT` itself
 TKFRAMEs) before calling `sincpt`, since the spacecraft body (-41) does
 have real ephemeris throughout.
 
-VNIR is **not yet supported**: its own per-pixel mirror-DN equivalence
-for synced-acquisition products (where VNIR's sample count is forced to
-match SWIR's, per the EAICD) isn't yet verified -- see `TODO.md`.
+`instrument=OMEGA_VNIR` is also supported, for the **synced-acquisition**
+VNIR product type -- the only kind `p.in.pds3`/`p.in.archive` currently
+import (confirmed against a real cube, `ORB0100_0.QUB`:
+`CHANNEL_ID=(IRC,IRL,VIS)`, `CORE_ITEMS` sample=64, identical to
+SWIR-C/SWIR-L's sample count, not VNIR's native 384/128-pixel pushbroom
+width). In this mode VNIR shares SWIR's real per-line/per-sample mirror
+telemetry one-for-one -- at each mirror step the same physical sweep
+that yields one SWIR sample also yields one VNIR sample -- so the
+*identical* `mirror_dn=`/`offset_angle` formula applies, just rotated
+out of `MEX_OMEGA_VNIR`'s own detector frame (a fixed `~0.3` deg TKFRAME
+offset from `MEX_OMEGA_SWIR_C`, per `MEX_V16.TF`) instead of SWIR's. The
+native-resolution, unsynced 128-pixel VNIR pushbroom mode
+(`MEX_OMEGA_V03.TI`'s `INS-41410_PIXEL_DN` calibration table) is a
+different, currently non-importable product type -- not implemented.
 
 Real-data result, verified against a real MEX OMEGA EDR (orbit 100,
 2004-02-10, `ORB0100_0.QUB`) and its own label's known ground-truth
@@ -277,7 +289,13 @@ bounds: 100% pixel hit rate, computed lat/lon bounds
 (-78.135..-70.253 deg lat, 291.477..302.969 deg E lon) match the
 label's own `MINIMUM_LATITUDE`/`MAXIMUM_LATITUDE`/`WESTERNMOST_
 LONGITUDE`/`EASTERNMOST_LONGITUDE` (-78.167/-70.253/291.415/303.019) to
-within ~0.05 deg -- not just crash-free output.
+within ~0.05 deg -- not just crash-free output. `OMEGA_VNIR` on the same
+cube (no independent label ground truth exists for VNIR) also gets a
+100% pixel hit rate, with bounds (-78.03..-70.17 deg lat,
+291.64..303.00 deg E lon) landing within the expected ~0.3 deg of
+SWIR-C's, consistent with the two channels' real, small boresight
+offset -- locked in as a regression test
+(`test_camera_mode_real_omega_vnir_geometry`).
 
 #### Cassini VIMS_IR/VIMS_VIS: a real 2-axis angular scan, ported from ISIS3
 
@@ -332,13 +350,12 @@ bounds are locked in as a regression test
 
 See the repo's top-level `TODO.md` for full context. `-c` supports
 CRISM (VNIR and IR detectors), Cassini ISS (NAC and WAC), MEX OMEGA
-(SWIR-C and SWIR-L), and Cassini VIMS (IR and VIS channels); any other
-`instrument=` value is a `G_fatal_error`, not a guess -- other
-instruments need their own per-instrument camera-model formula (the
-pinhole focal-plane convention used for CRISM/ISS is not necessarily
-how every instrument's optics work, and neither OMEGA's whiskbroom nor
-VIMS's 2-axis angular scan formula generalizes either). MEX OMEGA's
-VNIR detector still needs its own from-scratch research (see above).
+(SWIR-C, SWIR-L, and synced-acquisition VNIR), and Cassini VIMS (IR and
+VIS channels); any other `instrument=` value is a `G_fatal_error`, not
+a guess -- other instruments need their own per-instrument camera-model
+formula (the pinhole focal-plane convention used for CRISM/ISS is not
+necessarily how every instrument's optics work, and neither OMEGA's
+whiskbroom nor VIMS's 2-axis angular scan formula generalizes either).
 Real (non-ellipsoid) DSK shape models are supported in `-c` the same
 way as `-s` (reuses `camera_method`, `"DSK/Unprioritized"` when a DSK
 is attached).
@@ -432,6 +449,11 @@ p.phocube -c -tn instrument=OMEGA_SWIR_C input=omega_swirc.1 \
 # kernels) are needed because the real reconstructed-orbit SPK
 # (MEX_ROB_*.BSP) only gives MEX relative to MARS, not all the way to
 # the solar system barycenter that sincpt/ilumin need.
+
+# OMEGA_VNIR (synced-acquisition only) reuses the same mirror_dn=
+# raster as SWIR-C/SWIR-L above -- only instrument= changes:
+p.phocube -c -tn instrument=OMEGA_VNIR input=omega_swirc.1 \
+    output=omega_vnir_geom mirror_dn=omega_mirror_dn
 ```
 
 Camera mode, real per-pixel ray for a raw Cassini VIMS QUBE (real

@@ -248,10 +248,11 @@ Needs its own plan: decide whether to extend the existing (currently
 flat-field-only) `p.cam2map`/`p.caminfo`, or add a new
 instrument-specific module (e.g. starting with CRISM).
 
-Status: **implemented and verified correct against real data for eight
+Status: **implemented and verified correct against real data for nine
 instruments** (`CRISM_VNIR`/`CRISM_IR`, `ISS_NAC`/`ISS_WAC`,
-`OMEGA_SWIR_C`/`OMEGA_SWIR_L`, `VIMS_IR`/`VIMS_VIS` -- see the dedicated
-sections below for ISS, OMEGA, and VIMS). Decision: extended `p.phocube`
+`OMEGA_SWIR_C`/`OMEGA_SWIR_L`/`OMEGA_VNIR`, `VIMS_IR`/`VIMS_VIS` -- see
+the dedicated sections below for ISS, OMEGA, and VIMS). Decision:
+extended `p.phocube`
 (new `-c` flag), not
 `p.cam2map` -- research this session found `p.cam2map`'s actual code is
 pure ellipsoid flat-field resampling despite its docs claiming SPICE
@@ -601,10 +602,28 @@ an IAK, since OMEGA genuinely has none:
   pre-rotate into `MEX_SPACECRAFT` (whose center, -41, has real
   ephemeris throughout) and pass that as `dref` to `sincpt` instead --
   exact, not approximate, since TK frames have no light-time dependency.
-- VNIR deliberately deferred: its own per-pixel mirror-DN equivalence
-  for synced-acquisition products (where VNIR's sample count is forced
-  to match SWIR's, per the EAICD) isn't yet verified -- still a real
-  open question, not solved by this session's SWIR work.
+- **`OMEGA_VNIR` added (later session)**: confirmed against a real
+  cube (`ORB0100_0.QUB`: `CHANNEL_ID=(IRC,IRL,VIS)`, `CORE_ITEMS`
+  sample=64 -- identical to SWIR's sample count, not VNIR's native
+  384/128-pixel pushbroom width) that the only product type currently
+  importable is synced-acquisition: VNIR shares SWIR's real
+  per-line/per-sample mirror telemetry one-for-one, so the identical
+  `mirror_dn=`/`offset_angle` formula applies, just rotated out of
+  `MEX_OMEGA_VNIR`'s own detector frame (a fixed ~0.3 deg TKFRAME
+  offset from `MEX_OMEGA_SWIR_C`, per `MEX_V16.TF`) instead of SWIR's.
+  No code changes to the ray-construction loop were needed -- the
+  existing `is_omega` path is already frame-agnostic; only a new
+  `instrument=OMEGA_VNIR` branch in `load_pinhole_camera_model()` was
+  added. Verified: 100% pixel hit rate, lat/lon bounds within ~0.2 deg
+  of `OMEGA_SWIR_C`'s own label-verified bounds on the same cube --
+  consistent with the two channels' real, small boresight offset (no
+  independent VNIR ground truth exists in the label). The
+  native-resolution, unsynced 128-pixel VNIR pushbroom mode
+  (`MEX_OMEGA_V03.TI`'s `INS-41410_PIXEL_DN` calibration table) remains
+  a different, currently non-importable product type -- not
+  implemented; revisit if/when `p.in.archive`/`p.in.pds3` gains a path
+  for it. Added `test_camera_mode_real_omega_vnir_geometry` to
+  `p.phocube`'s test suite (passing).
 
 **Verified end-to-end against a real MEX OMEGA EDR** (`ORB0100_0.QUB`,
 orbit 100, 2004-02-10T18:07:10, 424 lines x 64 samples x 352 bands; real

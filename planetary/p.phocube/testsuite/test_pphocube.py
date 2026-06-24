@@ -747,6 +747,66 @@ class TestPphocube(TestCase):
                            pattern=f"{band_prefix}.*,{mirror_map},{out_prefix}_*",
                            quiet=True)
 
+    def test_camera_mode_real_omega_vnir_geometry(self):
+        """Real-kernel correctness check for -c OMEGA_VNIR: this is a
+        synced-acquisition cube (CHANNEL_ID=(IRC,IRL,VIS), CORE_ITEMS
+        sample=64 -- identical to SWIR's sample count, not VNIR's native
+        384/128-pixel pushbroom width), so VNIR shares SWIR's real
+        per-line/per-sample mirror_dn telemetry one-for-one; only the
+        detector frame differs (MEX_OMEGA_VNIR, a fixed ~0.3 deg TKFRAME
+        offset from MEX_OMEGA_SWIR_C per MEX_V16.TF). No independent
+        VNIR ground truth exists in the label, so this confirms a 100%
+        pixel hit rate and that computed lat/lon bounds land close to
+        (within the ~0.3 deg boresight offset) OMEGA_SWIR_C's own
+        label-verified bounds (test_camera_mode_real_omega_swir_c_geometry),
+        not just crash-free output."""
+        kernels = _find_omega_test_kernels()
+        if not kernels:
+            self.skipTest("no local MEX OMEGA test kernel set found "
+                          "(see _find_omega_test_kernels)")
+
+        band_prefix = "pphocube_test_omega_vnir"
+        mirror_map = "pphocube_test_omega_vnir_mirror_dn"
+        out_prefix = "pphocube_test_omega_vnir_out"
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        # Imports all 352 bands (SWIR-C+SWIR-L+VIS); only band 1 is
+        # needed to set the region shape -- the geometry itself comes
+        # entirely from mirror_dn=, shared with SWIR-C/SWIR-L.
+        self.runModule("p.in.pds3", input=kernels["cube"], output=band_prefix,
+                       overwrite=True, quiet=True)
+        self.runModule("p.in.pds3", input=kernels["cube"], output=mirror_map,
+                       suffix_band=1, overwrite=True, quiet=True)
+        self.runModule("g.region", raster=f"{band_prefix}.1")
+        self.runModule(
+            "p.spiceinit", map=f"{band_prefix}.1", target="MARS", observer="-41",
+            time="2004-02-10T18:08:35.0475", line_rate="0.401002358",
+            lsk=kernels["lsk"], sclk=kernels["sclk"], ik=kernels["ik"],
+            fk=kernels["fk"], pck=f"{kernels['pck1']},{kernels['pck2']}",
+            spk=f"{kernels['spk1']},{kernels['spk2']},{kernels['spk3']}",
+            ck=kernels["ck"])
+        try:
+            module = SimpleModule(
+                "p.phocube", flags="ctn", input=f"{band_prefix}.1",
+                output=out_prefix, instrument="OMEGA_VNIR",
+                mirror_dn=mirror_map)
+            self.assertModule(module)
+
+            lat = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lat")
+            lon = gs.parse_command("r.univar", flags="g", map=f"{out_prefix}_lon")
+            self.assertEqual(int(lat["null_cells"]), 0,
+                             "expected 100% pixel hit rate (0 NULL)")
+            # SWIR-C's own label-verified bounds: lat -78.135..-70.253,
+            # lon (0-360E) 291.477..302.969 -- VNIR's real ~0.3 deg
+            # boresight offset should keep it within delta=0.5 of these.
+            self.assertAlmostEqual(float(lat["max"]), -70.253, delta=0.5)
+            self.assertAlmostEqual(float(lat["min"]), -78.167, delta=0.5)
+            self.assertAlmostEqual(float(lon["max"]) + 360.0, 303.019, delta=0.5)
+            self.assertAlmostEqual(float(lon["min"]) + 360.0, 291.415, delta=0.5)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{band_prefix}.*,{mirror_map},{out_prefix}_*",
+                           quiet=True)
+
     def _camera_mode_real_vims(self, instrument, expect_lat_max, expect_lat_min,
                                 expect_lon_max, expect_lon_min):
         """Shared body for the VIMS_IR/VIMS_VIS real-kernel checks below."""
