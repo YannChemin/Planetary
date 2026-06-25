@@ -1708,16 +1708,29 @@ def main():
         sensor = "DAWN_VIR_VIS"
         if re.search(r"VIR_IR_1B", img_url, re.IGNORECASE):
             sensor = "DAWN_VIR_IR"
-        p_meta.write_planetary_metadata(
-            f"{opt_output}.1",
-            module="p.in.archive",
-            command=" ".join(sys.argv),
-            data_type="image",
-            sensor=sensor,
-            mission="DAWN",
-            body=body_slug.upper(),
-            source_file=img_url,
-        )
+        # p.in.pds3 -g already wrote planetary.json for <output>.1 (generic
+        # sensor="VIR" from the label's INSTRUMENT_ID); write_planetary_metadata()
+        # is create-only and would silently skip here, so update the existing
+        # record in place instead, same fix as the crism=/m3=/omega= paths above.
+        if p_meta.PlanetaryMetadata.exists(f"{opt_output}.1"):
+            meta = p_meta.PlanetaryMetadata.load(f"{opt_output}.1")
+            meta.sensor = sensor
+            meta.mission = "DAWN"
+            meta.body = body_slug.upper()
+            meta.source_file = img_url
+            meta.add_history_entry(" ".join(sys.argv))
+            meta.save(f"{opt_output}.1")
+        else:
+            p_meta.write_planetary_metadata(
+                f"{opt_output}.1",
+                module="p.in.archive",
+                command=" ".join(sys.argv),
+                data_type="image",
+                sensor=sensor,
+                mission="DAWN",
+                body=body_slug.upper(),
+                source_file=img_url,
+            )
         gs.message(f"Imported Dawn VIR RDR cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
         return

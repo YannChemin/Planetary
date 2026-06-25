@@ -145,7 +145,7 @@ implementer doesn't have to re-discover this):
 | Saturn system | VIMS | Cassini | Imaging spectrometer, 0.35-5.1 um | already partially supported via `opus=` (sensor inference only; no dedicated catalog/shortcut yet) |
 | Jupiter system | NIMS | Galileo | Near-IR imaging spectrometer | NASA PDS Imaging Node |
 | Pluto/Charon | LEISA (on Ralph) | New Horizons | IR imaging spectrometer | NASA PDS Small Bodies Node (SBN) |
-| Vesta/Ceres | VIR | Dawn | VIS+IR imaging spectrometer | NASA PDS Small Bodies Node (SBN) |
+| Vesta/Ceres | VIR | Dawn | VIS+IR imaging spectrometer | **done** -- `dawn_vir=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |
 | 67P/C-G | VIRTIS | Rosetta | Imaging spectrometer | ESA PSA |
 | Ryugu | NIRS3 | Hayabusa2 | NIR point spectrometer | JAXA DARTS |
 | Bennu | OVIRS | OSIRIS-REx | VIS-NIR point spectrometer | NASA PDS Small Bodies Node (SBN) |
@@ -164,6 +164,67 @@ spectrometers (MASCS, NIRS3, OVIRS) are a different shape of product
 (single spectra, not imaging cubes) and may not fit `p.in.archive`'s
 current per-pixel-cube import model without changes -- worth a separate
 scoping pass before starting one.
+
+**Full feasibility survey of the remaining 15 candidates** (4 parallel
+research passes, real live-archive checks, no fabricated URLs -- see
+also the auto-memory note `project_hyperspectral_survey.md` for the
+full per-instrument detail): found 10 real, tractable candidates
+(implementing one by one, this order):
+
+- **Tractable now, same detached/attached-label PDS3 QUB+LBL pattern
+  CRISM/M3/VIMS/OMEGA already use**: Dawn/VIR (**done**, see below),
+  Venus Express/VIRTIS, Rosetta/VIRTIS, Galileo/NIMS.
+- **Trivial (not new engineering)**: Cassini/UVIS (already reachable
+  via the existing `opus=`/`opus_id=` machinery -- just needs a
+  `co-uvis-euv*`/`co-uvis-fuv*` sensor-prefix mapping addition);
+  Cassini/VIMS dedicated catalog (already fully implemented, just has
+  one curated entry -- "done" means adding more).
+- **Tractable via the EXISTING generic GDAL-FITS import path, not a
+  new `libs/p_pds` reader**: MAVEN/IUVS, LRO/LAMP, Akatsuki IR1/IR2/UVI,
+  New Horizons/LEISA. All four are real FITS files with a detached
+  PDS3-style or PDS4 XML label -- `p.in.archive.py`'s own
+  `IMPORT_BY_EXT`/`import_file()` already routes `.fits`/unrecognized
+  extensions through `r.in.gdal` (confirmed: this machine's GDAL has a
+  working FITS driver), so this needs a `<name>=` catalog/resolver plus
+  parsing the companion label for sensor/target metadata (GDAL won't
+  read those fields itself) -- not a new binary reader.
+- **Wrong product shape (point spectrometers, confirmed, not just
+  assumed)**: MESSENGER/MASCS (likely a PDS3 TABLE, not yet fully
+  confirmed), OSIRIS-REx/OVIRS (confirmed PDS4 point spectrometer, 4
+  mrad FOV), Hayabusa2/NIRS3 (confirmed PDS4 + FITS + point
+  spectrometer, 0.1 deg FOV).
+- **Not archived yet, confirmed (not just assumed)**: BepiColombo/MERTIS
+  (real flyby data exists, reported at conferences, but ESA's own
+  MERTIS page says data is not yet public; Mercury orbit insertion not
+  until Nov 2026), Europa Clipper/MISE (launched Oct 2024, still in
+  cruise, zero Europa data yet), JUICE/MAJIS (real cruise-phase data
+  exists -- e.g. a comet 3I/ATLAS outgassing detection, Nov 2025 -- but
+  ESA states all MAJIS data goes to the PSA in 2029, nothing public
+  yet).
+
+### Dawn/VIR added to `p.in.archive` (`dawn_vir=`)
+
+First of the 10 queued candidates. Real archive: NASA PDS Small Bodies
+Node static tree (`sbnarchive.psi.edu/pds3/dawn/vir/`). Detached-label
+PDS3 QUBE: `AXIS_NAME = (BAND,SAMPLE,LINE)` (-> BIP organisation, a case
+`libs/p_pds` already handles generically), zero `SUFFIX_ITEMS`, 32-bit
+`IEEE_REAL` spectral radiance (`W/(m**2*sr*micron)`) -- no `libs/p_pds`
+changes needed at all, a plain case the existing reader already
+supports. Two curated catalog entries added, one per Dawn target body:
+`ceres_vir_ir_507093102` (Ceres LAMO, 2016-01-26) and
+`vesta_vir_ir_380500497` (Vesta LAMO, 2012-01-22), both 432 bands x 256
+samples x 48 lines. Verified live: real HTTP 200, `Content-Length`
+matching the label's own `CORE_ITEMS` exactly
+(432\*256\*48\*4 = 21233664 bytes for both), real end-to-end import via
+`p.in.archive dawn_vir=<key> output=...` producing sane, non-degenerate,
+physically-plausible-falloff radiance (band 1 mean 0.50, band 200 mean
+0.025 W/(m^2 sr um)). `sensor=DAWN_VIR_IR`/`DAWN_VIR_VIS` (detected from
+the real `VIR_IR_1B`/`VIR_VIS_1B` filename convention) correctly reaches
+`planetary.json` via the same load-existing-record-and-update-in-place
+fix `crism=`/`m3=`/`omega=` already needed (`p_meta.write_planetary_metadata()`
+is create-only and `p.in.pds3 -g` already writes a generic record first).
+No camera model added to `p.phocube -c` yet -- VIR's real per-pixel
+boresight/IK geometry is a separate, not-yet-investigated task.
 
 ## 1. Per-line/per-pixel timing in `p.phocube -s`
 
