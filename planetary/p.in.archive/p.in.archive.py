@@ -128,6 +128,33 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: virtis_rosetta
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Rosetta VIRTIS product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a Rosetta VIRTIS (Visible and Infrared Thermal Imaging Spectrometer) raw EDR product (attached-label PDS3 QUBE, single .QUB file) from the ESA Planetary Science Archive (archives.esac.esa.int). Use -l to list catalog keys.
+# %end
+
+# %option
+# % key: iuvs
+# % type: string
+# % required: no
+# % multiple: no
+# % label: MAVEN IUVS product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a MAVEN IUVS (Imaging Ultraviolet Spectrograph) calibrated L1B FITS cube from the NASA PDS Atmospheres Node (atmos.nmsu.edu). Multi-HDU FITS; HDU 1 is the calibrated radiance cube (kR/nm). Use -l to list catalog keys.
+# %end
+
+# %option
+# % key: nims
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Galileo NIMS product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a Galileo NIMS (Near Infrared Mapping Spectrometer) tube cube (BSQ PDS3 QUBE, VAX_REAL 4-byte floats, 12 geometry backplane bands) from the NASA PDS Imaging Node (planetarydata.jpl.nasa.gov). Use -l to list catalog keys.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
@@ -323,6 +350,16 @@ VIMS_CATALOG = {
         "Titan",
         "Cassini VIMS, Titan flyby, 2015-01-08T15:09:40, 118.5s exposure "
         "(VIS: 0.35-1.05 um/96 bands, IR: 0.88-5.1 um/256 bands)"),
+    "enceladus_v1484504730": (
+        "co-vims-v1484504730",
+        "Enceladus",
+        "Cassini VIMS, Enceladus, 2005-01-15T17:59:23 "
+        "(VIS: 0.35-1.05 um/96 bands, IR: 0.88-5.1 um/256 bands)"),
+    "saturn_v1454811589": (
+        "co-vims-v1454811589",
+        "Saturn",
+        "Cassini VIMS, Saturn atmosphere, 2003-12-23 "
+        "(VIS+IR imaging spectrometry of Saturn disk)"),
 }
 
 # Curated catalog of Mars Express OMEGA EDR products on the ESA Planetary
@@ -398,6 +435,73 @@ VIRTIS_VEX_CATALOG = {
         "Venus",
         "VIRTIS-M-IR raw EDR, orbit 23, 2006-05-14T00:10:43 "
         "(432 bands, 256 samples x 35 lines)"),
+}
+
+# Curated catalog of Rosetta VIRTIS raw EDR products on the ESA
+# Planetary Science Archive (archives.esac.esa.int), real mission path
+# segment "INTERNATIONAL-ROSETTA-MISSION" (not "ROSETTA"). Same
+# attached-label PDS3 QUBE / AXIS_NAME=(BAND,SAMPLE,LINE) BIP-with-
+# sample-suffix layout as Venus Express VIRTIS above -- the same
+# libs/p_pds BIP+suffix fix applies directly, no further library
+# changes needed. VIRTIS-H here is a true 1-sample-wide point
+# spectrometer slit (CORE_ITEMS sample=1, 3456 bands -- 8 spectral
+# orders x 432), unlike VEx VIRTIS-H's 256-sample slit; VIRTIS-M-IR is
+# true imaging (432 bands x 256 samples). Both verified live: real HTTP
+# 200, real end-to-end import (sane, non-degenerate raw DN; VIRTIS-H's
+# byte accounting matches the label's FILE_RECORDS exactly with zero
+# residual, VIRTIS-M-IR within a few hundred bytes of trailing padding,
+# same as VEx). Each entry: key -> (img_url, body, description).
+VIRTIS_ROSETTA_BASE = ("https://archives.esac.esa.int/psa/ftp/"
+                        "INTERNATIONAL-ROSETTA-MISSION/VIRTIS")
+VIRTIS_ROSETTA_CATALOG = {
+    "stp013_vh_s1_00366708038": (
+        f"{VIRTIS_ROSETTA_BASE}/RO-C-VIRTIS-2-PRL-MTP006-V2.0/DATA/STP013/"
+        "VIRTIS_H/S1_00366708038.QUB",
+        "67P",
+        "VIRTIS-H raw EDR, comet 67P/C-G, 2014-08-15T07:21:41 "
+        "(3456 bands, 1 sample x 18 lines)"),
+    "stp013_vi_i1_00366679117": (
+        f"{VIRTIS_ROSETTA_BASE}/RO-C-VIRTIS-2-PRL-MTP006-V2.0/DATA/STP013/"
+        "VIRTIS_M_IR/I1_00366679117.QUB",
+        "67P",
+        "VIRTIS-M-IR raw EDR, comet 67P/C-G, 2014-08-15T00:08:48 "
+        "(432 bands, 256 samples x 105 lines)"),
+}
+
+IUVS_BASE = ("https://atmos.nmsu.edu/PDS/data/PDS4/MAVEN/"
+             "iuvs_calibrated_bundle/l1b")
+IUVS_CATALOG = {
+    "limb_orbit00107_fuv": (
+        f"{IUVS_BASE}/limb/2014/10/"
+        "mvn_iuv_l1b_outlimb-orbit00107-fuv_20141018T075533_v13_r01.fits",
+        "Mars",
+        "MAVEN IUVS FUV limb scan, orbit 107, 2014-10-18T07:55:33 "
+        "(60 bands, 165 spectral x 7 spatial pixels, kR/nm)"),
+    "limb_orbit00107_muv": (
+        f"{IUVS_BASE}/limb/2014/10/"
+        "mvn_iuv_l1b_outlimb-orbit00107-muv_20141018T075533_v13_r01.fits",
+        "Mars",
+        "MAVEN IUVS MUV limb scan, orbit 107, 2014-10-18T07:55:33 "
+        "(60 bands, 165 spectral x 7 spatial pixels, kR/nm)"),
+}
+
+NIMS_BASE = "https://planetarydata.jpl.nasa.gov/img/data/go-j-nims-3-tube-v1.0"
+NIMS_CATALOG = {
+    "go1104_europa_g1e001ti": (
+        f"{NIMS_BASE}/go_1104/europa/g1e001ti.qub",
+        "Europa",
+        "Galileo NIMS tube cube, Europa G1 orbit, 1996-06-29 "
+        "(10 bands, 2.0-5.2 µm, BDRF, 20 samples x 17 lines, 12 geometry backplanes)"),
+    "go1104_callisto_g1c001ti": (
+        f"{NIMS_BASE}/go_1104/callisto/g1c001ti.qub",
+        "Callisto",
+        "Galileo NIMS tube cube, Callisto G1 orbit, 1996-06-04 "
+        "(10 bands, 2.0-5.2 µm, BDRF, 20 samples x 17 lines, 12 geometry backplanes)"),
+    "go1104_ganymede_g1g001ci": (
+        f"{NIMS_BASE}/go_1104/ganymede/g1g001ci.qub",
+        "Ganymede",
+        "Galileo NIMS tube cube, Ganymede G1 orbit, 1996-06-27 "
+        "(10 bands, 2.0-5.2 µm, BDRF, 20 samples x 17 lines, 12 geometry backplanes)"),
 }
 
 # Prefer these formats (checked in order against the STAC asset media-types
@@ -1262,6 +1366,79 @@ def print_virtis_vex_catalog():
         gs.message(f"  {k:<16} {body:<6} {desc}")
 
 
+def resolve_virtis_rosetta(virtis_rosetta_arg):
+    """Resolve a virtis_rosetta= argument to (img_url, body_hint).
+
+    Accepts a catalog key (see VIRTIS_ROSETTA_CATALOG) or a direct https
+    URL to a Rosetta VIRTIS raw EDR *.QUB on archives.esac.esa.int
+    (attached label, no separate .LBL)."""
+    a = virtis_rosetta_arg.strip()
+    if a in VIRTIS_ROSETTA_CATALOG:
+        img_url, body, _desc = VIRTIS_ROSETTA_CATALOG[a]
+        return img_url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown VIRTIS key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a raw EDR *.QUB file.")
+
+
+def print_virtis_rosetta_catalog():
+    gs.message("Rosetta VIRTIS raw EDR products (use virtis_rosetta=<key>, "
+               "or a direct https URL to a *.QUB on archives.esac.esa.int):")
+    gs.message(f"  {'key':<26} {'body':<6} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, body, desc) in VIRTIS_ROSETTA_CATALOG.items():
+        gs.message(f"  {k:<26} {body:<6} {desc}")
+
+
+def resolve_iuvs(iuvs_arg):
+    """Resolve an iuvs= argument to (fits_url, body_hint).
+
+    Accepts a catalog key (see IUVS_CATALOG) or a direct https URL to a
+    MAVEN IUVS calibrated L1B FITS file on atmos.nmsu.edu."""
+    a = iuvs_arg.strip()
+    if a in IUVS_CATALOG:
+        fits_url, body, _desc = IUVS_CATALOG[a]
+        return fits_url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown IUVS key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a FITS file.")
+
+
+def print_iuvs_catalog():
+    gs.message("MAVEN IUVS calibrated L1B products (use iuvs=<key>, "
+               "or a direct https URL to a .fits on atmos.nmsu.edu):")
+    gs.message(f"  {'key':<28} {'body':<6} description")
+    gs.message("  " + "-" * 90)
+    for k, (_url, body, desc) in IUVS_CATALOG.items():
+        gs.message(f"  {k:<28} {body:<6} {desc}")
+
+
+def resolve_nims(nims_arg):
+    """Resolve a nims= argument to (img_url, body_hint).
+
+    Accepts a catalog key (see NIMS_CATALOG) or a direct https URL to a
+    Galileo NIMS tube cube *.qub on planetarydata.jpl.nasa.gov."""
+    a = nims_arg.strip()
+    if a in NIMS_CATALOG:
+        img_url, body, _desc = NIMS_CATALOG[a]
+        return img_url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown NIMS key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a *.qub file.")
+
+
+def print_nims_catalog():
+    gs.message("Galileo NIMS tube cube products (use nims=<key>, "
+               "or a direct https URL to a *.qub on planetarydata.jpl.nasa.gov):")
+    gs.message(f"  {'key':<30} {'body':<10} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, body, desc) in NIMS_CATALOG.items():
+        gs.message(f"  {k:<30} {body:<10} {desc}")
+
+
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
 _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
@@ -1532,6 +1709,9 @@ def main():
     opt_omega        = options["omega"]
     opt_dawn_vir     = options["dawn_vir"]
     opt_virtis_vex   = options["virtis_vex"]
+    opt_virtis_rosetta = options["virtis_rosetta"]
+    opt_iuvs         = options["iuvs"]
+    opt_nims         = options["nims"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -1558,12 +1738,15 @@ def main():
         print_omega_catalog()
         print_dawn_vir_catalog()
         print_virtis_vex_catalog()
-        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex)):
+        print_virtis_rosetta_catalog()
+        print_iuvs_catalog()
+        print_nims_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
-            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1633,8 +1816,8 @@ def main():
         return
 
     if opt_m3:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
-            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1680,8 +1863,8 @@ def main():
         return
 
     if opt_vims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
-            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1695,8 +1878,8 @@ def main():
         # fall through into the OPUS branch below
 
     if opt_omega:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
-            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1743,8 +1926,8 @@ def main():
         return
 
     if opt_dawn_vir:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_opus, opt_opus_id)):
-            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1801,8 +1984,8 @@ def main():
         return
 
     if opt_virtis_vex:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
-            gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_rosetta=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1851,6 +2034,167 @@ def main():
             )
         gs.message(f"Imported VIRTIS raw EDR cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+        return
+
+    if opt_virtis_rosetta:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("virtis_rosetta= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/nims=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a VIRTIS product.")
+        img_url, body_hint = resolve_virtis_rosetta(opt_virtis_rosetta)
+        gs.message(f"VIRTIS source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "67p")
+        local_img = _rsdata_dest(img_url, body_hint)
+        _wget_resumable(img_url, local_img)
+
+        gs.message("Importing VIRTIS raw EDR cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="go" if flag_override else "g",
+                       input=local_img, output=opt_output, overwrite=True)
+        # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
+        # groups them under <output>; align the region to band 1.
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        # H (point-spectrometer-shaped) vs M-IR (imaging) channel, per the
+        # real filename convention (S1_<sctime>.../I1_<sctime>...).
+        fname = os.path.basename(urllib.parse.urlparse(img_url).path)
+        sensor = "RO_VIRTIS_M_IR" if fname.upper().startswith("I1") else "RO_VIRTIS_H"
+        # p.in.pds3 -g already wrote planetary.json for <output>.1 (generic
+        # sensor="VIRTIS" from the label's INSTRUMENT_ID); write_planetary_metadata()
+        # is create-only and would silently skip here, so update the existing
+        # record in place instead, same fix as the crism=/m3=/omega= paths above.
+        if p_meta.PlanetaryMetadata.exists(f"{opt_output}.1"):
+            meta = p_meta.PlanetaryMetadata.load(f"{opt_output}.1")
+            meta.sensor = sensor
+            meta.mission = "ROSETTA"
+            meta.body = body_slug.upper()
+            meta.source_file = img_url
+            meta.add_history_entry(" ".join(sys.argv))
+            meta.save(f"{opt_output}.1")
+        else:
+            p_meta.write_planetary_metadata(
+                f"{opt_output}.1",
+                module="p.in.archive",
+                command=" ".join(sys.argv),
+                data_type="image",
+                sensor=sensor,
+                mission="ROSETTA",
+                body=body_slug.upper(),
+                source_file=img_url,
+            )
+        gs.message(f"Imported VIRTIS raw EDR cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+        return
+
+    if opt_iuvs:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_nims, opt_opus, opt_opus_id)):
+            gs.fatal("iuvs= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import an IUVS product.")
+        fits_url, body_hint = resolve_iuvs(opt_iuvs)
+        gs.message(f"IUVS source: {fits_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(fits_url) or "mars")
+        local_fits = _rsdata_dest(fits_url, body_hint)
+        _wget_resumable(fits_url, local_fits)
+
+        # IUVS is a multi-HDU FITS; HDU 1 = calibrated radiance cube (kR/nm).
+        # GDAL FITS driver imports all bands in one call via the subdataset
+        # path "FITS:<file>:1". Infer channel (FUV/MUV) from the filename.
+        fname = os.path.basename(urllib.parse.urlparse(fits_url).path)
+        if "-fuv_" in fname.lower():
+            channel = "FUV"
+        elif "-muv_" in fname.lower():
+            channel = "MUV"
+        else:
+            channel = "FUV"
+        sensor = f"MAVEN_IUVS_{channel}"
+
+        gdal_path = f"FITS:{local_fits}:1"
+        gs.message(f"Importing MAVEN IUVS {channel} cube via r.in.gdal …")
+        try:
+            gs.run_command("r.in.gdal",
+                           flags="o",
+                           input=gdal_path,
+                           output=opt_output,
+                           overwrite=True)
+        except grass.exceptions.CalledModuleError:
+            gs.run_command("r.in.gdal",
+                           input=gdal_path,
+                           output=opt_output,
+                           overwrite=True)
+
+        # r.in.gdal does not auto-create an imagery group; do it explicitly.
+        band_maps = gs.read_command("g.list", type="raster",
+                                    pattern=f"{opt_output}.*",
+                                    mapset=".").strip().split()
+        if band_maps:
+            gs.run_command("i.group",
+                           group=opt_output, subgroup=opt_output,
+                           input=",".join(band_maps))
+
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        p_meta.write_planetary_metadata(
+            f"{opt_output}.1",
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor=sensor,
+            mission="MAVEN",
+            body=body_slug.upper(),
+            source_file=fits_url,
+        )
+        gs.message(f"Imported MAVEN IUVS {channel} cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1' .. '{opt_output}.N', kR/nm).")
+        return
+
+    if opt_nims:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_opus, opt_opus_id)):
+            gs.fatal("nims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a NIMS product.")
+        img_url, body_hint = resolve_nims(opt_nims)
+        gs.message(f"NIMS source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "jupiter")
+        local_img = _rsdata_dest(img_url, body_hint)
+        _wget_resumable(img_url, local_img)
+
+        gs.message("Importing Galileo NIMS tube cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="go" if flag_override else "g",
+                       input=local_img, output=opt_output, overwrite=True)
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        if p_meta.PlanetaryMetadata.exists(f"{opt_output}.1"):
+            meta = p_meta.PlanetaryMetadata.load(f"{opt_output}.1")
+            meta.sensor = "GALILEO_NIMS"
+            meta.mission = "GALILEO"
+            meta.body = body_slug.upper()
+            meta.source_file = img_url
+            meta.add_history_entry(" ".join(sys.argv))
+            meta.save(f"{opt_output}.1")
+        else:
+            p_meta.write_planetary_metadata(
+                f"{opt_output}.1",
+                module="p.in.archive",
+                command=" ".join(sys.argv),
+                data_type="image",
+                sensor="GALILEO_NIMS",
+                mission="GALILEO",
+                body=body_slug.upper(),
+                source_file=img_url,
+            )
+        gs.message(f"Imported Galileo NIMS tube cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1' .. '{opt_output}.N').")
         return
 
     if opt_cog:
@@ -2041,7 +2385,7 @@ def main():
         _align_region_to_raster(f"{opt_output}.1" if ext == ".qub" else opt_output,
                                  save_default=False)
 
-        # Infer sensor from OPUS ID prefix (co-iss-n* / co-iss-w* / co-vims-*).
+        # Infer sensor from OPUS ID prefix.
         oid_lower = opus_id.lower()
         if oid_lower.startswith("co-iss-n"):
             _sensor = "CASSINI_ISS_NAC"
@@ -2049,6 +2393,10 @@ def main():
             _sensor = "CASSINI_ISS_WAC"
         elif oid_lower.startswith("co-vims"):
             _sensor = "CASSINI_VIMS"
+        elif oid_lower.startswith("co-uvis-euv"):
+            _sensor = "CASSINI_UVIS_EUV"
+        elif oid_lower.startswith("co-uvis-fuv"):
+            _sensor = "CASSINI_UVIS_FUV"
         else:
             _sensor = None
 

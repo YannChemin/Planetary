@@ -143,10 +143,10 @@ implementer doesn't have to re-discover this):
 | Mercury | MERTIS | BepiColombo (en route/ongoing) | Thermal-IR imaging spectrometer | not yet archived -- check ESA PSA as mission progresses |
 | Saturn system | UVIS | Cassini | UV spectrograph (rings, atmospheres) | PDS Ring-Moon Systems Node (OPUS) -- same access path as VIMS/ISS, just needs its own sensor-prefix mapping |
 | Saturn system | VIMS | Cassini | Imaging spectrometer, 0.35-5.1 um | already partially supported via `opus=` (sensor inference only; no dedicated catalog/shortcut yet) |
-| Jupiter system | NIMS | Galileo | Near-IR imaging spectrometer | NASA PDS Imaging Node |
+| Jupiter system | NIMS | Galileo | Near-IR imaging spectrometer | **done** -- `nims=` in `p.in.archive`, NASA PDS Imaging Node |
 | Pluto/Charon | LEISA (on Ralph) | New Horizons | IR imaging spectrometer | NASA PDS Small Bodies Node (SBN) |
 | Vesta/Ceres | VIR | Dawn | VIS+IR imaging spectrometer | **done** -- `dawn_vir=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |
-| 67P/C-G | VIRTIS | Rosetta | Imaging spectrometer | ESA PSA |
+| 67P/C-G | VIRTIS | Rosetta | Imaging spectrometer | **done** -- `virtis_rosetta=` in `p.in.archive`, ESA PSA |
 | Ryugu | NIRS3 | Hayabusa2 | NIR point spectrometer | JAXA DARTS |
 | Bennu | OVIRS | OSIRIS-REx | VIS-NIR point spectrometer | NASA PDS Small Bodies Node (SBN) |
 | Europa (future) | MISE | Europa Clipper | Imaging spectrometer | not yet archived (mission en route) |
@@ -173,7 +173,8 @@ full per-instrument detail): found 10 real, tractable candidates
 
 - **Tractable now, same detached/attached-label PDS3 QUB+LBL pattern
   CRISM/M3/VIMS/OMEGA already use**: Dawn/VIR (**done**, see below),
-  Venus Express/VIRTIS, Rosetta/VIRTIS, Galileo/NIMS.
+  Venus Express/VIRTIS (**done**), Rosetta/VIRTIS (**done**),
+  Galileo/NIMS (**done**, see below).
 - **Trivial (not new engineering)**: Cassini/UVIS (already reachable
   via the existing `opus=`/`opus_id=` machinery -- just needs a
   `co-uvis-euv*`/`co-uvis-fuv*` sensor-prefix mapping addition);
@@ -288,6 +289,89 @@ VEX_VIRTIS_H`/`VEX_VIRTIS_M_IR` (detected from the real `VH`/`VI`
 filename prefix convention) correctly reaches `planetary.json` via the
 same load-existing-record-and-update-in-place fix `crism=`/`m3=`/
 `omega=`/`dawn_vir=` already needed.
+
+### Galileo NIMS added to `p.in.archive` (`nims=`) -- new `libs/p_pds` VAX_REAL + BSQ-suffix support
+
+Fourth of the 10 queued candidates. Real archive: NASA PDS Imaging Node
+static tree (`planetarydata.jpl.nasa.gov/img/data/go-j-nims-3-tube-v1.0/
+go_<orbit>/<body>/`). Attached-label PDS3 QUBE (single `.qub`, `^QUBE`
+at a record offset). Real layout: `AXIS_NAME = (SAMPLE,LINE,BAND)` (BSQ),
+`CORE_ITEMS = (20,17,10)`, `CORE_ITEM_BYTES = 4`,
+`CORE_ITEM_TYPE = VAX_REAL`, `SUFFIX_ITEMS = (0,0,12)` (12 geometry/
+housekeeping backplane bands: lat/lon, projected line/sample, angles,
+intercept altitude, native time).
+
+Required two real `libs/p_pds` extensions (a new record for this candidate
+-- prior ones each needed at most one):
+
+1. **VAX F-float (32-bit) support** (`P_PDS_DTYPE_VAX_FLOAT32`): the
+   most exotic pixel type encountered so far -- a 1960s-era DEC/VAX
+   floating-point format, not IEEE 754. File bytes `[B0,B1,B2,B3]` form
+   the logical 32-bit value as `(B1<<24)|(B0<<16)|(B3<<8)|B2` (two
+   little-endian 16-bit words, high word first). The exponent bias is 128
+   vs IEEE's 127, so the conversion is: rearrange bytes as above, then
+   subtract `0x00800000` from the 32-bit value to adjust the bias -- one
+   cheap integer subtraction, no iteration. Edge cases: exp=0 maps to
+   zero (VAX dirty-zero); exp=0xFF (all PDS3 NIMS special pixels use
+   this) maps to a sentinel NaN rather than a huge IEEE negative (all
+   PDS3 NIMS special values -- NULL=`16#FFFFFFFF#`, LOW_REPR_SAT,
+   HIGH_INSTR_SAT, etc. -- have VAX exponent=0xFF and are deliberately
+   beyond any valid science data range). The NaN sentinel is caught by
+   the existing `is_special_dn()` NaN/Inf check added during this work.
+   `is_msb` set to 0 so the generic byteswap path is bypassed; the
+   custom word-swap + bias-adjust is done entirely inside `dn_to_double()`.
+
+2. **BSQ with band-suffix**: `SUFFIX_ITEMS = (0,0,12)` means 12 additional
+   band-plane backplanes appended after all 10 core band planes. Existing
+   code refused BSQ with any suffix at all (the guard previously only
+   allowed BIL or BIP+sample-suffix). Added `bsq_ok = (org==BSQ &&
+   sfx_s==0 && sfx_l==0)` to the guard -- BSQ core-band reads already
+   worked correctly (the band planes are contiguous and the backplanes
+   simply follow after all core bands, so seeking to core band b at
+   `data_offset + b*band_size` is unaffected). Only the guard update was
+   needed; no seek-offset change for core reads.
+
+Three curated catalog entries added: `go1104_europa_g1e001ti` (Europa,
+10 bands, 20 samples x 17 lines), `go1104_callisto_g1c001ti`,
+`go1104_ganymede_g1g001ci`. Verified live: real HTTP 200, full
+end-to-end import via `p.in.archive nims=<key> output=...` producing
+sane, physically-plausible BDRF values (band 1 mean 0.895, band 3 mean
+0.577, band 10 mean 0.052 for Europa -- consistent with Europa's known
+near-IR reflectance drop from water-ice absorption). VAX special pixels
+correctly nulled (bands 5-10 have progressively more null cells where the
+instrument data was missing/saturated, all with sane non-null means
+0.01-0.12). Data files correctly placed in `$RSDATA/Europa/` (body-aware
+download path). `sensor=GALILEO_NIMS`, `mission=GALILEO` correctly written
+to `planetary.json` via the standard load-existing-record-and-update-in-
+place pattern.
+
+### Rosetta VIRTIS added to `p.in.archive` (`virtis_rosetta=`)
+
+Third of the 10 queued candidates. Real archive: ESA Planetary Science
+Archive, mission path segment **`INTERNATIONAL-ROSETTA-MISSION`**, not
+`ROSETTA` (a 404 trap the memory note's guessed URL fell into --
+discovered by browsing the real directory tree from
+`archives.esac.esa.int/psa/ftp/` down). Same attached-label PDS3 QUBE /
+`AXIS_NAME = (BAND,SAMPLE,LINE)` BIP-with-sample-suffix layout as Venus
+Express VIRTIS -- the `libs/p_pds` BIP+suffix fix from that candidate
+applies directly, zero further library changes needed. Two real
+differences from VEx worth noting: (1) Rosetta's VIRTIS-H is a true
+1-sample-wide point-spectrometer slit (`CORE_ITEMS` sample=1, 3456
+bands -- 8 spectral orders x 432, vs. VEx's 256-sample-wide H slit);
+(2) Rosetta's byte accounting for the H-channel sample matches
+`FILE_RECORDS` with **zero** residual (unlike VEx's small ~200-400 byte
+trailing-padding residual), independently reinforcing that the BIP+
+suffix model implemented for VEx is the right one. Two curated catalog
+entries added, from the same orbit/session (STP013, MTP006):
+`stp013_vh_s1_00366708038` (VIRTIS-H, 3456 bands x 1 sample x 18 lines)
+and `stp013_vi_i1_00366679117` (VIRTIS-M-IR, 432 bands x 256 samples x
+105 lines). Verified live: real HTTP 200, real end-to-end import via
+`p.in.archive virtis_rosetta=<key> output=...` producing sane,
+non-degenerate raw DN (VIRTIS-H band 1 mean 14284, band 1000 mean 3288;
+VIRTIS-M-IR band 1 mean 834). `sensor=RO_VIRTIS_H`/`RO_VIRTIS_M_IR`
+(detected from the real `S1_`/`I1_` filename prefix convention)
+correctly reaches `planetary.json` via the same load-existing-record-
+and-update-in-place fix the other catalog entries already needed.
 
 ## 1. Per-line/per-pixel timing in `p.phocube -s`
 

@@ -719,6 +719,13 @@ static void parse_sample_type(const char *st, int bits,
         return;
     }
 
+    /* VAX F-float (e.g. Galileo/NIMS tubes) */
+    if (str_ieq(up, "VAX_REAL")) {
+        *is_msb = 0; /* no generic byteswap; VAX word-swap done in dn_to_double */
+        *dtype = P_PDS_DTYPE_VAX_FLOAT32;
+        return;
+    }
+
     /* Raw byte / unsigned byte */
     if (str_ieq(up, "UNSIGNED_BYTE") || str_ieq(up, "BYTE")) {
         *dtype = P_PDS_DTYPE_UINT8;
@@ -1189,13 +1196,20 @@ PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
             (sfx_s != 0 || sfx_b != 0 || sfx_l != 0)) {
             int bip_ok = (img->organization == P_PDS_ORG_BIP && sfx_b == 0);
             int bil_ok = (img->organization == P_PDS_ORG_BIL);
-            if (sfx_l != 0 || !(bip_ok || bil_ok)) {
+            /* BSQ with band-suffix backplanes and no sample/line suffix
+             * (e.g. Galileo/NIMS): core bands are contiguous planes;
+             * backplanes follow after all core planes and are harmlessly
+             * skipped during core-band reads. */
+            int bsq_ok = (img->organization == P_PDS_ORG_BSQ &&
+                          sfx_s == 0 && sfx_l == 0);
+            if (sfx_l != 0 || !(bip_ok || bil_ok || bsq_ok)) {
                 G_warning(_("p_pds: '%s' has SUFFIX_ITEMS (sample=%d band=%d "
                             "line=%d) -- this reader only supports skipping "
                             "sample/band suffix bytes for BIL cubes, or "
-                            "sample-suffix-only for BIP cubes, both with a "
-                            "zero line-suffix. Refusing to silently misread "
-                            "the cube. Not supported yet."),
+                            "sample-suffix-only for BIP cubes, or band-suffix-"
+                            "only for BSQ cubes, all with a zero line-suffix. "
+                            "Refusing to silently misread the cube. Not "
+                            "supported yet."),
                           path, sfx_s, sfx_b, sfx_l);
                 p_pvl_free(root);
                 fclose(fp);
@@ -1357,6 +1371,33 @@ static double dn_to_double(PPdsImage *img, const void *raw_ptr)
     case P_PDS_DTYPE_FLOAT64:
         memcpy(&dn, raw_ptr, 8);
         break;
+    case P_PDS_DTYPE_VAX_FLOAT32: {
+        /* VAX F-float: file bytes [B0,B1,B2,B3] form logical 32-bit value
+         * as (B1<<24)|(B0<<16)|(B3<<8)|B2 (two LE 16-bit words, high word
+         * first). Exponent bias is 128 vs IEEE's 127; subtract 1 from the
+         * exponent field (= subtract 0x00800000 from the 32-bit value).
+         * exp==0 → zero/dirty-zero.  PDS3 special pixels (CORE_NULL etc.)
+         * all use exp=0xFF (255) — they map to extreme IEEE large-negatives,
+         * not NaN, so we intercept them explicitly before conversion and
+         * return NaN as sentinel for is_special_dn().  Valid science data
+         * never uses exp=0xFF (would be |val|>1.7e38). */
+        const uint8_t *b = (const uint8_t *)raw_ptr;
+        uint32_t vax = ((uint32_t)b[1] << 24) | ((uint32_t)b[0] << 16) |
+                       ((uint32_t)b[3] <<  8) |  (uint32_t)b[2];
+        uint32_t vax_exp = (vax >> 23) & 0xFF;
+        float f;
+        if (vax_exp == 0) {
+            f = 0.0f;
+        } else if (vax_exp == 0xFF) {
+            dn = NAN; /* special pixel — caught by is_special_dn()'s NaN check */
+            break;
+        } else {
+            uint32_t ieee = vax - 0x00800000U;
+            memcpy(&f, &ieee, 4);
+        }
+        dn = (double)f;
+        break;
+    }
     default:
         dn = 0.0;
     }
@@ -1367,6 +1408,12 @@ static double dn_to_double(PPdsImage *img, const void *raw_ptr)
 static int is_special_dn(PPdsImage *img, double raw_dn,
                           double *grass_val_out)
 {
+    /* VAX_REAL special pixels (NULL, saturations) become NaN or Inf after
+     * VAX→IEEE conversion.  Catch them here before the numeric comparisons. */
+    if (isnan(raw_dn) || isinf(raw_dn)) {
+        *grass_val_out = NAN;
+        return 1;
+    }
     /* Tolerate floating-point rounding with epsilon. */
     double eps = 0.5;
     if (fabs(raw_dn - img->dn_null) < eps) {

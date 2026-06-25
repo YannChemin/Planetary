@@ -77,7 +77,8 @@ typedef enum {
     P_PDS_DTYPE_INT32    = 4,  /*!< 32-bit signed integer                  */
     P_PDS_DTYPE_UINT32   = 5,  /*!< 32-bit unsigned integer                */
     P_PDS_DTYPE_FLOAT32  = 6,  /*!< 32-bit IEEE float                      */
-    P_PDS_DTYPE_FLOAT64  = 7   /*!< 64-bit IEEE double                     */
+    P_PDS_DTYPE_FLOAT64  = 7,  /*!< 64-bit IEEE double                     */
+    P_PDS_DTYPE_VAX_FLOAT32 = 8 /*!< 32-bit VAX F-float (e.g. Galileo/NIMS)*/
 } PPdsDataType;
 
 /*! \brief Band interleave organisation on disk. */
