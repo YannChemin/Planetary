@@ -119,6 +119,15 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: virtis_vex
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Venus Express VIRTIS product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a Venus Express VIRTIS (Visible and Infrared Thermal Imaging Spectrometer) raw EDR product (attached-label PDS3 QUBE, single .QUB file) from the ESA Planetary Science Archive (archives.esac.esa.int). Use -l to list catalog keys.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
@@ -360,6 +369,35 @@ DAWN_VIR_CATALOG = {
         "Vesta",
         "Dawn VIR-IR RDR, Vesta LAMO, 2012-01-22T10:33:50 "
         "(432 bands, 1.02-5.10 um, 256 samples x 48 lines)"),
+}
+
+# Curated catalog of Venus Express VIRTIS raw EDR products on the ESA
+# Planetary Science Archive (archives.esac.esa.int). Attached-label PDS3
+# QUBE (single .QUB file, ^QUBE points at a record offset within the
+# same file -- same convention as Mars Express OMEGA above). Real
+# AXIS_NAME = (BAND,SAMPLE,LINE) -> BIP organisation, with a real
+# sample-suffix (10 16-bit housekeeping items appended as phantom extra
+# samples at the end of every line) that required extending
+# libs/p_pds's BIP reader (see TODO.md) -- verified end to end against
+# real downloaded data (sane, non-degenerate raw DN, smooth sample-to-
+# sample/line-to-line spectral continuity). Each entry:
+# key -> (img_url, body, description). VIRTIS-H (point-spectrometer-
+# shaped, "VH" filename prefix) and VIRTIS-M-IR ("VI" prefix, true
+# imaging) both share this exact QUBE layout; both are listed since
+# they're real, separately downloadable products from the same orbit.
+VIRTIS_VEX_BASE = ("https://archives.esac.esa.int/psa/ftp/VENUS-EXPRESS/"
+                    "VIRTIS/VEX-V-VIRTIS-2-3-V2.0/DATA/MTP001/VIR0023/RAW")
+VIRTIS_VEX_CATALOG = {
+    "orb0023_vh_00": (
+        f"{VIRTIS_VEX_BASE}/VH0023_00.QUB",
+        "Venus",
+        "VIRTIS-H raw EDR, orbit 23, 2006-05-13T23:57:23 "
+        "(432 bands, 256 samples x 7 lines)"),
+    "orb0023_vi_00": (
+        f"{VIRTIS_VEX_BASE}/VI0023_00.QUB",
+        "Venus",
+        "VIRTIS-M-IR raw EDR, orbit 23, 2006-05-14T00:10:43 "
+        "(432 bands, 256 samples x 35 lines)"),
 }
 
 # Prefer these formats (checked in order against the STAC asset media-types
@@ -1199,6 +1237,31 @@ def print_dawn_vir_catalog():
         gs.message(f"  {k:<26} {body:<6} {desc}")
 
 
+def resolve_virtis_vex(virtis_vex_arg):
+    """Resolve a virtis_vex= argument to (img_url, body_hint).
+
+    Accepts a catalog key (see VIRTIS_VEX_CATALOG) or a direct https URL
+    to a Venus Express VIRTIS raw EDR *.QUB on archives.esac.esa.int
+    (attached label, no separate .LBL)."""
+    a = virtis_vex_arg.strip()
+    if a in VIRTIS_VEX_CATALOG:
+        img_url, body, _desc = VIRTIS_VEX_CATALOG[a]
+        return img_url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown VIRTIS key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a raw EDR *.QUB file.")
+
+
+def print_virtis_vex_catalog():
+    gs.message("Venus Express VIRTIS raw EDR products (use virtis_vex=<key>, "
+               "or a direct https URL to a *.QUB on archives.esac.esa.int):")
+    gs.message(f"  {'key':<16} {'body':<6} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, body, desc) in VIRTIS_VEX_CATALOG.items():
+        gs.message(f"  {k:<16} {body:<6} {desc}")
+
+
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
 _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
@@ -1468,6 +1531,7 @@ def main():
     opt_vims         = options["vims"]
     opt_omega        = options["omega"]
     opt_dawn_vir     = options["dawn_vir"]
+    opt_virtis_vex   = options["virtis_vex"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -1493,12 +1557,13 @@ def main():
         print_vims_catalog()
         print_omega_catalog()
         print_dawn_vir_catalog()
-        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir)):
+        print_virtis_vex_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
-            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1568,8 +1633,8 @@ def main():
         return
 
     if opt_m3:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
-            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
+            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1615,8 +1680,8 @@ def main():
         return
 
     if opt_vims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
-            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
+            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1630,8 +1695,8 @@ def main():
         # fall through into the OPUS branch below
 
     if opt_omega:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_opus, opt_opus_id)):
-            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_opus, opt_opus_id)):
+            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1678,8 +1743,8 @@ def main():
         return
 
     if opt_dawn_vir:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_opus, opt_opus_id)):
-            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_opus, opt_opus_id)):
+            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1732,6 +1797,59 @@ def main():
                 source_file=img_url,
             )
         gs.message(f"Imported Dawn VIR RDR cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+        return
+
+    if opt_virtis_vex:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
+            gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a VIRTIS product.")
+        img_url, body_hint = resolve_virtis_vex(opt_virtis_vex)
+        gs.message(f"VIRTIS source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "venus")
+        local_img = _rsdata_dest(img_url, body_hint)
+        _wget_resumable(img_url, local_img)
+
+        gs.message("Importing VIRTIS raw EDR cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="go" if flag_override else "g",
+                       input=local_img, output=opt_output, overwrite=True)
+        # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
+        # groups them under <output>; align the region to band 1.
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        # H (point-spectrometer-shaped) vs M-IR (imaging) channel, per the
+        # real filename convention (VH<orbit>_.../VI<orbit>_...).
+        fname = os.path.basename(urllib.parse.urlparse(img_url).path)
+        sensor = "VEX_VIRTIS_M_IR" if fname.upper().startswith("VI") else "VEX_VIRTIS_H"
+        # p.in.pds3 -g already wrote planetary.json for <output>.1 (generic
+        # sensor="VIRTIS" from the label's INSTRUMENT_ID); write_planetary_metadata()
+        # is create-only and would silently skip here, so update the existing
+        # record in place instead, same fix as the crism=/m3=/omega= paths above.
+        if p_meta.PlanetaryMetadata.exists(f"{opt_output}.1"):
+            meta = p_meta.PlanetaryMetadata.load(f"{opt_output}.1")
+            meta.sensor = sensor
+            meta.mission = "VENUS EXPRESS"
+            meta.body = body_slug.upper()
+            meta.source_file = img_url
+            meta.add_history_entry(" ".join(sys.argv))
+            meta.save(f"{opt_output}.1")
+        else:
+            p_meta.write_planetary_metadata(
+                f"{opt_output}.1",
+                module="p.in.archive",
+                command=" ".join(sys.argv),
+                data_type="image",
+                sensor=sensor,
+                mission="VENUS EXPRESS",
+                body=body_slug.upper(),
+                source_file=img_url,
+            )
+        gs.message(f"Imported VIRTIS raw EDR cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
         return
 

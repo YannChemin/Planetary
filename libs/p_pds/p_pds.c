@@ -1431,16 +1431,20 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
         break;
     }
     case P_PDS_ORG_BIP: {
-        /* QUBE sample-suffix bytes (e.g. Venus Express/Rosetta VIRTIS): a
-         * sample-suffix block is appended after each real sample's
-         * per-band spectrum, widening every line by suffix_sample_items
-         * "samples" -- zero for cubes without suffix items, reducing to
-         * the plain BIP stride below. See the SUFFIX_ITEMS handling
-         * above for the verification this layout is based on. */
-        long samp_sfx_bytes = (long)img->suffix_sample_items * img->suffix_item_bytes;
-        long bip_sample_stride = (long)img->bands * bpp + samp_sfx_bytes;
+        /* QUBE sample-suffix items (e.g. Venus Express/Rosetta VIRTIS):
+         * unlike BIL's per-band-row suffix, a BIP sample-suffix is a
+         * block of suffix_sample_items extra *phantom samples* (each
+         * still bands*bpp bytes wide, i.e. a full spectrum-shaped slot)
+         * appended once after the real samples in each line -- so the
+         * per-sample stride within a row is plain bands*bpp, and only
+         * the row-to-row stride widens by suffix_sample_items extra
+         * sample-slots. Zero suffix_sample_items reduces to the plain
+         * BIP stride. Verified against a real downloaded VIRTIS-H QUBE
+         * (sample-to-sample and line-to-line spectral continuity). */
+        long bip_line_stride = ((long)ns + img->suffix_sample_items) *
+                                (long)img->bands * bpp;
         seek_pos = img->data_offset
-                   + (long)row * (long)ns * bip_sample_stride
+                   + (long)row * bip_line_stride
                    + (long)band * bpp;
         break;
     }
@@ -1481,11 +1485,13 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
         G_free(raw);
     }
     else {
-        /* BIP: samples are interleaved; skip (bands * bpp), plus any
-         * sample-suffix bytes, between samples. */
+        /* BIP: samples are interleaved; skip (bands * bpp) between
+         * samples -- sample-suffix items are phantom samples appended
+         * once at the end of each line (see seek_pos's bip_line_stride
+         * above), not extra bytes per real sample, so the per-sample
+         * stride here is unaffected by suffix_sample_items. */
         uint8_t *elem = (uint8_t *)G_malloc((size_t)bpp);
-        long stride = (long)img->bands * bpp +
-                      (long)img->suffix_sample_items * img->suffix_item_bytes;
+        long stride = (long)img->bands * bpp;
 
         for (int s = 0; s < ns; s++) {
             long pos = seek_pos + (long)s * stride;
