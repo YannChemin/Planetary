@@ -868,8 +868,81 @@ fixture (`_find_iss_test_kernels()`, `~/RSDATA/Saturn/spice_test/` and
 Rewrote `p.cam2map.md` to remove the false `projection=`/`res=`/
 `clon=`/8-named-projections/`p_projection_planet` claims and document
 the real `-c` ISS_NAC/ISS_WAC back-projection feature, the
-`PROJECTION_XY` convention, and the summing/light-time handling.
-`p.caminfo`'s own separate doc/code mismatch (claims incidence/
-emission/phase + footprint vector output, code has neither) was **not**
-touched this session -- still open if wanted later. Real cartographic
-map-projection support (beyond plain lat/lon) also remains unbuilt.
+`PROJECTION_XY` convention, and the summing/light-time handling. Real
+cartographic map-projection support (beyond plain lat/lon) remains
+unbuilt.
+
+### Candidate #5b: `p.caminfo`'s own doc/code mismatch -- full rebuild
+
+`p.caminfo`'s docs claimed real SPICE camera geometry (calling a
+`p_spice_geo_row` function that does exist in `libs/p_spice` but was
+never wired up) -- centre/corner lat/lon, incidence/emission/phase,
+sub-solar/sub-spacecraft points, solar distance, pixel resolution,
+north azimuth -- but the actual code just computed generic ellipsoid
+radius/resolution stats from CLI-supplied `a_radius`/`b_radius`/
+`c_radius`, no SPICE calls at all, and even the option name differed
+from every other module (`map=` instead of `input=`). User asked for
+this to be closed out the same way as candidate #5 (`p.cam2map`): a
+full rebuild matching the docs, not a docs-only fix.
+
+ISIS3's own `caminfo` (the documented "ISIS3 equivalent") is itself a
+raw-camera-cube report tool -- it evaluates the real camera model at
+the image centre/corners, not a georeferenced product's region. So
+`p.caminfo` was rebuilt to reuse the exact same per-instrument pinhole
+camera model `p.phocube -c`/`p.cam2map -c` already use (boresight/
+pixel-pitch/focal-length/K1, including the SUMMING/binning auto-
+detection fix from candidate #5), evaluated at 5 points (centre + 4
+corners) instead of every pixel. Scoped to `CRISM_VNIR`/`CRISM_IR`/
+`ISS_NAC`/`ISS_WAC` only (same reasoning as `p.cam2map`'s scope: MEX
+OMEGA's whiskbroom mirror needs a per-pixel `mirror_dn=` raster lookup
+and Cassini VIMS's 2-axis scan needs real per-cube swath offsets --
+both are mechanically addable later but skipped here to keep this
+candidate reviewable).
+
+**New library functions** (`libs/p_spice`): `p_spice_subpnt()`/
+`p_spice_subslr()`, wrapping CSPICE `subpnt_c`/`subslr_c` (sub-observer
+and sub-solar point) with this library's existing simple
+"Ellipsoid"/"DSK/Unprioritized" method-string convention (mapped
+internally to the longer `subpnt_c`/`subslr_c` method strings). Reused
+the already-existing `p_shape_xyz_to_latlon()` (`libs/p_shapemodel`) to
+convert SPICE's body-fixed XYZ surface points to planetocentric
+lat/lon, rather than adding a redundant `reclat_c` wrapper.
+
+**North azimuth** (not previously implemented anywhere in this
+project) is computed as the clockwise angle, in the image's own
+(sample, line) plane, from "up" (decreasing line) to true north at the
+centre pixel: project the body's rotation-pole direction onto the
+local tangent plane (using the centre-to-surface-point direction as an
+approximate outward normal -- exact for a sphere, a small
+approximation for a flattened ellipsoid, consistent with this
+project's other documented-approximation formulas), then rotate into
+the camera frame through the same two-leg, light-time-aware J2000
+decomposition fixed in candidate #5 (`pxform(fixref, "J2000", trgepc)`
+then `pxform("J2000", camera_frame, et)`, using `sincpt`'s own returned
+`trgepc` directly rather than recomputing `et-lt`).
+
+**Verified against real data, cross-validated against two
+independently-already-verified sources**:
+- `ISS_NAC` (same `N1466182140_1_CALIB` SUM2 frame as candidate #5):
+  centre lat/lon -10.61/317.49 deg, matching the independently-computed
+  `p.phocube -c`/`p.cam2map -c` forward geometry for this exact frame
+  (-10.58/-42.60, i.e. 317.40 in 0-360 convention) to within ~0.1 deg.
+  Solar distance 9.04 AU (Saturn's real heliocentric distance) and
+  pixel resolution ~99.3 km/pixel (matches `pixel_pitch/focal_length *
+  range` computed by hand) are both real, physically sane numbers, not
+  just non-crashing output.
+- `CRISM_VNIR` (same `FRT00003BFB` cube as `p.phocube`'s own CRISM
+  test): centre lat/lon 22.148/342.044 deg (i.e. -17.96 in +-180
+  convention), matching the known Mawrth Vallis ground truth
+  (22.149/-17.95) used as that test's own regression baseline, to
+  within 0.01 deg. Solar distance 1.509 AU (a real, in-range Mars
+  heliocentric distance).
+
+Added `test_camera_mode_real_crism_geometry`/
+`_iss_nac_geometry` to `p.caminfo`'s test suite (both passing). Rewrote
+`p.caminfo.md` to describe the real centre/corner camera-ray geometry,
+renamed the `map=` option to `input=` (matching `p.phocube`/
+`p.cam2map`'s convention), and removed the dead `a_radius`/`b_radius`/
+`c_radius` options (no longer used -- real radii now come implicitly
+from the loaded PCK via the SPICE calls themselves). `Makefile` updated
+to link `p_spice`/`p_meta`/cspice (mirrors `p.cam2map`'s Makefile).
