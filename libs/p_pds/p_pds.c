@@ -934,40 +934,60 @@ static int resolve_data_pointer(PPvlNode *root, const char *label_path,
 /*                                                                      */
 /* Used to correct stale ^IMAGE pointers in attached-label PDS3 files. */
 /* Strategy:                                                            */
-/*   1. Read the byte at nominal_offset.                                */
-/*   2. If it is already binary (not printable ASCII / common WS),     */
-/*      return nominal_offset unchanged — the pointer is correct.       */
+/*   1. Read a short run of bytes at nominal_offset (P_PDS_ASCII_RUN).  */
+/*   2. If even one of them is binary (not printable ASCII / common    */
+/*      WS), the pointer already lands on real pixel data -- return    */
+/*      nominal_offset unchanged. A single coincidentally ASCII-range   */
+/*      byte (e.g. a 16-bit pixel whose high byte is a small positive   */
+/*      value like 0x09) is expected by chance in real binary data and  */
+/*      must not trigger a shift; real PVL label text, by contrast,     */
+/*      always runs many consecutive printable bytes.                   */
 /*   3. Otherwise scan forward (up to P_PDS_LABEL_SCAN_BYTES) until    */
-/*      the first binary byte, which is the true start of pixel data.  */
+/*      a run of P_PDS_ASCII_RUN consecutive binary bytes is found,    */
+/*      which is the true start of pixel data.                          */
 /* ================================================================== */
 
 #define P_PDS_LABEL_SCAN_BYTES 512
+#define P_PDS_ASCII_RUN 4
+
+static int is_ascii_textlike(int c)
+{
+    return !(c > 0x7E || c < 0x09 || (c > 0x0D && c < 0x20 && c != 0x1A));
+}
+
+/* True if all P_PDS_ASCII_RUN bytes starting at fp's current position
+ * (which is restored on return) look like printable/whitespace ASCII. */
+static int run_is_ascii(FILE *fp, long pos, long file_size)
+{
+    if (pos + P_PDS_ASCII_RUN > file_size) return 0;
+    long save = ftell(fp);
+    fseek(fp, pos, SEEK_SET);
+    int all_ascii = 1;
+    for (int i = 0; i < P_PDS_ASCII_RUN; i++) {
+        int c = fgetc(fp);
+        if (c == EOF || !is_ascii_textlike(c)) { all_ascii = 0; break; }
+    }
+    fseek(fp, save, SEEK_SET);
+    return all_ascii;
+}
 
 static long scan_past_ascii(FILE *fp, long nominal_offset, long file_size)
 {
     if (nominal_offset < 0) return nominal_offset;
-    if (fseek(fp, nominal_offset, SEEK_SET) != 0) return nominal_offset;
 
-    /* Read byte at nominal_offset. */
-    int c = fgetc(fp);
-    if (c == EOF) return nominal_offset;
-
-    /* Already at binary pixel data — pointer is correct, no scan needed. */
-    if (c > 0x7E || c < 0x09 || (c > 0x0D && c < 0x20 && c != 0x1A))
+    /* Already at (or within a run of) binary pixel data — pointer is
+     * correct, no scan needed. */
+    if (!run_is_ascii(fp, nominal_offset, file_size))
         return nominal_offset;
 
-    /* First byte is printable/whitespace ASCII — still inside label text.
-     * Scan forward for the first binary byte. */
+    /* A real run of printable/whitespace ASCII — still inside label
+     * text. Scan forward for the first position starting a binary run. */
     long scan_end = nominal_offset + P_PDS_LABEL_SCAN_BYTES;
     if (scan_end > file_size) scan_end = file_size;
 
-    long pos = nominal_offset + 1;
-    while (pos < scan_end) {
-        c = fgetc(fp);
-        if (c == EOF) break;
-        if (c > 0x7E || c < 0x09 || (c > 0x0D && c < 0x20 && c != 0x1A))
+    for (long pos = nominal_offset + 1; pos < scan_end; pos++) {
+        if (!run_is_ascii(fp, pos, file_size))
             return pos;
-        pos++;
     }
     return nominal_offset;
 }
@@ -1137,32 +1157,45 @@ PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
     /* --- Refuse QUBE sideplanes (SUFFIX_ITEMS) rather than silently
      * misreading. Real PDS3 QUBE products (e.g. ESA Mars Express OMEGA,
      * Cassini VIMS raw .qub) append extra sample-/band-direction
-     * "sideplane" bytes per record. Supported case (matching NASA's own
-     * ISIS3 ReadVimsBIL() importer, the authoritative reference for this
-     * exact layout): BAND_STORAGE_TYPE = LINE_INTERLEAVED (BIL) with a
-     * zero line-suffix -- a sample-suffix block of
-     * (sample-suffix-items * SUFFIX_ITEM_BYTES) bytes is appended after
-     * each band's core samples within a line, and a band-suffix backplane
-     * of (band-suffix-items rows, each (samples + sample-suffix-items)
-     * items wide) is appended once per line after all bands. Any other
-     * organisation, or a nonzero line-suffix, has no verified byte layout
-     * here and is refused rather than guessed -- reading on as if
-     * SUFFIX_ITEMS were (0,0,0) would silently shift every subsequent
-     * record, producing wrong-but-plausible-looking pixel values instead
-     * of an obvious failure. */
+     * "sideplane" bytes per record. Two supported cases:
+     * 1. BAND_STORAGE_TYPE = LINE_INTERLEAVED (BIL) with a zero
+     *    line-suffix (matching NASA's own ISIS3 ReadVimsBIL() importer):
+     *    a sample-suffix block of (sample-suffix-items * item-bytes)
+     *    bytes is appended after each band's core samples within a line,
+     *    and a band-suffix backplane of (band-suffix-items rows, each
+     *    (samples + sample-suffix-items) items wide) is appended once
+     *    per line after all bands.
+     * 2. BAND_STORAGE_TYPE = BAND_SEQUENTIAL_BY_PIXEL (BIP), zero
+     *    band-suffix and zero line-suffix (matching real ESA Venus
+     *    Express/Rosetta VIRTIS QUBEs, and ISIS3's own generic
+     *    ProcessImport::ProcessBip() suffix handling): a sample-suffix
+     *    block of (sample-suffix-items * item-bytes) bytes is appended
+     *    after each real sample's per-band spectrum, i.e. each line
+     *    becomes (real samples + sample-suffix-items) "samples" wide,
+     *    every one of them a full per-band spectrum. Verified against a
+     *    real downloaded VIRTIS-H QUBE: decoding with this stride
+     *    produces smooth, physically coherent sample-to-sample and
+     *    line-to-line spectral continuity (see TODO.md).
+     * Any other organisation, or a nonzero band-suffix/line-suffix, has
+     * no verified byte layout here and is refused rather than guessed --
+     * reading on as if SUFFIX_ITEMS were (0,0,0) would silently shift
+     * every subsequent record, producing wrong-but-plausible-looking
+     * pixel values instead of an obvious failure. */
     img->suffix_sample_items = img->suffix_band_items = img->suffix_line_items = 0;
     img->suffix_item_bytes = 4; /* matches every real archive seen so far */
     {
         int sfx_s, sfx_b, sfx_l;
         if (pvl_tuple_by_axis(img_obj, "SUFFIX_ITEMS", &sfx_s, &sfx_b, &sfx_l) &&
             (sfx_s != 0 || sfx_b != 0 || sfx_l != 0)) {
-            if (sfx_l != 0 || img->organization != P_PDS_ORG_BIL) {
+            int bip_ok = (img->organization == P_PDS_ORG_BIP && sfx_b == 0);
+            int bil_ok = (img->organization == P_PDS_ORG_BIL);
+            if (sfx_l != 0 || !(bip_ok || bil_ok)) {
                 G_warning(_("p_pds: '%s' has SUFFIX_ITEMS (sample=%d band=%d "
                             "line=%d) -- this reader only supports skipping "
-                            "sample/band suffix bytes for BAND_STORAGE_TYPE = "
-                            "LINE_INTERLEAVED (BIL) cubes with a zero "
-                            "line-suffix. Refusing to silently misread the "
-                            "cube. Not supported yet."),
+                            "sample/band suffix bytes for BIL cubes, or "
+                            "sample-suffix-only for BIP cubes, both with a "
+                            "zero line-suffix. Refusing to silently misread "
+                            "the cube. Not supported yet."),
                           path, sfx_s, sfx_b, sfx_l);
                 p_pvl_free(root);
                 fclose(fp);
@@ -1171,6 +1204,8 @@ PPdsImage *p_pds_open_image_named(const char *path, const char *object_name)
             }
             int ok2;
             int item_bytes = p_pvl_value_int(img_obj, "SUFFIX_ITEM_BYTES", &ok2);
+            if (!ok2)
+                item_bytes = p_pvl_value_int(img_obj, "SAMPLE_SUFFIX_ITEM_BYTES", &ok2);
             img->suffix_sample_items = sfx_s;
             img->suffix_band_items   = sfx_b;
             if (ok2 && item_bytes > 0) img->suffix_item_bytes = item_bytes;
@@ -1395,11 +1430,20 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
                    + pfx;
         break;
     }
-    case P_PDS_ORG_BIP:
+    case P_PDS_ORG_BIP: {
+        /* QUBE sample-suffix bytes (e.g. Venus Express/Rosetta VIRTIS): a
+         * sample-suffix block is appended after each real sample's
+         * per-band spectrum, widening every line by suffix_sample_items
+         * "samples" -- zero for cubes without suffix items, reducing to
+         * the plain BIP stride below. See the SUFFIX_ITEMS handling
+         * above for the verification this layout is based on. */
+        long samp_sfx_bytes = (long)img->suffix_sample_items * img->suffix_item_bytes;
+        long bip_sample_stride = (long)img->bands * bpp + samp_sfx_bytes;
         seek_pos = img->data_offset
-                   + (long)row * (long)ns * (long)img->bands * bpp
+                   + (long)row * (long)ns * bip_sample_stride
                    + (long)band * bpp;
         break;
+    }
     default:
         return -1;
     }
@@ -1437,9 +1481,11 @@ int p_pds_read_row(PPdsImage *img, int band, int row,
         G_free(raw);
     }
     else {
-        /* BIP: samples are interleaved; skip (bands * bpp) between samples. */
+        /* BIP: samples are interleaved; skip (bands * bpp), plus any
+         * sample-suffix bytes, between samples. */
         uint8_t *elem = (uint8_t *)G_malloc((size_t)bpp);
-        long stride = (long)img->bands * bpp;
+        long stride = (long)img->bands * bpp +
+                      (long)img->suffix_sample_items * img->suffix_item_bytes;
 
         for (int s = 0; s < ns; s++) {
             long pos = seek_pos + (long)s * stride;
