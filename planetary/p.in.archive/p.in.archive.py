@@ -110,6 +110,15 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: dawn_vir
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Dawn VIR product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a Dawn VIR (Visible and InfraRed mapping spectrometer) calibrated RDR product (.QUB + companion .LBL) for Ceres or Vesta from the NASA PDS Small Bodies Node static archive (sbnarchive.psi.edu). Use -l to list catalog keys.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
@@ -320,6 +329,37 @@ OMEGA_CATALOG = {
         "Mars",
         "OMEGA EDR, orbit 100, 2004-02-10T18:07:10 "
         "(352 bands, 64 samples x 424 lines)"),
+}
+
+# Curated catalog of Dawn VIR (Visible and InfraRed mapping spectrometer)
+# calibrated RDR products on the NASA PDS Small Bodies Node static archive
+# (sbnarchive.psi.edu). Detached-label PDS3 QUBE (separate .LBL + .QUB,
+# AXIS_NAME = (BAND,SAMPLE,LINE) -> BIP organisation, zero suffix, 32-bit
+# IEEE_REAL spectral radiance -- a plain case already handled by the
+# existing libs/p_pds reader, no new code needed). Each entry:
+# key -> (img_url, lbl_url, body, description). Verified live: real HTTP
+# 200, Content-Length matching the label's own CORE_ITEMS exactly
+# (432*256*48*4 = 21233664 bytes), real import (432 bands, sane
+# non-degenerate W/(m**2*sr*micron) radiance). Confirmed reachable with
+# plain wget's default User-Agent (no special handling needed).
+DAWN_VIR_BASE = "https://sbnarchive.psi.edu/pds3/dawn/vir"
+DAWN_VIR_CATALOG = {
+    "ceres_vir_ir_507093102": (
+        f"{DAWN_VIR_BASE}/DWNCLVIR_I1B/DATA/20151216_LAMO/20160110_CYCLE2/"
+        "VIR_IR_1B_1_507093102_1.QUB",
+        f"{DAWN_VIR_BASE}/DWNCLVIR_I1B/DATA/20151216_LAMO/20160110_CYCLE2/"
+        "VIR_IR_1B_1_507093102_1.LBL",
+        "Ceres",
+        "Dawn VIR-IR RDR, Ceres LAMO, 2016-01-26T15:13:00 "
+        "(432 bands, 1.02-5.10 um, 256 samples x 48 lines)"),
+    "vesta_vir_ir_380500497": (
+        f"{DAWN_VIR_BASE}/DWNVVIR_I1B/DATA/20111212_LAMO/20120114_CYCLE6/"
+        "VIR_IR_1B_1_380500497_2.QUB",
+        f"{DAWN_VIR_BASE}/DWNVVIR_I1B/DATA/20111212_LAMO/20120114_CYCLE6/"
+        "VIR_IR_1B_1_380500497_2.LBL",
+        "Vesta",
+        "Dawn VIR-IR RDR, Vesta LAMO, 2012-01-22T10:33:50 "
+        "(432 bands, 1.02-5.10 um, 256 samples x 48 lines)"),
 }
 
 # Prefer these formats (checked in order against the STAC asset media-types
@@ -1130,6 +1170,35 @@ def print_omega_catalog():
         gs.message(f"  {k:<14} {body:<6} {desc}")
 
 
+def resolve_dawn_vir(dawn_vir_arg):
+    """Resolve a dawn_vir= argument to (img_url, lbl_url, body_hint).
+
+    Accepts a catalog key (see DAWN_VIR_CATALOG) or a direct https URL to
+    a Dawn VIR RDR *.QUB on sbnarchive.psi.edu; the companion .LBL is
+    derived by replacing the extension."""
+    a = dawn_vir_arg.strip()
+    if a in DAWN_VIR_CATALOG:
+        img_url, lbl_url, body, _desc = DAWN_VIR_CATALOG[a]
+        return img_url, lbl_url, body
+    if a.lower().startswith(("http://", "https://")):
+        if not a.upper().endswith(".QUB"):
+            gs.fatal("Direct dawn_vir= URLs must point at a Dawn VIR RDR "
+                     "*.QUB file.")
+        lbl_url = a[: -len(".QUB")] + (".LBL" if a.endswith(".QUB") else ".lbl")
+        return a, lbl_url, None
+    gs.fatal(f"Unknown Dawn VIR key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to an RDR *.QUB file.")
+
+
+def print_dawn_vir_catalog():
+    gs.message("Dawn VIR RDR products (use dawn_vir=<key>, or a direct https "
+               "URL to a *.QUB on sbnarchive.psi.edu):")
+    gs.message(f"  {'key':<26} {'body':<6} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, _lbl, body, desc) in DAWN_VIR_CATALOG.items():
+        gs.message(f"  {k:<26} {body:<6} {desc}")
+
+
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
 _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
@@ -1398,6 +1467,7 @@ def main():
     opt_m3           = options["m3"]
     opt_vims         = options["vims"]
     opt_omega        = options["omega"]
+    opt_dawn_vir     = options["dawn_vir"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -1422,12 +1492,13 @@ def main():
         print_m3_catalog()
         print_vims_catalog()
         print_omega_catalog()
-        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega)):
+        print_dawn_vir_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_opus, opt_opus_id)):
-            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1497,8 +1568,8 @@ def main():
         return
 
     if opt_m3:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_opus, opt_opus_id)):
-            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
+            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1544,8 +1615,8 @@ def main():
         return
 
     if opt_vims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_opus, opt_opus_id)):
-            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_opus, opt_opus_id)):
+            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1559,8 +1630,8 @@ def main():
         # fall through into the OPUS branch below
 
     if opt_omega:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_opus, opt_opus_id)):
-            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_opus, opt_opus_id)):
+            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1603,6 +1674,51 @@ def main():
                 source_file=img_url,
             )
         gs.message(f"Imported OMEGA EDR cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
+        return
+
+    if opt_dawn_vir:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_opus, opt_opus_id)):
+            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a Dawn VIR product.")
+        img_url, lbl_url, body_hint = resolve_dawn_vir(opt_dawn_vir)
+        gs.message(f"Dawn VIR source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "ceres")
+        local_img = _rsdata_dest(img_url, body_hint)
+        local_lbl = os.path.join(os.path.dirname(local_img),
+                                  os.path.basename(urllib.parse.urlparse(lbl_url).path))
+        _wget_resumable(img_url, local_img)
+        gs.message(f"Fetching label: {lbl_url}")
+        _wget_resumable(lbl_url, local_lbl)
+
+        gs.message("Importing Dawn VIR RDR cube via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       flags="go" if flag_override else "g",
+                       input=local_lbl, output=opt_output, overwrite=True)
+        # Multi-band cube: p.in.pds3 -g writes <output>.1 .. <output>.N and
+        # groups them under <output>; align the region to band 1.
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        # IR vs VIS channel, per the real filename convention
+        # (VIR_IR_1B_.../VIR_VIS_1B_...).
+        sensor = "DAWN_VIR_VIS"
+        if re.search(r"VIR_IR_1B", img_url, re.IGNORECASE):
+            sensor = "DAWN_VIR_IR"
+        p_meta.write_planetary_metadata(
+            f"{opt_output}.1",
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor=sensor,
+            mission="DAWN",
+            body=body_slug.upper(),
+            source_file=img_url,
+        )
+        gs.message(f"Imported Dawn VIR RDR cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1', '{opt_output}.2', ...).")
         return
 
