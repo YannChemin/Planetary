@@ -226,6 +226,69 @@ is create-only and `p.in.pds3 -g` already writes a generic record first).
 No camera model added to `p.phocube -c` yet -- VIR's real per-pixel
 boresight/IK geometry is a separate, not-yet-investigated task.
 
+### Venus Express VIRTIS added to `p.in.archive` (`virtis_vex=`) -- new `libs/p_pds` BIP+suffix support
+
+Second of the 10 queued candidates, and the first one to actually need a
+real `libs/p_pds` reader extension (Dawn/VIR didn't). Real archive: ESA
+Planetary Science Archive, `archives.esac.esa.int/psa/ftp/VENUS-EXPRESS/
+VIRTIS/VEX-V-VIRTIS-2-3-V2.0/DATA/MTP<NNN>/VIR<NNNN>/RAW/`. Attached-label
+PDS3 QUBE (single `.QUB`, `^QUBE` points at a record offset, same
+convention OMEGA already taught this reader). Real layout:
+`AXIS_NAME = (BAND,SAMPLE,LINE)` (BIP) with a genuine, nonzero
+`SUFFIX_ITEMS = (0,10,0)` -- 10 16-bit housekeeping items per line. This
+is a **different suffix attachment model than BIL's** (OMEGA/VIMS): in
+BIL the suffix is extra bytes tacked onto every band-row; in BIP here the
+10 suffix items are 10 *phantom whole-spectrum samples* appended once at
+the end of each line (i.e. the per-real-sample stride is plain
+`bands*item_bytes`, and only the line-to-line stride widens by
+`suffix_sample_items` extra sample-slots). Confirmed via two independent
+checks: (1) cross-referencing ISIS3's own `ProcessImportPds`/
+`ProcessImport::ProcessBip()` source (`$HOME/dev/ISIS3`) for the
+authoritative suffix-as-extra-samples model, confirming `AXIS_NAME =
+(BAND,SAMPLE,LINE)` always maps to BIP organisation in real archives
+regardless of physical channel; (2) direct empirical byte-level
+decoding of a real downloaded VIRTIS-H sample (`VH0023_00.QUB`) at
+several sample/line offsets, checking for smooth, physically-coherent
+sample-to-sample and line-to-line spectral continuity -- the first,
+wrong implementation attempt (treating the suffix as BIL-style
+per-sample bytes) produced wildly discontinuous ±32767 garbage, caught
+immediately by this check before it ever reached a "looks plausible"
+state.
+
+Implementing this also surfaced and fixed a real, pre-existing,
+previously-undetected `libs/p_pds` bug: `scan_past_ascii()` (the
+heuristic that detects and corrects stale attached-label `^IMAGE`/`^QUBE`
+pointers) used a single-byte ASCII/whitespace test, so a real 16-bit
+pixel whose high byte coincidentally fell in the printable-ASCII range
+(e.g. `0x09`, a real VIRTIS-H raw DN's high byte) caused a false-positive
+"still inside label text" detection, silently shifting the read offset
+by a few bytes and corrupting every value. Fixed by requiring a short
+*run* of `P_PDS_ASCII_RUN` (4) consecutive ASCII-like bytes before
+concluding "still in label text" -- real PVL label text always runs many
+consecutive printable bytes, while real binary data hitting one
+ASCII-range byte by chance is expected and must not trigger a shift.
+This fix is general (benefits every attached-label archive this reader
+handles, not just VIRTIS) and was verified against the existing
+`p_pds`/`test_p_pds.c` unit suite (9/9 passing, run with `GISBASE`/
+`GISRC` set -- the test binary needs a real GRASS session for
+`G_warning()` to behave; running it bare without env vars silently
+`exit(1)`s on the very first `G_warning()` call, a pre-existing harness
+quirk unrelated to this fix, confirmed by reproducing it against the
+pre-change `p_pds.c` too).
+
+Two curated catalog entries added (orbit 23, both real, separately
+downloadable products from the same orbit): `orb0023_vh_00` (VIRTIS-H,
+432 bands x 256 samples x 7 lines) and `orb0023_vi_00` (VIRTIS-M-IR, 432
+bands x 256 samples x 35 lines). Verified live: real HTTP 200, real
+end-to-end import via `p.in.archive virtis_vex=<key> output=...`
+producing sane, non-degenerate raw DN (VIRTIS-H band 1 mean 4872, band
+200 mean 8013; VIRTIS-M-IR band 1 mean 8013 -- all well within the
+label's own saturation bounds, no garbage swings). `sensor=
+VEX_VIRTIS_H`/`VEX_VIRTIS_M_IR` (detected from the real `VH`/`VI`
+filename prefix convention) correctly reaches `planetary.json` via the
+same load-existing-record-and-update-in-place fix `crism=`/`m3=`/
+`omega=`/`dawn_vir=` already needed.
+
 ## 1. Per-line/per-pixel timing in `p.phocube -s`
 
 `-s` currently uses one mid-scene epoch (`time=`, attached via
