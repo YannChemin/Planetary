@@ -136,15 +136,15 @@ implementer doesn't have to re-discover this):
 | Mars | OMEGA | Mars Express | VIS+NIR imaging spectrometer, 0.38-5.1 um | ESA Planetary Science Archive (PSA) |
 | Mars | MAVEN/IUVS | MAVEN | UV spectrograph (upper atmosphere) | NASA PDS Atmospheres Node |
 | Moon | M3 (Moon Mineralogy Mapper) | Chandrayaan-1 | VNIR imaging spectrometer, 0.43-3.0 um | NASA PDS Imaging Node (also via Astropedia's own M3 mosaic in some contexts -- check STAC first) |
-| Moon | LAMP | LRO | Far-UV spectrograph (airglow/exosphere) | NASA PDS Atmospheres Node |
+| Moon | LAMP | LRO | Far-UV spectrograph (airglow/exosphere) | **done** -- `lamp=` in `p.in.archive`, NASA PDS Imaging Node |
 | Venus | VIRTIS | Venus Express | Imaging spectrometer, 0.25-5.1 um | **done** -- `virtis_vex=` in `p.in.archive`, ESA PSA |
-| Venus | IR1/IR2/UVI | Akatsuki | Multispectral imagers (not hyperspectral, but UV-VIS-NIR) | JAXA DARTS |
+| Venus | IR1/IR2/UVI | Akatsuki | Multispectral imagers (not hyperspectral, but UV-VIS-NIR) | **done** -- `akatsuki=` in `p.in.archive`, JAXA DARTS |
 | Mercury | MASCS (UVVS+VIRS) | MESSENGER | UV-VIS-NIR point spectrometer | NASA PDS Geosciences Node |
 | Mercury | MERTIS | BepiColombo (en route/ongoing) | Thermal-IR imaging spectrometer | not yet archived -- check ESA PSA as mission progresses |
 | Saturn system | UVIS | Cassini | UV spectrograph (rings, atmospheres) | PDS Ring-Moon Systems Node (OPUS) -- same access path as VIMS/ISS, just needs its own sensor-prefix mapping |
 | Saturn system | VIMS | Cassini | Imaging spectrometer, 0.35-5.1 um | already partially supported via `opus=` (sensor inference only; no dedicated catalog/shortcut yet) |
 | Jupiter system | NIMS | Galileo | Near-IR imaging spectrometer | **done** -- `nims=` in `p.in.archive`, NASA PDS Imaging Node |
-| Pluto/Charon | LEISA (on Ralph) | New Horizons | IR imaging spectrometer | NASA PDS Small Bodies Node (SBN) |
+| Pluto/Charon | LEISA (on Ralph) | New Horizons | IR imaging spectrometer | **done** -- `leisa=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |
 | Vesta/Ceres | VIR | Dawn | VIS+IR imaging spectrometer | **done** -- `dawn_vir=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |
 | 67P/C-G | VIRTIS | Rosetta | Imaging spectrometer | **done** -- `virtis_rosetta=` in `p.in.archive`, ESA PSA |
 | Ryugu | NIRS3 | Hayabusa2 | NIR point spectrometer | JAXA DARTS |
@@ -181,14 +181,15 @@ full per-instrument detail): found 10 real, tractable candidates
   Cassini/VIMS dedicated catalog (already fully implemented, just has
   one curated entry -- "done" means adding more).
 - **Tractable via the EXISTING generic GDAL-FITS import path, not a
-  new `libs/p_pds` reader**: MAVEN/IUVS, LRO/LAMP, Akatsuki IR1/IR2/UVI,
-  New Horizons/LEISA. All four are real FITS files with a detached
-  PDS3-style or PDS4 XML label -- `p.in.archive.py`'s own
-  `IMPORT_BY_EXT`/`import_file()` already routes `.fits`/unrecognized
-  extensions through `r.in.gdal` (confirmed: this machine's GDAL has a
-  working FITS driver), so this needs a `<name>=` catalog/resolver plus
-  parsing the companion label for sensor/target metadata (GDAL won't
-  read those fields itself) -- not a new binary reader.
+  new `libs/p_pds` reader**: **done** -- MAVEN/IUVS (`iuvs=`), LRO/LAMP
+  (`lamp=`), Akatsuki IR1/IR2/UVI (`akatsuki=`), New Horizons/LEISA
+  (`leisa=`). All four are real FITS files with a detached PDS3-style or
+  PDS4 XML label -- imported via `r.in.gdal` with FITS subdataset paths
+  where needed (`FITS:<file>:1` for IUVS and LEISA which have multi-HDU
+  layout; direct path for Akatsuki UVI which GDAL auto-promotes to the
+  first IMAGE extension). Multi-band cubes (IUVS: 60 bands, LEISA: 270
+  bands) get an imagery group via `i.group`; single-band images (LAMP:
+  1024×32, Akatsuki: 1024×1024) are imported as single rasters.
 - **Wrong product shape (point spectrometers, confirmed, not just
   assumed)**: MESSENGER/MASCS (likely a PDS3 TABLE, not yet fully
   confirmed), OSIRIS-REx/OVIRS (confirmed PDS4 point spectrometer, 4
@@ -372,6 +373,60 @@ VIRTIS-M-IR band 1 mean 834). `sensor=RO_VIRTIS_H`/`RO_VIRTIS_M_IR`
 (detected from the real `S1_`/`I1_` filename prefix convention)
 correctly reaches `planetary.json` via the same load-existing-record-
 and-update-in-place fix the other catalog entries already needed.
+
+### MAVEN IUVS added to `p.in.archive` (`iuvs=`)
+
+Fifth of the 10 queued candidates. Real archive: NASA PDS Atmospheres Node
+(`atmos.nmsu.edu`). Product type: **multi-HDU FITS** with a companion PDS4
+XML label -- NOT a PDS3 binary. Import path: `r.in.gdal` via the GDAL FITS
+driver, addressing HDU 1 (calibrated radiance cube, kR/nm) with subdataset
+path `FITS:<file>:1`. Two catalog entries added: FUV limb scan
+(`limb_orbit00107_fuv`) and MUV limb scan (`limb_orbit00107_muv`), orbit 107
+of MAVEN, 2014-10-18, 60 bands × 165 spectral × 7 spatial pixels.
+`r.in.gdal` does NOT auto-create a GRASS imagery group (unlike `p.in.pds3
+-g`); must call `i.group` explicitly after import. Fixed in response to user
+feedback: "Do not forget that all import of multi-bands image should create
+an imagery group by the name of the file". `sensor=MAVEN_IUVS_FUV` or
+`MAVEN_IUVS_MUV` inferred from filename substring (`-fuv_` / `-muv_`).
+
+### LRO LAMP added to `p.in.archive` (`lamp=`)
+
+Seventh of the 10 queued candidates. Real archive: NASA PDS Imaging Node
+(`planetarydata.jpl.nasa.gov/img/data/lro/lamp/edr/`). Product type: **multi-
+HDU FITS EDR** with a detached PDS3 label. GDAL sees the file as having
+subdatasets; HDU 1 = door-open spectrogram (1024 spectral × 32 spatial
+pixels), HDU 2 = door-closed background. Import via `r.in.gdal` with subdataset
+path `FITS:<file>:1`. Single-band result (1 GDAL band from a 2D FITS array)
+-- no imagery group. Verified: min=0, max=25,560 raw counts. Two catalog
+entries from 2022-03-06 in LROLAM_0050. `sensor=LRO_LAMP`.
+
+### Akatsuki (VCO) UVI added to `p.in.archive` (`akatsuki=`)
+
+Eighth of the 10 queued candidates. Real archive: JAXA DARTS
+(`data.darts.isas.jaxa.jp/pub/pds3/vco-v-uvi-3-cdr-v1.0/`). Product type:
+**multi-HDU FITS** where the primary HDU has NAXIS=0 (no data) and the first
+IMAGE extension is the science image. GDAL automatically promotes to the first
+IMAGE extension, so no `:N` subdataset suffix needed -- direct path import
+works. 1024×1024 calibrated radiance in W/m²/sr/m, single band (one filter
+per file). Sensor inferred from filename: `uvi_` → `AKATSUKI_UVI`, `ir1_` →
+`AKATSUKI_IR1`, `ir2_` → `AKATSUKI_IR2`, `lir_` → `AKATSUKI_LIR`. Three
+catalog entries: UVI 283 nm and 365 nm from orbit 1 (2015-12-07), UVI 365 nm
+from orbit 8 (2016-02-24). Verified: min=−3.4e+38 (missing-data sentinel from
+`P_MPIXV` header keyword), max=25.7 MW/m²/sr/m. `mission=AKATSUKI`.
+
+### New Horizons LEISA added to `p.in.archive` (`leisa=`)
+
+Ninth of the 10 queued candidates. Real archive: NASA PDS Small Bodies Node
+(`pds-smallbodies.astro.umd.edu/holdings/nh-a-leisa-3-kem2-v1.0/`). Product
+type: **multi-HDU FITS** 3D cube, NAXIS=3, 256×256×270 bands, BITPIX=−32
+(IEEE float). Like IUVS, GDAL reports subdatasets and requires the subdataset
+path `FITS:<file>:1` to access the science cube (otherwise refuses: "No raster
+bands found"). Import via `r.in.gdal FITS:<file>:1` creates 270 GRASS raster
+bands at once; then `i.group` creates the imagery group. Spectral coverage:
+1.25–2.50 µm (near-IR). Target: Arrokoth (MU69, KEM2 approach phase).
+Verified: band 1 max=0.34, band 135 max=0.43 (physically plausible NIR
+reflectance); −9999 fill value used for unobserved pixels. `sensor=NH_LEISA`.
+`mission=NEW_HORIZONS`.
 
 ## 1. Per-line/per-pixel timing in `p.phocube -s`
 

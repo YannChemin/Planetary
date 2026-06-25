@@ -2446,16 +2446,18 @@ def main():
         local_fits = _rsdata_dest(fits_url, body_hint)
         _wget_resumable(fits_url, local_fits)
 
+        # LEISA FITS has multiple HDUs; HDU 1 is the calibrated science cube.
+        gdal_path = f"FITS:{local_fits}:1"
         gs.message("Importing NH LEISA cube via r.in.gdal …")
         try:
             gs.run_command("r.in.gdal",
                            flags="o",
-                           input=local_fits,
+                           input=gdal_path,
                            output=opt_output,
                            overwrite=True)
         except grass.exceptions.CalledModuleError:
             gs.run_command("r.in.gdal",
-                           input=local_fits,
+                           input=gdal_path,
                            output=opt_output,
                            overwrite=True)
 
