@@ -155,6 +155,33 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: lamp
+# % type: string
+# % required: no
+# % multiple: no
+# % label: LRO LAMP product: a catalog key (see -l) or a direct https URL
+# % description: Fetches an LRO LAMP (Lyman Alpha Mapping Project) EDR FITS spectrogram (1024 spectral x 32 spatial pixels, FUV 57-196 nm) from the PDS Imaging Node (planetarydata.jpl.nasa.gov). Use -l to list catalog keys.
+# %end
+
+# %option
+# % key: akatsuki
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Akatsuki (VCO) product: a catalog key (see -l) or a direct https URL
+# % description: Fetches an Akatsuki Venus Climate Orbiter FITS image (UVI 283/365 nm, IR1, IR2) from the JAXA DARTS archive (data.darts.isas.jaxa.jp). Use -l to list catalog keys.
+# %end
+
+# %option
+# % key: leisa
+# % type: string
+# % required: no
+# % multiple: no
+# % label: New Horizons LEISA product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a New Horizons LEISA (Linear Etalon Imaging Spectral Array) calibrated science FITS cube (256x256x270 bands, 1.25-2.50 µm) from the PDS Small Bodies Node (pds-smallbodies.astro.umd.edu). Use -l to list catalog keys.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
@@ -1439,6 +1466,107 @@ def print_nims_catalog():
         gs.message(f"  {k:<30} {body:<10} {desc}")
 
 
+LAMP_BASE = ("https://planetarydata.jpl.nasa.gov/img/data/lro/lamp/edr/"
+             "LROLAM_0050/DATA")
+LAMP_CATALOG = {
+    "lro_lamp_2022065_001": (
+        f"{LAMP_BASE}/2022065/LAMP_ENG_0668223981_01.fit",
+        "Moon",
+        "LRO LAMP FUV EDR, 2022-03-06T01:46:21 (1024 spectral x 32 spatial, door-open)"),
+    "lro_lamp_2022065_002": (
+        f"{LAMP_BASE}/2022065/LAMP_ENG_0668231004_01.fit",
+        "Moon",
+        "LRO LAMP FUV EDR, 2022-03-06T03:43:24 (1024 spectral x 32 spatial, door-open)"),
+}
+
+
+def resolve_lamp(a):
+    if a in LAMP_CATALOG:
+        url, body, _desc = LAMP_CATALOG[a]
+        return url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown LAMP key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a *.fit file.")
+
+
+def print_lamp_catalog():
+    gs.message("LRO LAMP FUV EDR products (use lamp=<key>, "
+               "or a direct https URL to a *.fit on planetarydata.jpl.nasa.gov):")
+    gs.message(f"  {'key':<30} {'body':<10} description")
+    gs.message("  " + "-" * 90)
+    for k, (_url, body, desc) in LAMP_CATALOG.items():
+        gs.message(f"  {k:<30} {body:<10} {desc}")
+
+
+AKATSUKI_BASE_UVI = ("https://data.darts.isas.jaxa.jp/pub/pds3/"
+                     "vco-v-uvi-3-cdr-v1.0/vcouvi_1001/data/l2b")
+AKATSUKI_CATALOG = {
+    "vco_uvi_r0001_283nm": (
+        f"{AKATSUKI_BASE_UVI}/r0001/uvi_20151207_051953_283_l2b_v10.fit",
+        "Venus",
+        "Akatsuki UVI 283 nm, orbit 1, 2015-12-07T05:19:53 (1024x1024, W/m2/sr/m)"),
+    "vco_uvi_r0001_365nm": (
+        f"{AKATSUKI_BASE_UVI}/r0001/uvi_20151207_052330_365_l2b_v10.fit",
+        "Venus",
+        "Akatsuki UVI 365 nm, orbit 1, 2015-12-07T05:23:30 (1024x1024, W/m2/sr/m)"),
+    "vco_uvi_r0008_365nm": (
+        f"{AKATSUKI_BASE_UVI}/r0008/uvi_20160224_123123_365_l2b_v10.fit",
+        "Venus",
+        "Akatsuki UVI 365 nm, orbit 8, 2016-02-24 (1024x1024, W/m2/sr/m)"),
+}
+
+
+def resolve_akatsuki(a):
+    if a in AKATSUKI_CATALOG:
+        url, body, _desc = AKATSUKI_CATALOG[a]
+        return url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown Akatsuki key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a *.fit file.")
+
+
+def print_akatsuki_catalog():
+    gs.message("Akatsuki (VCO) FITS products (use akatsuki=<key>, "
+               "or a direct https URL to a *.fit on data.darts.isas.jaxa.jp):")
+    gs.message(f"  {'key':<30} {'body':<10} description")
+    gs.message("  " + "-" * 90)
+    for k, (_url, body, desc) in AKATSUKI_CATALOG.items():
+        gs.message(f"  {k:<30} {body:<10} {desc}")
+
+
+LEISA_BASE = ("https://pds-smallbodies.astro.umd.edu/holdings/"
+              "nh-a-leisa-3-kem2-v1.0/data")
+LEISA_CATALOG = {
+    "nh_leisa_arrokoth_20181231": (
+        f"{LEISA_BASE}/20181231_040858/lsb_0408587281_0x53c_sci.fit",
+        "Arrokoth",
+        "NH LEISA KEM2, Arrokoth (MU69) approach, 2018-12-31 "
+        "(256x256x270 bands, 1.25-2.50 µm, calibrated)"),
+}
+
+
+def resolve_leisa(a):
+    if a in LEISA_CATALOG:
+        url, body, _desc = LEISA_CATALOG[a]
+        return url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown LEISA key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a *.fit file.")
+
+
+def print_leisa_catalog():
+    gs.message("New Horizons LEISA calibrated science FITS cubes (use leisa=<key>, "
+               "or a direct https URL to a *.fit on pds-smallbodies.astro.umd.edu):")
+    gs.message(f"  {'key':<30} {'body':<10} description")
+    gs.message("  " + "-" * 90)
+    for k, (_url, body, desc) in LEISA_CATALOG.items():
+        gs.message(f"  {k:<30} {body:<10} {desc}")
+
+
+
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
 _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
@@ -1712,6 +1840,9 @@ def main():
     opt_virtis_rosetta = options["virtis_rosetta"]
     opt_iuvs         = options["iuvs"]
     opt_nims         = options["nims"]
+    opt_lamp         = options["lamp"]
+    opt_akatsuki     = options["akatsuki"]
+    opt_leisa        = options["leisa"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -1741,12 +1872,15 @@ def main():
         print_virtis_rosetta_catalog()
         print_iuvs_catalog()
         print_nims_catalog()
-        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims)):
+        print_lamp_catalog()
+        print_akatsuki_catalog()
+        print_leisa_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1816,8 +1950,8 @@ def main():
         return
 
     if opt_m3:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1863,8 +1997,8 @@ def main():
         return
 
     if opt_vims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1878,8 +2012,8 @@ def main():
         # fall through into the OPUS branch below
 
     if opt_omega:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1926,8 +2060,8 @@ def main():
         return
 
     if opt_dawn_vir:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/virtis_rosetta=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -1984,8 +2118,8 @@ def main():
         return
 
     if opt_virtis_vex:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_rosetta=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2037,8 +2171,8 @@ def main():
         return
 
     if opt_virtis_rosetta:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("virtis_rosetta= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/nims=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("virtis_rosetta= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2090,8 +2224,8 @@ def main():
         return
 
     if opt_iuvs:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_nims, opt_opus, opt_opus_id)):
-            gs.fatal("iuvs= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("iuvs= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2155,8 +2289,8 @@ def main():
         return
 
     if opt_nims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_opus, opt_opus_id)):
-            gs.fatal("nims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("nims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2195,6 +2329,159 @@ def main():
             )
         gs.message(f"Imported Galileo NIMS tube cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1' .. '{opt_output}.N').")
+        return
+
+    if opt_lamp:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("lamp= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/akatsuki=/leisa=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a LAMP product.")
+        fits_url, body_hint = resolve_lamp(opt_lamp)
+        gs.message(f"LAMP source: {fits_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(fits_url) or "moon")
+        local_fits = _rsdata_dest(fits_url, body_hint)
+        _wget_resumable(fits_url, local_fits)
+
+        # LAMP FITS HDU 1 = door-open spectrogram (1024 spectral x 32 spatial).
+        gdal_path = f"FITS:{local_fits}:1"
+        gs.message("Importing LRO LAMP FUV spectrogram via r.in.gdal …")
+        try:
+            gs.run_command("r.in.gdal",
+                           flags="o",
+                           input=gdal_path,
+                           output=opt_output,
+                           overwrite=True)
+        except grass.exceptions.CalledModuleError:
+            gs.run_command("r.in.gdal",
+                           input=gdal_path,
+                           output=opt_output,
+                           overwrite=True)
+
+        _align_region_to_raster(opt_output, save_default=False)
+
+        p_meta.write_planetary_metadata(
+            opt_output,
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="LRO_LAMP",
+            mission="LRO",
+            body=body_slug.upper(),
+            source_file=fits_url,
+        )
+        gs.message(f"Imported LRO LAMP FUV EDR spectrogram as '{opt_output}' "
+                   f"(1024 spectral x 32 spatial pixels, 57-196 nm).")
+        return
+
+    if opt_akatsuki:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_leisa, opt_opus, opt_opus_id)):
+            gs.fatal("akatsuki= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp=/leisa=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import an Akatsuki product.")
+        fits_url, body_hint = resolve_akatsuki(opt_akatsuki)
+        gs.message(f"Akatsuki source: {fits_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(fits_url) or "venus")
+        local_fits = _rsdata_dest(fits_url, body_hint)
+        _wget_resumable(fits_url, local_fits)
+
+        # Infer sensor/filter from filename: uvi_YYYYMMDD_HHMMSS_<NNN>nm_...
+        fname = os.path.basename(urllib.parse.urlparse(fits_url).path)
+        if "uvi_" in fname.lower():
+            sensor = "AKATSUKI_UVI"
+        elif "ir1_" in fname.lower() or "_ir1" in fname.lower():
+            sensor = "AKATSUKI_IR1"
+        elif "ir2_" in fname.lower() or "_ir2" in fname.lower():
+            sensor = "AKATSUKI_IR2"
+        elif "lir_" in fname.lower():
+            sensor = "AKATSUKI_LIR"
+        else:
+            sensor = "AKATSUKI"
+
+        gs.message(f"Importing Akatsuki {sensor} image via r.in.gdal …")
+        try:
+            gs.run_command("r.in.gdal",
+                           flags="o",
+                           input=local_fits,
+                           output=opt_output,
+                           overwrite=True)
+        except grass.exceptions.CalledModuleError:
+            gs.run_command("r.in.gdal",
+                           input=local_fits,
+                           output=opt_output,
+                           overwrite=True)
+
+        _align_region_to_raster(opt_output, save_default=False)
+
+        p_meta.write_planetary_metadata(
+            opt_output,
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor=sensor,
+            mission="AKATSUKI",
+            body=body_slug.upper(),
+            source_file=fits_url,
+        )
+        gs.message(f"Imported Akatsuki {sensor} image as '{opt_output}' "
+                   f"(1024x1024 pixels, W/m2/sr/m).")
+        return
+
+    if opt_leisa:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_opus, opt_opus_id)):
+            gs.fatal("leisa= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp=/akatsuki=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a LEISA product.")
+        fits_url, body_hint = resolve_leisa(opt_leisa)
+        gs.message(f"LEISA source: {fits_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(fits_url) or "misc")
+        local_fits = _rsdata_dest(fits_url, body_hint)
+        _wget_resumable(fits_url, local_fits)
+
+        gs.message("Importing NH LEISA cube via r.in.gdal …")
+        try:
+            gs.run_command("r.in.gdal",
+                           flags="o",
+                           input=local_fits,
+                           output=opt_output,
+                           overwrite=True)
+        except grass.exceptions.CalledModuleError:
+            gs.run_command("r.in.gdal",
+                           input=local_fits,
+                           output=opt_output,
+                           overwrite=True)
+
+        # r.in.gdal does not auto-create an imagery group for multi-band FITS.
+        band_maps = gs.read_command("g.list", type="raster",
+                                    pattern=f"{opt_output}.*",
+                                    mapset=".").strip().split()
+        if band_maps:
+            gs.run_command("i.group",
+                           group=opt_output, subgroup=opt_output,
+                           input=",".join(band_maps))
+
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        p_meta.write_planetary_metadata(
+            f"{opt_output}.1",
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="NH_LEISA",
+            mission="NEW_HORIZONS",
+            body=body_slug.upper(),
+            source_file=fits_url,
+        )
+        gs.message(f"Imported NH LEISA cube as imagery group '{opt_output}' "
+                   f"(bands '{opt_output}.1' .. '{opt_output}.270', 1.25-2.50 µm).")
         return
 
     if opt_cog:
