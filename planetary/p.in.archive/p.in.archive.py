@@ -1161,6 +1161,22 @@ def download_file(url, dest_dir):
 
 # ── Import into GRASS ──────────────────────────────────────────────────────
 
+def _ensure_imagery_group(output):
+    """Create an imagery group for *output* if the import produced ≥2 bands.
+
+    Called after any import that does not already pass -g to p.in.pds3 or
+    call i.group explicitly. Idempotent: re-adding maps to an existing
+    group is harmless; does nothing when only a single raster was produced.
+    """
+    band_maps = gs.read_command("g.list", type="raster",
+                                pattern=f"{output}.*",
+                                mapset=".").strip().split()
+    if len(band_maps) >= 2:
+        gs.run_command("i.group",
+                       group=output, subgroup=output,
+                       input=",".join(band_maps))
+
+
 def import_file(local_path, output_name, band=1, override_proj=False):
     """
     Import *local_path* into GRASS raster *output_name*.
@@ -2673,6 +2689,7 @@ def main():
                            overwrite=True, quiet=True)
         _align_region_to_raster(f"{opt_output}.1" if ext == ".qub" else opt_output,
                                  save_default=False)
+        _ensure_imagery_group(opt_output)
 
         # Infer sensor from OPUS ID prefix.
         oid_lower = opus_id.lower()
@@ -2857,6 +2874,7 @@ def main():
     try:
         import_file(local_path, opt_output, band=opt_band,
                     override_proj=flag_override)
+        _ensure_imagery_group(opt_output)
         # Align region to the imported raster so the project is usable out of
         # the box (mirrors the cog= path). DEFAULT_WIND is intentionally NOT
         # saved here because the DOI/LID/STAC branches don't auto-create a
