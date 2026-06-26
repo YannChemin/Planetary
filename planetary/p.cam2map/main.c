@@ -336,6 +336,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_a, *opt_b, *opt_c;
     struct Option  *opt_interp;
     struct Option  *opt_instrument, *opt_filter1, *opt_filter2;
+    struct Option  *opt_projection, *opt_clon;
     struct Flag    *flag_camera;
     struct History  history;
 
@@ -409,6 +410,29 @@ int main(int argc, char *argv[])
     opt_interp->options="nearest,bilinear";
     opt_interp->description=_("Resampling method");
 
+    opt_projection = G_define_option();
+    opt_projection->key         = "projection";
+    opt_projection->type        = TYPE_STRING;
+    opt_projection->required    = NO;
+    opt_projection->answer      = "latlon";
+    opt_projection->options     = "latlon,sinusoidal,stereo_north,stereo_south";
+    opt_projection->description = _("Output map projection (camera mode only). "
+        "latlon: output north/south/east/west are plain lat/lon degrees (default). "
+        "sinusoidal: equal-area; output north/south are lat degrees, "
+        "east/west are (lon-clon)*cos(lat) degrees. "
+        "stereo_north/stereo_south: polar stereographic; output east/west "
+        "are sin(lon-clon)*tan(pi/4-lat/2)*180/pi degrees from the pole, "
+        "north/south are -cos(lon-clon)*tan(pi/4-lat/2)*180/pi degrees. "
+        "For all non-latlon projections, set clon= to the central meridian.");
+
+    opt_clon = G_define_option();
+    opt_clon->key         = "clon";
+    opt_clon->type        = TYPE_DOUBLE;
+    opt_clon->required    = NO;
+    opt_clon->answer      = "0";
+    opt_clon->description = _("Central longitude (degrees East) for sinusoidal "
+                               "or polar stereographic projections");
+
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
 
@@ -421,6 +445,11 @@ int main(int argc, char *argv[])
     double b_km = atof(opt_b->answer);
     double c_km = atof(opt_c->answer);
     int bilinear = (strcmp(opt_interp->answer, "bilinear") == 0);
+    double clon_deg = atof(opt_clon->answer);
+    const char *proj_name = opt_projection->answer ? opt_projection->answer : "latlon";
+    int proj_sinusoidal  = (strcmp(proj_name, "sinusoidal")  == 0);
+    int proj_stereo_n    = (strcmp(proj_name, "stereo_north") == 0);
+    int proj_stereo_s    = (strcmp(proj_name, "stereo_south") == 0);
 
     /* Open input raster, find its mapset (needed for camera mode's
      * history read), and load it fully into memory for random-access
@@ -525,7 +554,44 @@ int main(int argc, char *argv[])
         for (int col = 0; col < out_cols; col++) {
             double east  = out_region.west  + (col + 0.5) * out_region.ew_res;
             double north = out_region.north - (row + 0.5) * out_region.ns_res;
-            double lat_deg = north, lon_deg = east;
+            double lat_deg, lon_deg;
+
+            if (proj_sinusoidal) {
+                /* Inverse sinusoidal: north=lat (deg), east=(lon-clon)*cos(lat) (deg).
+                 * Invalid within +-90 deg latitude, but cos(90)=0 so just clamp. */
+                lat_deg = north;
+                double coslat = cos(lat_deg * M_PI / 180.0);
+                if (fabs(coslat) < 1.0e-10) {
+                    lon_deg = clon_deg;
+                } else {
+                    lon_deg = clon_deg + east / coslat;
+                }
+            }
+            else if (proj_stereo_n || proj_stereo_s) {
+                /* Inverse polar stereographic (sphere, true-scale at pole).
+                 * rho = sqrt(east^2 + north^2) is tan(co-lat/2) (in degrees).
+                 * For North pole: lat = 90 - 2*atan(rho)*R2D, lon = clon + atan2(east,-north)*R2D.
+                 * For South pole: lat = -90 + 2*atan(rho)*R2D, lon = clon + atan2(east, north)*R2D.
+                 * Here east/north are in degrees (same unit as the forward:
+                 * rho_deg = tan(pi/4 - lat/2)*180/pi, so inverse: lat = pi/2-2*atan(rho_deg*pi/180)). */
+                double rho_deg = sqrt(east*east + north*north);
+                double rho_rad = rho_deg * M_PI / 180.0;
+                if (proj_stereo_n) {
+                    lat_deg = 90.0 - 2.0 * atan(rho_rad) * 180.0 / M_PI;
+                    lon_deg = clon_deg + atan2(east, -north) * 180.0 / M_PI;
+                } else {
+                    lat_deg = -90.0 + 2.0 * atan(rho_rad) * 180.0 / M_PI;
+                    lon_deg = clon_deg + atan2(east, north) * 180.0 / M_PI;
+                }
+            }
+            else {
+                /* latlon (default): east=lon, north=lat, no conversion */
+                lat_deg = north;
+                lon_deg = east;
+            }
+
+            /* Clamp to valid lat/lon range (guards against numerical edge cases). */
+            if (lat_deg < -90.0 || lat_deg > 90.0) { Rast_set_d_null_value(&out_buf[col], 1); continue; }
 
             double in_col_f, in_row_f;
             int have_pixel = 1;

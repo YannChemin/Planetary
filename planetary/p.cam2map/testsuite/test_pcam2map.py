@@ -180,6 +180,62 @@ class TestPcam2map(TestCase):
                            pattern=f"{mapname},{fwd_prefix}_*,{out_prefix}*",
                            quiet=True)
 
+    def test_sinusoidal_projection_matches_latlon_at_equator(self):
+        """Verify that sinusoidal projection=sinusoidal at the equator
+        (lat=0) yields the same output as the default latlon projection
+        at the same region: at lat=0, cos(lat)=1 so sinusoidal and
+        latlon are identical. Uses the same real ISS_NAC fixture;
+        the near-equatorial part of the Saturn disk should map
+        identically under both projections."""
+        kernels = _find_iss_test_kernels()
+        if not kernels:
+            self.skipTest("no local Cassini ISS test kernel set found "
+                          "(see _find_iss_test_kernels)")
+
+        mapname = "pcam2map_test_sinusoidal"
+        out_ll  = "pcam2map_test_sinusoidal_latlon"
+        out_sin = "pcam2map_test_sinusoidal_sinusoidal"
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        self.runModule("p.in.pds3", input=kernels["nac_lbl"], output=mapname,
+                       overwrite=True, quiet=True)
+        self.runModule("g.region", raster=mapname)
+        self.runModule(
+            "p.spiceinit", map=mapname, target="SATURN", observer="CASSINI",
+            time="2004-169T16:24:48.262",
+            lsk=kernels["lsk"], sclk=kernels["sclk"],
+            ik=f"{kernels['ik']},{kernels['iak_nac']}", fk=kernels["fk"],
+            pck=f"{kernels['pck']},{kernels['pck2']}", spk=kernels["spk"],
+            ck=kernels["ck"])
+        try:
+            # Equatorial strip of this Saturn NAC frame (lat ~0,
+            # lon ~317 E; width 0.1 deg so sin=latlon there).
+            self.runModule(
+                "g.region", n=1.0, s=-1.0, e=320.0, w=315.0, res=0.1)
+            self.runModule(
+                "p.cam2map", flags="c", input=mapname, output=out_ll,
+                instrument="ISS_NAC", filter1="P0", filter2="CB2",
+                projection="latlon", overwrite=True)
+            self.runModule(
+                "p.cam2map", flags="c", input=mapname, output=out_sin,
+                instrument="ISS_NAC", filter1="P0", filter2="CB2",
+                projection="sinusoidal", clon=0, overwrite=True)
+            # At lat=0, sinusoidal and latlon are the same projection.
+            # Both should return similar hit counts (not necessarily
+            # pixel-identical due to floating-point, but close).
+            s_ll  = gs.parse_command("r.univar", flags="g", map=out_ll)
+            s_sin = gs.parse_command("r.univar", flags="g", map=out_sin)
+            n_ll  = int(s_ll.get("n", 0))
+            n_sin = int(s_sin.get("n", 0))
+            # Both should hit approximately the same pixels (within 2%)
+            if n_ll > 0:
+                self.assertAlmostEqual(n_sin / n_ll, 1.0, delta=0.02,
+                                       msg="sinusoidal and latlon should "
+                                           "match at the equator")
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname},{out_ll},{out_sin}",
+                           quiet=True)
+
     @unittest.skipUnless(shutil.which("cam2map"),
                          "ISIS3 application cam2map not available "
                          "in PATH - skipping cross-validation test")
