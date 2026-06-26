@@ -169,18 +169,38 @@ p.in.archive crism=mawrth_vallis_frt00003bfb_vnir output=crism_mawrth_vnir
 # Import the IR cube (L detector, 438 bands, 1.00-3.92 um)
 p.in.archive crism=mawrth_vallis_frt00003bfb_ir output=crism_mawrth_ir
 
+# Nili Fossae (22.3N, 77.1E) — olivine/carbonate/phyllosilicate terrain
+p.in.archive crism=nili_fossae_frt00003e12_ir output=crism_nili_ir
+
+# Jezero Crater (18.6N, 77.5E) — Perseverance landing site, delta phyllosilicates
+p.in.archive crism=jezero_crater_frt000047a3_ir output=crism_jezero_ir
+
+# Gale Crater (5.5S, 137.5E) — Curiosity landing site, smectite/sulfate strat.
+p.in.archive crism=gale_crater_frt0000901a_ir output=crism_gale_ir
+
 # Or pass a direct https URL to any other TRDR .IMG on the archive
 p.in.archive \
     crism="https://pds-geosciences.wustl.edu/mro/mro-m-crism-3-rdr-targeted-v1/mrocr_2101/trdr/2007/2007_005/FRT00003BFB/FRT00003BFB_01_IF156L_TRR3.IMG" \
     output=crism_mawrth_ir
 ```
 
-Both catalog entries were verified live end-to-end (HTTP 200 on `.IMG`
-and `.LBL`, successful `p.in.pds3 -g` import). `output=` becomes a GRASS
-imagery group (`output.1` .. `output.N`, one raster per spectral band),
-mirroring `p.in.pds3 -g`'s own convention; the region is aligned to
-`output.1` after import. Downloads land in `~/RSDATA/Mars/` and are
-resumable via `wget -c`, same as the OPUS path.
+The catalog covers four key Mars mineralogy sites, each verified via
+CRISM MTRDR map-projected label footprints (MINIMUM/MAXIMUM_LATITUDE,
+WESTERNMOST/EASTERNMOST_LONGITUDE) against the known target coordinates:
+
+| Key prefix | Target | Center lat/lon | Date |
+|---|---|---|---|
+| `mawrth_vallis_frt00003bfb` | Mawrth Vallis | 22.3°N, 342°E | 2007-01-05 |
+| `nili_fossae_frt00003e12` | Nili Fossae trough | 22.3°N, 77.1°E | 2007-01-13 |
+| `jezero_crater_frt000047a3` | Jezero Crater delta | 18.6°N, 77.5°E | 2007-02-26 |
+| `gale_crater_frt0000901a` | Gale Crater (Mt Sharp) | 5.5°S, 137.5°E | 2007-12-27 |
+
+Each site has `_ir` (L detector, IR 1.00–3.92 µm, 438 bands) and
+`_vnir` (S detector, 0.36–1.05 µm, 107 bands) variants.
+
+`output=` becomes a GRASS imagery group (`output.1` .. `output.N`, one
+raster per spectral band). Downloads land in `~/RSDATA/Mars/` and are
+resumable via `wget -c`.
 
 CRISM detector naming: **L** = long-wavelength/IR detector (1.00–3.92 µm,
 438 bands); **S** = short-wavelength/VNIR detector (0.36–1.05 µm,
@@ -189,9 +209,7 @@ A given FRT (Full Resolution Targeted) observation ID can have multiple
 repeat segments (`_01_`, `_02_`, `_03_`, ...) acquired during the same
 multi-pass campaign; the wavelength-filter code (e.g. `156`, `166`)
 varies per segment and cannot be derived from the observation ID alone —
-it was resolved here by greping the volume's
-`collection_data_trdr_inventory.csv` and the monthly `index/trdrMMYY_index.tab`
-table (column `FILE_SPECIFICATION_NAME`) on the real archive.
+verified by reading the MTRDR label footprints for each archived product.
 
 Downloads land in `~/RSDATA/<Body>/` and are resumable via `wget -c`.
 
