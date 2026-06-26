@@ -2,19 +2,25 @@
 
 *p.caminfo* reports real SPICE-derived camera geometry for a raw,
 *p.spiceinit*'d planetary camera image. It evaluates the same
-per-instrument pinhole camera model `p.phocube -c`/`p.cam2map -c` use
-(boresight, pixel pitch, focal length, K1 radial distortion, read from
-the same real ISIS3 instrument kernel/IAK) at the image's centre pixel
-and its four corners, plus body-wide quantities that don't need a
-camera ray at all (sub-solar point, sub-spacecraft point, solar
-distance).
+per-instrument camera model `p.phocube -c`/`p.cam2map -c` use at the
+image's centre pixel and its four corners, plus body-wide quantities
+that don't need a camera ray at all (sub-solar point, sub-spacecraft
+point, solar distance).
 
-Only `CRISM_VNIR`, `CRISM_IR`, `ISS_NAC`, and `ISS_WAC` are currently
-supported. MEX OMEGA (whiskbroom scanning mirror) and Cassini VIMS
-(2-axis angular scan) need extra per-pixel inputs (a mirror-DN raster,
-real swath offsets) not yet wired into this module's centre/corner
-evaluation -- see `p.phocube -c` for those, and `TODO.md` for the
-status of extending `p.caminfo` to them.
+Supported instruments: `CRISM_VNIR`, `CRISM_IR` (MRO/CRISM, 1-D
+pushbroom pinhole); `ISS_NAC`, `ISS_WAC` (Cassini ISS, 2-D framing
+pinhole with K1 radial distortion and per-filter-pair focal length);
+`OMEGA_SWIR_C`, `OMEGA_SWIR_L`, `OMEGA_VNIR` (MEX OMEGA, whiskbroom
+scanning mirror — requires `mirror_dn=` raster); `VIMS_IR`, `VIMS_VIS`
+(Cassini VIMS, 2-axis angular scan — requires `sampling_mode=` and
+swath metadata).
+
+For OMEGA, `mirror_dn=` must be a raster imported from the QUBE's
+band-suffix sideplane via `p.in.pds3 suffix_band=1`. For VIMS,
+`sampling_mode=`, `x_offset=`, `z_offset=`, `swath_width=`, and
+`swath_length=` can be omitted when the raster was imported via
+`p.in.archive vims=` (which writes them to the raster's
+`planetary.json` metadata).
 
 Reported quantities:
 

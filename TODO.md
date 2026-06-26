@@ -1209,3 +1209,44 @@ renamed the `map=` option to `input=` (matching `p.phocube`/
 `c_radius` options (no longer used -- real radii now come implicitly
 from the loaded PCK via the SPICE calls themselves). `Makefile` updated
 to link `p_spice`/`p_meta`/cspice (mirrors `p.cam2map`'s Makefile).
+
+### p.caminfo extended to OMEGA_SWIR_C/SWIR_L/VNIR and VIMS_IR/VIMS_VIS
+
+Extended `p.caminfo` to cover the two remaining camera shapes previously
+noted as "not yet wired" (see candidate #5b note above):
+
+- **MEX OMEGA (whiskbroom scanning mirror)**: same `mirror_center`/
+  `mirror_slope`/`omega_rot` model and IK kernel-pool reads as
+  `p.phocube -c`. The 5-point (centre + 4 corners) evaluation needs the
+  mirror-DN telemetry at each specific (sample, line) position -- supplied
+  via the new `mirror_dn=` raster option (the band-suffix sideplane
+  imported via `p.in.pds3 suffix_band=1`). `Rast_get_d_row()` is called
+  once per evaluation point rather than once per whole image row, making
+  the 5-point path much cheaper than `p.phocube`'s per-pixel path.
+  IFOV for resolution: `mirror_slope * pi/180` rad/pixel.
+
+- **Cassini VIMS (2-axis angular scan)**: same `vims_*` geometry struct
+  and `VimsGroundMap::LookDirection()` formula as `p.phocube -c`. Swath
+  metadata (`sampling_mode=`, `x_offset=`, `z_offset=`, `swath_width=`,
+  `swath_length=`) read from the raster's `planetary.json` when imported
+  via `p.in.archive vims=`, or overridable via CLI options. IFOV:
+  `vims_x_pixsize` rad/pixel.
+
+- **`CamPoint` extended**: added `trgepc` field (the surface epoch
+  returned by `sincpt`), so the north-azimuth computation no longer
+  needs a second `sincpt` call to recover it. All instrument types
+  benefit; fixes a latent inefficiency in the CRISM/ISS paths too.
+
+Verified against the same real fixtures used by `p.phocube`'s own tests:
+
+- `OMEGA_SWIR_C` (ORB0100_0.QUB, orbit 100, Mars, 2004-02-10): centre
+  lat/lon lands within the label's declared extents (-78.167..-70.253 N,
+  291.415..303.019 E); solar distance 1.5x AU (real Mars range); pixel
+  resolution > 0. `mirror_dn=` raster from `p.in.pds3 suffix_band=1`.
+- `VIMS_IR` (v1799424623_1.qub, T-108 Titan, 2015-01-08): solar distance
+  within 7-12 AU (Saturn range); centre hit with lat/lon within the
+  verified patch (-70..75 N); resolution > 0.
+
+Added `test_camera_mode_real_omega_swir_c_geometry` /
+`test_camera_mode_real_vims_ir_geometry` to `p.caminfo`'s test suite
+(both passing, ~6s combined).
