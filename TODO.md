@@ -1131,9 +1131,15 @@ fixture (`_find_iss_test_kernels()`, `~/RSDATA/Saturn/spice_test/` and
 Rewrote `p.cam2map.md` to remove the false `projection=`/`res=`/
 `clon=`/8-named-projections/`p_projection_planet` claims and document
 the real `-c` ISS_NAC/ISS_WAC back-projection feature, the
-`PROJECTION_XY` convention, and the summing/light-time handling. Real
-cartographic map-projection support (beyond plain lat/lon) remains
-unbuilt.
+`PROJECTION_XY` convention, and the summing/light-time handling.
+
+**Cartographic map-projection support added (2026-06-26):** Added
+`projection=` option (`latlon` default, `sinusoidal`, `stereo_north`,
+`stereo_south`) and `clon=` to `p.cam2map`. The projection inverse is
+applied in the output pixel loop before the `latsrf_c` call. Sinusoidal
+at the equator is algebraically identical to `latlon`, verified by
+regression test (`test_sinusoidal_projection_matches_latlon_at_equator`).
+Docs updated in `p.cam2map.md`.
 
 ### Candidate #5b: `p.caminfo`'s own doc/code mismatch -- full rebuild
 
