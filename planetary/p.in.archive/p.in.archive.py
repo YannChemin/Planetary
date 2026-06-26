@@ -336,22 +336,76 @@ USGS_COG = {
 # discovered via the per-volume collection inventory CSV. Each entry:
 # key -> (img_url, lbl_url, body, description). All URLs below were verified
 # live (HTTP 200, Content-Length present) against pds-geosciences.wustl.edu.
-CRISM_BASE = ("https://pds-geosciences.wustl.edu/mro/"
-              "mro-m-crism-3-rdr-targeted-v1/mrocr_2101/trdr/2007/2007_005/"
-              "FRT00003BFB")
+_CRISM_PDS = ("https://pds-geosciences.wustl.edu/mro/"
+              "mro-m-crism-3-rdr-targeted-v1")
 CRISM_CATALOG = {
     "mawrth_vallis_frt00003bfb_ir": (
-        f"{CRISM_BASE}/FRT00003BFB_01_IF156L_TRR3.IMG",
-        f"{CRISM_BASE}/FRT00003BFB_01_IF156L_TRR3.LBL",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_005/FRT00003BFB"
+        "/FRT00003BFB_01_IF156L_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_005/FRT00003BFB"
+        "/FRT00003BFB_01_IF156L_TRR3.LBL",
         "Mars",
         "CRISM FRT00003BFB, Mawrth Vallis (22.3N, 342.1E), L detector "
         "(IR, 1.00-3.92 um, 438 bands) - Bishop et al. 2008"),
     "mawrth_vallis_frt00003bfb_vnir": (
-        f"{CRISM_BASE}/FRT00003BFB_01_IF156S_TRR3.IMG",
-        f"{CRISM_BASE}/FRT00003BFB_01_IF156S_TRR3.LBL",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_005/FRT00003BFB"
+        "/FRT00003BFB_01_IF156S_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_005/FRT00003BFB"
+        "/FRT00003BFB_01_IF156S_TRR3.LBL",
         "Mars",
         "CRISM FRT00003BFB, Mawrth Vallis (22.3N, 342.1E), S detector "
         "(VNIR, 0.36-1.05 um, 107 bands) - Bishop et al. 2008"),
+    "nili_fossae_frt00003e12_ir": (
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_013/FRT00003E12"
+        "/FRT00003E12_01_IF156L_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_013/FRT00003E12"
+        "/FRT00003E12_01_IF156L_TRR3.LBL",
+        "Mars",
+        "CRISM FRT00003E12, Nili Fossae (22.3N, 77.1E), L detector "
+        "(IR, 1.00-3.92 um, 438 bands), 2007-01-13; "
+        "olivine-carbonate-phyllosilicate terrain"),
+    "nili_fossae_frt00003e12_vnir": (
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_013/FRT00003E12"
+        "/FRT00003E12_01_IF156S_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_013/FRT00003E12"
+        "/FRT00003E12_01_IF156S_TRR3.LBL",
+        "Mars",
+        "CRISM FRT00003E12, Nili Fossae (22.3N, 77.1E), S detector "
+        "(VNIR, 0.36-1.05 um, 107 bands), 2007-01-13"),
+    "jezero_crater_frt000047a3_ir": (
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_057/FRT000047A3"
+        "/FRT000047A3_01_IF156L_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_057/FRT000047A3"
+        "/FRT000047A3_01_IF156L_TRR3.LBL",
+        "Mars",
+        "CRISM FRT000047A3, Jezero Crater (18.6N, 77.5E), L detector "
+        "(IR, 1.00-3.92 um, 438 bands), 2007-02-26; "
+        "Perseverance landing site, olivine/phyllosilicate delta"),
+    "jezero_crater_frt000047a3_vnir": (
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_057/FRT000047A3"
+        "/FRT000047A3_01_IF156S_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2101/trdr/2007/2007_057/FRT000047A3"
+        "/FRT000047A3_01_IF156S_TRR3.LBL",
+        "Mars",
+        "CRISM FRT000047A3, Jezero Crater (18.6N, 77.5E), S detector "
+        "(VNIR, 0.36-1.05 um, 107 bands), 2007-02-26"),
+    "gale_crater_frt0000901a_ir": (
+        f"{_CRISM_PDS}/mrocr_2102/trdr/2007/2007_361/FRT0000901A"
+        "/FRT0000901A_01_IF156L_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2102/trdr/2007/2007_361/FRT0000901A"
+        "/FRT0000901A_01_IF156L_TRR3.LBL",
+        "Mars",
+        "CRISM FRT0000901A, Gale Crater (5.5S, 137.5E), L detector "
+        "(IR, 1.00-3.92 um, 438 bands), 2007-12-27; "
+        "Curiosity landing site, smectite/sulfate stratigraphy"),
+    "gale_crater_frt0000901a_vnir": (
+        f"{_CRISM_PDS}/mrocr_2102/trdr/2007/2007_361/FRT0000901A"
+        "/FRT0000901A_01_IF156S_TRR3.IMG",
+        f"{_CRISM_PDS}/mrocr_2102/trdr/2007/2007_361/FRT0000901A"
+        "/FRT0000901A_01_IF156S_TRR3.LBL",
+        "Mars",
+        "CRISM FRT0000901A, Gale Crater (5.5S, 137.5E), S detector "
+        "(VNIR, 0.36-1.05 um, 107 bands), 2007-12-27"),
 }
 
 # Curated catalog of Chandrayaan-1 Moon Mineralogy Mapper (M3) L1B radiance
