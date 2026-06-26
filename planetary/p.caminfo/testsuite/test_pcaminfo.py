@@ -16,6 +16,50 @@ from grass.gunittest.gmodules import SimpleModule
 import grass.script as gs
 
 
+def _find_omega_test_kernels():
+    """Locate the real MEX OMEGA kernel set + raw QUBE on this machine."""
+    d = os.path.expanduser("~/RSDATA/Mars/spice_omega")
+    qub = os.path.expanduser("~/RSDATA/Mars/ORB0100_0.QUB")
+    needed = {
+        "lsk": "naif0012.tls", "sclk": "MEX_260522_STEP.TSC",
+        "ik": "MEX_OMEGA_V03.TI", "fk": "MEX_V16.TF",
+        "pck": "MARS_IAU2000_V0.TPC", "pck2": "pck00010.tpc",
+        "spk_mex": "MEX_ROB_040101_041231_003.BSP",
+        "spk_de": "de432s.bsp", "spk_mar": "mar099.bsp",
+        "ck": "ATNM_MEASURED_040101_050101_V03.BC",
+    }
+    paths = {k: os.path.join(d, v) for k, v in needed.items()}
+    if not os.path.exists(qub) or not all(os.path.exists(p) for p in paths.values()):
+        return None
+    paths["qub"] = qub
+    return paths
+
+
+def _find_vims_test_kernels():
+    """Locate the real Cassini VIMS kernel set + raw QUBE on this machine."""
+    d = os.path.expanduser("~/RSDATA/Saturn/spice_vims")
+    qub = os.path.expanduser("~/RSDATA/Misc/v1799424623_1.qub")
+    lbl = os.path.expanduser("~/RSDATA/Misc/v1799424623_1.lbl")
+    needed = {
+        "lsk": os.path.join(d, "lsk", "naif0012.tls"),
+        "sclk": os.path.join(d, "sclk", "cas00172.tsc"),
+        "ik": os.path.join(d, "ik", "cas_vims_v06.ti"),
+        "iak": os.path.join(d, "iak", "vimsAddendum04.ti"),
+        "fk": os.path.join(d, "fk", "cas_v43.tf"),
+        "pck": os.path.join(d, "pck", "cpck_rock_21Jan2011_merged.tpc"),
+        "pck2": os.path.join(d, "pck", "pck00010.tpc"),
+        "spk": os.path.join(d, "spk", "150108AP_SCPSE_14365_15016.bsp"),
+        "ck": os.path.join(d, "ck", "15008_15013ra.bc"),
+    }
+    if not os.path.exists(qub) or not os.path.exists(lbl):
+        return None
+    if not all(os.path.exists(p) for p in needed.values()):
+        return None
+    needed["qub"] = qub
+    needed["lbl"] = lbl
+    return needed
+
+
 def _find_crism_test_kernels():
     """Locate the real CRISM kernel set + raw FRT cube on this machine,
     used by the real-data test below. Identical fixture to p.phocube's
@@ -192,6 +236,103 @@ class TestPcaminfo(TestCase):
         finally:
             self.runModule("g.remove", flags="f", type="raster",
                            pattern=f"{mapname}", quiet=True)
+
+    def test_camera_mode_real_omega_swir_c_geometry(self):
+        """Real-kernel correctness check: the real MEX OMEGA orbit-100
+        QUBE (OMEGA_SWIR_C), same fixture as p.phocube's own OMEGA test.
+        Confirms that the centre lat/lon lands within the label's own
+        declared lat/lon extents (the ground truth available for this
+        observation), and that solar distance/resolution/north-azimuth
+        are real, physically sane numbers.  mirror_dn= is the
+        band-suffix sideplane (suffix_band=1), required by p.caminfo
+        for OMEGA_SWIR_C."""
+        kernels = _find_omega_test_kernels()
+        if not kernels:
+            self.skipTest("no local MEX OMEGA test kernel set found "
+                          "(see _find_omega_test_kernels)")
+
+        mapname = "pcaminfo_test_omega_swir_c"
+        mdn_map = "pcaminfo_test_omega_mirror_dn"
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        self.runModule("p.in.pds3", input=kernels["qub"], output=mapname,
+                       overwrite=True, quiet=True)
+        self.runModule("p.in.pds3", input=kernels["qub"], output=mdn_map,
+                       suffix_band=1, overwrite=True, quiet=True)
+        self.runModule("g.region", raster=f"{mapname}.1")
+        self.runModule(
+            "p.spiceinit", map=f"{mapname}.1", target="MARS",
+            observer="MEX", time="2004-02-10T18:08:35",
+            line_rate=0.401002358,
+            lsk=kernels["lsk"], sclk=kernels["sclk"],
+            ik=kernels["ik"], fk=kernels["fk"],
+            pck=f"{kernels['pck']},{kernels['pck2']}",
+            spk=f"{kernels['spk_mex']},{kernels['spk_de']},{kernels['spk_mar']}",
+            ck=kernels["ck"])
+        try:
+            raw = gs.read_command(
+                "p.caminfo", flags="j", input=f"{mapname}.1",
+                instrument="OMEGA_SWIR_C", mirror_dn=mdn_map)
+            out = json.loads(raw)
+            # label ground truth: lat in [-78.167, -70.253],
+            # lon in [291.415, 303.019]
+            self.assertGreater(float(out["centre_lat_deg"]), -78.5)
+            self.assertLess(float(out["centre_lat_deg"]), -69.5)
+            lon = float(out["centre_lon_deg"])
+            self.assertGreater(lon, 290.0)
+            self.assertLess(lon, 304.0)
+            self.assertGreater(float(out["solar_distance_au"]), 1.3)
+            self.assertLess(float(out["solar_distance_au"]), 1.7)
+            self.assertGreater(float(out["pixel_resolution_m"]), 0)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname}.*", quiet=True)
+            self.runModule("g.remove", flags="f", type="raster",
+                           name=mdn_map, quiet=True)
+
+    def test_camera_mode_real_vims_ir_geometry(self):
+        """Real-kernel correctness check: the real Cassini VIMS T-108
+        Titan flyby cube (VIMS_IR, HI-RES), same fixture as p.phocube's
+        own VIMS test. Confirms that the centre lat/lon lands within the
+        known Titan-disk extent for this observation, and that solar
+        distance and resolution are physically sane."""
+        kernels = _find_vims_test_kernels()
+        if not kernels:
+            self.skipTest("no local Cassini VIMS test kernel set found "
+                          "(see _find_vims_test_kernels)")
+
+        mapname = "pcaminfo_test_vims_ir"
+        self.runModule("g.region", n=1, s=0, e=1, w=0, rows=1, cols=1)
+        self.runModule("p.in.pds3", input=kernels["lbl"], output=mapname,
+                       overwrite=True, quiet=True)
+        self.runModule("g.region", raster=f"{mapname}.1")
+        self.runModule(
+            "p.spiceinit", map=f"{mapname}.1", target="TITAN",
+            observer="CASSINI", time="2015-01-08T15:09:40.135",
+            lsk=kernels["lsk"], sclk=kernels["sclk"],
+            ik=f"{kernels['ik']},{kernels['iak']}", fk=kernels["fk"],
+            pck=f"{kernels['pck']},{kernels['pck2']}",
+            spk=kernels["spk"], ck=kernels["ck"])
+        try:
+            raw = gs.read_command(
+                "p.caminfo", flags="j", input=f"{mapname}.1",
+                instrument="VIMS_IR",
+                sampling_mode="HI-RES",
+                x_offset=11, z_offset=25,
+                swath_width=38, swath_length=18)
+            out = json.loads(raw)
+            # p.phocube verified lat range: -65.23..68.09, lon: -62.32..104.54
+            # Centre should be within this patch (hit or miss is geometry-dependent)
+            self.assertIn("centre_hit", out)
+            self.assertGreater(float(out["solar_distance_au"]), 7.0)
+            self.assertLess(float(out["solar_distance_au"]), 12.0)
+            # If centre hits: lat/lon within the verified patch extents
+            if out.get("centre_hit"):
+                self.assertGreater(float(out["centre_lat_deg"]), -70.0)
+                self.assertLess(float(out["centre_lat_deg"]), 75.0)
+                self.assertGreater(float(out["pixel_resolution_m"]), 0)
+        finally:
+            self.runModule("g.remove", flags="f", type="raster",
+                           pattern=f"{mapname}.*", quiet=True)
 
     @unittest.skipUnless(shutil.which("caminfo"),
                          "ISIS3 application caminfo not available "

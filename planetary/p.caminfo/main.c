@@ -31,15 +31,15 @@
 #define RAD2DEG (180.0 / M_PI)
 
 /* ------------------------------------------------------------------ */
-/* Camera model: CRISM (1-D pushbroom + time-varying gimbal CK) and    */
-/* Cassini ISS (2-D framing + K1 radial distortion), the exact same    */
-/* pinhole model p.phocube -c and p.cam2map -c already use -- see      */
-/* those modules for OMEGA (whiskbroom mirror) and VIMS (2-axis scan), */
-/* deliberately not duplicated here yet (see TODO.md).                 */
+/* Camera model: CRISM/ISS (pinhole), MEX OMEGA (whiskbroom mirror),  */
+/* Cassini VIMS (2-axis angular scan) -- the same models p.phocube -c */
+/* and p.cam2map -c use, evaluated here at 5 points (centre+corners)  */
+/* instead of every pixel.                                             */
 /* ------------------------------------------------------------------ */
 typedef struct {
     int    naif_id;
     char   frame[64];
+    /* CRISM / ISS pinhole fields */
     double boresight_sample;
     double boresight_line;
     double pixel_pitch;
@@ -48,18 +48,55 @@ typedef struct {
     int    is_framing;  /* 1: ISS (2-D, dy is a real focal-plane offset).
                           * 0: CRISM (1-D, dy stays 0 -- per-line pointing
                           * comes from the gimbal CK over time instead). */
+    /* MEX OMEGA whiskbroom mirror fields */
+    int    is_omega;
+    double mirror_center;   /* INS-41420_MIRROR_CENTER_POSITION (DN) */
+    double mirror_slope;    /* INS-41420_MIRROR_SLOPE (deg/DN)       */
+    double omega_rot[3][3]; /* pre-rotated: detector frame -> MEX_SPACECRAFT */
+    /* Cassini VIMS 2-axis scan fields */
+    int    is_vims;
+    double vims_x_pixsize, vims_y_pixsize;
+    double vims_x_bore,    vims_y_bore;
+    int    vims_samp_offset, vims_line_offset;
 } PinholeCameraModel;
+
+/* Per-cube overrides for VIMS (same as CameraOverrides in p.phocube). */
+typedef struct {
+    const char *sampling_mode;
+    const char *x_offset;
+    const char *z_offset;
+    const char *swath_width;
+    const char *swath_length;
+} CameraOverrides;
 
 static void load_pinhole_camera_model(const char *instrument,
                                        const char *input_map,
                                        const char *filter1, const char *filter2,
+                                       const CameraOverrides *ov,
                                        int image_cols, int image_rows,
                                        PinholeCameraModel *cam)
 {
     memset(cam, 0, sizeof(*cam));
     int is_iss = 0;
+    char varname[80];
+    int n;
 
-    if (strcmp(instrument, "CRISM_VNIR") == 0) {
+    if (strcmp(instrument, "OMEGA_SWIR_C") == 0) {
+        cam->naif_id = -41421;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_SWIR_C");
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "OMEGA_SWIR_L") == 0) {
+        cam->naif_id = -41422;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_SWIR_L");
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "OMEGA_VNIR") == 0) {
+        cam->naif_id = -41410;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_VNIR");
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "CRISM_VNIR") == 0) {
         cam->naif_id = -74017;
         snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_VNIR");
     }
@@ -79,16 +116,113 @@ static void load_pinhole_camera_model(const char *instrument,
         is_iss = 1;
         cam->is_framing = 1;
     }
-    else
-        G_fatal_error(_("Unsupported instrument='%s' -- only CRISM_VNIR, "
-                        "CRISM_IR, ISS_NAC, ISS_WAC are implemented. MEX "
-                        "OMEGA (whiskbroom mirror) and Cassini VIMS (2-axis "
-                        "scan) need extra per-pixel inputs not yet wired "
-                        "into p.caminfo -- see p.phocube -c and TODO.md."),
-                       instrument);
+    else if (strcmp(instrument, "VIMS_IR") == 0 ||
+             strcmp(instrument, "VIMS_VIS") == 0) {
+        int is_ir = (strcmp(instrument, "VIMS_IR") == 0);
+        cam->naif_id = is_ir ? -82371 : -82370;
+        snprintf(cam->frame, sizeof(cam->frame),
+                 is_ir ? "CASSINI_VIMS_IR" : "CASSINI_VIMS_V");
+        cam->is_vims = 1;
 
-    char varname[80];
-    int n;
+        char samp_mode[16] = "";
+        if (ov && ov->sampling_mode && ov->sampling_mode[0])
+            snprintf(samp_mode, sizeof(samp_mode), "%s", ov->sampling_mode);
+        if (!samp_mode[0]) {
+            char buf[16];
+            const char *field = is_ir ? "sampling_mode_ir" : "sampling_mode_vis";
+            if (p_meta_read_string_field(input_map, "raster", field,
+                                          buf, sizeof(buf)) == 0)
+                snprintf(samp_mode, sizeof(samp_mode), "%s", buf);
+        }
+        if (!samp_mode[0])
+            G_fatal_error(_("instrument=%s needs the real SamplingMode "
+                            "(NORMAL or HI-RES) -- pass sampling_mode= or "
+                            "import via p.in.archive's vims=."), instrument);
+
+        long x_offset = 0, z_offset = 0, swath_width = 0, swath_length = 0;
+        const char *fields[4]    = { "x_offset", "z_offset",
+                                      "swath_width", "swath_length" };
+        const char *ovrides[4]   = { ov ? ov->x_offset : NULL,
+                                      ov ? ov->z_offset : NULL,
+                                      ov ? ov->swath_width : NULL,
+                                      ov ? ov->swath_length : NULL };
+        long *out[4] = { &x_offset, &z_offset, &swath_width, &swath_length };
+        for (int i = 0; i < 4; i++) {
+            if (ovrides[i] && ovrides[i][0]) { *out[i] = atol(ovrides[i]); continue; }
+            char buf[16];
+            if (p_meta_read_string_field(input_map, "raster", fields[i],
+                                          buf, sizeof(buf)) == 0)
+                *out[i] = atol(buf);
+            else
+                G_fatal_error(_("instrument=%s needs label field '%s' -- "
+                                "pass %s= or import via p.in.archive's vims=."),
+                               instrument, fields[i], fields[i]);
+        }
+
+        int hires = (strcasecmp(samp_mode, "HI-RES") == 0);
+        double xPixSize, yPixSize, xBore, yBore;
+        int camSampOffset, camLineOffset;
+
+        if (!is_ir) {
+            if (!hires) {
+                xPixSize = yPixSize = 0.00051;
+                xBore = yBore = 31;
+                camSampOffset = (int)x_offset - 1;
+                camLineOffset = (int)z_offset - 1;
+            } else {
+                xPixSize = yPixSize = 0.00051 / 3.0;
+                xBore = yBore = 94;
+                camSampOffset = (3 * ((int)x_offset + (int)swath_width / 2)) -
+                                (int)swath_width / 2;
+                camLineOffset = (3 * ((int)z_offset + (int)swath_length / 2)) -
+                                (int)swath_length / 2;
+            }
+        } else {
+            if (!hires) {
+                xPixSize = yPixSize = 0.000495;
+                xBore = yBore = 31;
+                camSampOffset = (int)x_offset - 1;
+                camLineOffset = (int)z_offset - 1;
+            } else {
+                xPixSize = 0.000495 / 2.0;
+                yPixSize = 0.000495;
+                xBore = 62.5;
+                yBore = 31;
+                camSampOffset = 2 * (((int)x_offset - 1) +
+                                     (((int)swath_width - 1) / 4));
+                camLineOffset = (int)z_offset - 1;
+            }
+        }
+        cam->vims_x_pixsize  = xPixSize;
+        cam->vims_y_pixsize  = yPixSize;
+        cam->vims_x_bore     = xBore;
+        cam->vims_y_bore     = yBore;
+        cam->vims_samp_offset = camSampOffset;
+        cam->vims_line_offset = camLineOffset;
+        return;
+    }
+    else
+        G_fatal_error(_("Unsupported instrument='%s'. Supported: "
+                        "CRISM_VNIR, CRISM_IR, ISS_NAC, ISS_WAC, "
+                        "OMEGA_SWIR_C, OMEGA_SWIR_L, OMEGA_VNIR, "
+                        "VIMS_IR, VIMS_VIS."), instrument);
+
+    if (cam->is_omega) {
+        if (p_spice_gdpool_d("INS-41420_MIRROR_CENTER_POSITION", 0, 1, &n,
+                              &cam->mirror_center) < 0 || n != 1)
+            G_fatal_error(_("Could not read INS-41420_MIRROR_CENTER_POSITION "
+                            "from the loaded IK (MEX_OMEGA_V03.TI)."));
+        if (p_spice_gdpool_d("INS-41420_MIRROR_SLOPE", 0, 1, &n,
+                              &cam->mirror_slope) < 0 || n != 1)
+            G_fatal_error(_("Could not read INS-41420_MIRROR_SLOPE from "
+                            "the loaded IK (MEX_OMEGA_V03.TI)."));
+        if (p_spice_pxform(cam->frame, "MEX_SPACECRAFT", 0.0, cam->omega_rot) < 0)
+            G_fatal_error(_("pxform('%s' -> 'MEX_SPACECRAFT') failed -- is "
+                            "MEX_V16.TF attached via p.spiceinit's fk=?"),
+                           cam->frame);
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_SPACECRAFT");
+        return;
+    }
 
     snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->pixel_pitch) < 0 || n != 1)
@@ -302,11 +436,13 @@ static void uppercase_copy(char *dst, size_t n, const char *src)
 }
 
 /* A point in the camera-mode sample/line grid, evaluated to a body-fixed
- * surface point (if the look-direction ray hits the target). */
+ * surface point (if the look-direction ray hits the target). trgepc is the
+ * surface epoch returned by sincpt (needed for north_azimuth_deg). */
 typedef struct {
     int    hit;
     double lat_deg, lon_deg, radius_km;
     double spoint[3];
+    double trgepc;
 } CamPoint;
 
 static CamPoint eval_pixel(const PinholeCameraModel *cam,
@@ -314,7 +450,8 @@ static CamPoint eval_pixel(const PinholeCameraModel *cam,
                             const char *target, const char *fixref,
                             const char *observer,
                             double et, double line_rate, int have_line_rate,
-                            int nrows, int row, int col)
+                            int nrows, int row, int col,
+                            double mirror_dn)
 {
     CamPoint result;
     memset(&result, 0, sizeof(result));
@@ -323,22 +460,43 @@ static CamPoint eval_pixel(const PinholeCameraModel *cam,
     if (have_line_rate)
         et_row = et + (row - (nrows - 1) / 2.0) * line_rate;
 
-    double sample_1based = col + 1.0;
-    double line_1based   = row + 1.0;
-    double dx = (sample_1based - cam->boresight_sample) * cam->pixel_pitch;
-    double dy = cam->is_framing
-                  ? (line_1based - cam->boresight_line) * cam->pixel_pitch
-                  : 0.0;
+    double dvec[3];
 
-    double r2 = dx * dx + dy * dy;
-    double ux = dx * (1.0 + cam->k1 * r2);
-    double uy = dy * (1.0 + cam->k1 * r2);
-    double dvec[3] = { ux, uy, cam->focal_length };
+    if (cam->is_omega) {
+        double offset_deg = (mirror_dn - cam->mirror_center) * cam->mirror_slope;
+        double theta = offset_deg * M_PI / 180.0;
+        double ddet[3] = { sin(theta), 0.0, cos(theta) };
+        for (int i = 0; i < 3; i++)
+            dvec[i] = cam->omega_rot[i][0]*ddet[0] +
+                      cam->omega_rot[i][1]*ddet[1] +
+                      cam->omega_rot[i][2]*ddet[2];
+    }
+    else if (cam->is_vims) {
+        double x = col + cam->vims_samp_offset;
+        double y = row + cam->vims_line_offset;
+        double theta = (M_PI/2.0) - (y - cam->vims_y_bore) * cam->vims_y_pixsize;
+        double phi   = -(M_PI/2.0) + (x - cam->vims_x_bore) * cam->vims_x_pixsize;
+        dvec[0] = sin(theta) * cos(phi);
+        dvec[1] = cos(theta);
+        dvec[2] = -sin(theta) * sin(phi);
+    }
+    else {
+        double sample_1based = col + 1.0;
+        double line_1based   = row + 1.0;
+        double dx = (sample_1based - cam->boresight_sample) * cam->pixel_pitch;
+        double dy = cam->is_framing
+                      ? (line_1based - cam->boresight_line) * cam->pixel_pitch
+                      : 0.0;
+        double r2 = dx * dx + dy * dy;
+        dvec[0] = dx * (1.0 + cam->k1 * r2);
+        dvec[1] = dy * (1.0 + cam->k1 * r2);
+        dvec[2] = cam->focal_length;
+    }
 
-    double srfvec[3], trgepc;
+    double srfvec[3];
     int hit = p_spice_sincpt(camera_method, target, et_row, fixref, "LT+S",
                              observer, cam->frame, dvec, result.spoint,
-                             &trgepc, srfvec);
+                             &result.trgepc, srfvec);
     if (hit != 1)
         return result;
 
@@ -400,6 +558,9 @@ int main(int argc, char *argv[])
     struct GModule *module;
     struct Option  *opt_input, *opt_output;
     struct Option  *opt_instrument, *opt_filter1, *opt_filter2;
+    struct Option  *opt_mirror_dn;
+    struct Option  *opt_sampling_mode, *opt_x_offset, *opt_z_offset;
+    struct Option  *opt_swath_width, *opt_swath_length;
     struct Flag    *flag_json;
 
     G_gisinit(argv[0]);
@@ -432,7 +593,9 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = YES;
-    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC";
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC,"
+                               "OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,"
+                               "VIMS_IR,VIMS_VIS";
     opt_instrument->description = _("Instrument camera model to use");
 
     opt_filter1 = G_define_option();
@@ -448,6 +611,47 @@ int main(int argc, char *argv[])
     opt_filter2->type        = TYPE_STRING;
     opt_filter2->required    = NO;
     opt_filter2->description = _("ISS_NAC/ISS_WAC: second filter wheel position");
+
+    opt_mirror_dn = G_define_standard_option(G_OPT_R_INPUT);
+    opt_mirror_dn->key         = "mirror_dn";
+    opt_mirror_dn->required    = NO;
+    opt_mirror_dn->label       = _("OMEGA_SWIR_C/SWIR_L/VNIR: mirror position (DN) raster");
+    opt_mirror_dn->description = _("Per-sample scanning mirror position raster "
+                                    "(band-suffix sideplane imported via p.in.pds3 "
+                                    "suffix_band=1); required when instrument=OMEGA_*.");
+
+    opt_sampling_mode = G_define_option();
+    opt_sampling_mode->key         = "sampling_mode";
+    opt_sampling_mode->type        = TYPE_STRING;
+    opt_sampling_mode->required    = NO;
+    opt_sampling_mode->options     = "NORMAL,HI-RES";
+    opt_sampling_mode->description = _("VIMS_IR/VIMS_VIS: real label SAMPLING_MODE_ID "
+                                        "(else read from planetary.json via p.in.archive's "
+                                        "vims=)");
+
+    opt_x_offset = G_define_option();
+    opt_x_offset->key         = "x_offset";
+    opt_x_offset->type        = TYPE_INTEGER;
+    opt_x_offset->required    = NO;
+    opt_x_offset->description = _("VIMS_IR/VIMS_VIS: real label X_OFFSET");
+
+    opt_z_offset = G_define_option();
+    opt_z_offset->key         = "z_offset";
+    opt_z_offset->type        = TYPE_INTEGER;
+    opt_z_offset->required    = NO;
+    opt_z_offset->description = _("VIMS_IR/VIMS_VIS: real label Z_OFFSET");
+
+    opt_swath_width = G_define_option();
+    opt_swath_width->key         = "swath_width";
+    opt_swath_width->type        = TYPE_INTEGER;
+    opt_swath_width->required    = NO;
+    opt_swath_width->description = _("VIMS_IR/VIMS_VIS: real label SWATH_WIDTH");
+
+    opt_swath_length = G_define_option();
+    opt_swath_length->key         = "swath_length";
+    opt_swath_length->type        = TYPE_INTEGER;
+    opt_swath_length->required    = NO;
+    opt_swath_length->description = _("VIMS_IR/VIMS_VIS: real label SWATH_LENGTH");
 
     flag_json = G_define_flag();
     flag_json->key = 'j';
@@ -477,10 +681,43 @@ int main(int argc, char *argv[])
 
     const char *camera_method = spice_info.have_dsk ? "DSK/Unprioritized" : "Ellipsoid";
 
+    int is_omega_instr = (strncmp(opt_instrument->answer, "OMEGA_", 6) == 0);
+    if (is_omega_instr && !opt_mirror_dn->answer)
+        G_fatal_error(_("instrument=%s requires mirror_dn= (per-sample mirror "
+                        "position raster, imported via p.in.pds3 suffix_band=1)."),
+                       opt_instrument->answer);
+
+    CameraOverrides ov = {
+        opt_sampling_mode->answer,
+        opt_x_offset->answer,
+        opt_z_offset->answer,
+        opt_swath_width->answer,
+        opt_swath_length->answer
+    };
+
     PinholeCameraModel cam;
     load_pinhole_camera_model(opt_instrument->answer, opt_input->answer,
                                opt_filter1->answer, opt_filter2->answer,
-                               ncols, nrows, &cam);
+                               &ov, ncols, nrows, &cam);
+
+    /* Open mirror_dn raster (OMEGA only) -- read one row at a time for
+     * each of the 5 evaluation points below. */
+    int mirror_dn_fd = -1;
+    DCELL *mirror_dn_row_buf = NULL;
+    if (is_omega_instr) {
+        const char *mset = G_find_raster(opt_mirror_dn->answer, "");
+        if (!mset)
+            G_fatal_error(_("mirror_dn raster <%s> not found"),
+                           opt_mirror_dn->answer);
+        mirror_dn_fd = Rast_open_old(opt_mirror_dn->answer, mset);
+        mirror_dn_row_buf = Rast_allocate_d_buf();
+    }
+
+#define READ_MIRROR_DN(row_idx, col_idx) \
+    (mirror_dn_fd >= 0 \
+         ? (Rast_get_d_row(mirror_dn_fd, mirror_dn_row_buf, (row_idx)), \
+            (double)mirror_dn_row_buf[(col_idx)]) \
+         : 0.0)
 
     G_message(_("instrument=%s frame=%s target=%s observer=%s time=%s "
                 "(et=%.6f) image=%dx%d"), opt_instrument->answer, cam.frame,
@@ -490,7 +727,8 @@ int main(int argc, char *argv[])
     int row_c = nrows / 2, col_c = ncols / 2;
     CamPoint centre = eval_pixel(&cam, camera_method, target_upper, fixref,
                                  spice_info.observer, et, spice_info.line_rate,
-                                 spice_info.have_line_rate, nrows, row_c, col_c);
+                                 spice_info.have_line_rate, nrows, row_c, col_c,
+                                 READ_MIRROR_DN(row_c, col_c));
 
     struct { const char *name; int row, col; } corner_defs[4] = {
         { "corner_ul", 0,         0 },
@@ -503,7 +741,14 @@ int main(int argc, char *argv[])
         corners[i] = eval_pixel(&cam, camera_method, target_upper, fixref,
                                 spice_info.observer, et, spice_info.line_rate,
                                 spice_info.have_line_rate, nrows,
-                                corner_defs[i].row, corner_defs[i].col);
+                                corner_defs[i].row, corner_defs[i].col,
+                                READ_MIRROR_DN(corner_defs[i].row, corner_defs[i].col));
+#undef READ_MIRROR_DN
+
+    if (mirror_dn_fd >= 0) {
+        Rast_close(mirror_dn_fd);
+        G_free(mirror_dn_row_buf);
+    }
 
     double phase_deg = 0, incidence_deg = 0, emission_deg = 0;
     int have_illum = 0;
@@ -553,29 +798,28 @@ int main(int argc, char *argv[])
                               centre.spoint[1] + obs_pos[1],
                               centre.spoint[2] + obs_pos[2] };
             double range_km = sqrt(ray[0]*ray[0] + ray[1]*ray[1] + ray[2]*ray[2]);
-            double ifov_rad = cam.pixel_pitch / cam.focal_length;
-            resolution_m = ifov_rad * range_km * 1000.0;
-            have_resolution = 1;
 
-            /* sincpt doesn't hand back trgepc for the centre point above
-             * (only hit/spoint were kept) -- recompute it here via the
-             * same ray, cheap and avoids widening CamPoint for one field. */
+            /* IFOV in radians per pixel -- instrument-dependent formula. */
+            double ifov_rad = 0;
+            if (cam.is_omega)
+                ifov_rad = cam.mirror_slope * M_PI / 180.0;
+            else if (cam.is_vims)
+                ifov_rad = cam.vims_x_pixsize;
+            else if (cam.focal_length > 0)
+                ifov_rad = cam.pixel_pitch / cam.focal_length;
+
+            if (ifov_rad > 0) {
+                resolution_m = ifov_rad * range_km * 1000.0;
+                have_resolution = 1;
+            }
+
+            /* North azimuth: use centre.trgepc (stored by eval_pixel via
+             * sincpt's own returned value -- no second sincpt call needed). */
             double et_row_c = et;
             if (spice_info.have_line_rate)
                 et_row_c = et + (row_c - (nrows - 1) / 2.0) * spice_info.line_rate;
-            double sample_1based = col_c + 1.0, line_1based = row_c + 1.0;
-            double dx = (sample_1based - cam.boresight_sample) * cam.pixel_pitch;
-            double dy = cam.is_framing
-                          ? (line_1based - cam.boresight_line) * cam.pixel_pitch : 0.0;
-            double r2 = dx*dx + dy*dy;
-            double dvec[3] = { dx*(1.0+cam.k1*r2), dy*(1.0+cam.k1*r2), cam.focal_length };
-            double spoint2[3], srfvec2[3], trgepc;
-            if (p_spice_sincpt(camera_method, target_upper, et_row_c, fixref,
-                               "LT+S", spice_info.observer, cam.frame, dvec,
-                               spoint2, &trgepc, srfvec2) == 1) {
-                have_az = (north_azimuth_deg(&cam, fixref, spoint2, trgepc,
-                                             et_row_c, &az_deg) == 0);
-            }
+            have_az = (north_azimuth_deg(&cam, fixref, centre.spoint,
+                                         centre.trgepc, et_row_c, &az_deg) == 0);
         }
     }
 
