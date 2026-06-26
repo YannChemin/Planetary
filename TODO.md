@@ -141,8 +141,8 @@ implementer doesn't have to re-discover this):
 | Venus | IR1/IR2/UVI | Akatsuki | Multispectral imagers (not hyperspectral, but UV-VIS-NIR) | **done** -- `akatsuki=` in `p.in.archive`, JAXA DARTS |
 | Mercury | MASCS (UVVS+VIRS) | MESSENGER | UV-VIS-NIR point spectrometer | NASA PDS Geosciences Node |
 | Mercury | MERTIS | BepiColombo (en route/ongoing) | Thermal-IR imaging spectrometer | not yet archived -- check ESA PSA as mission progresses |
-| Saturn system | UVIS | Cassini | UV spectrograph (rings, atmospheres) | PDS Ring-Moon Systems Node (OPUS) -- same access path as VIMS/ISS, just needs its own sensor-prefix mapping |
-| Saturn system | VIMS | Cassini | Imaging spectrometer, 0.35-5.1 um | already partially supported via `opus=` (sensor inference only; no dedicated catalog/shortcut yet) |
+| Saturn system | UVIS | Cassini | UV spectrograph (rings, atmospheres) | **done** -- `opus_id=co-uvis-euv*/co-uvis-fuv*` auto-infers `CASSINI_UVIS_EUV`/`CASSINI_UVIS_FUV` sensor in `p.in.archive` |
+| Saturn system | VIMS | Cassini | Imaging spectrometer, 0.35-5.1 um | **done** -- `vims=` with 10-entry curated catalog (Titan x3, Enceladus x2, Saturn x2, rings, Iapetus, Dione) |
 | Jupiter system | NIMS | Galileo | Near-IR imaging spectrometer | **done** -- `nims=` in `p.in.archive`, NASA PDS Imaging Node |
 | Pluto/Charon | LEISA (on Ralph) | New Horizons | IR imaging spectrometer | **done** -- `leisa=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |
 | Vesta/Ceres | VIR | Dawn | VIS+IR imaging spectrometer | **done** -- `dawn_vir=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |

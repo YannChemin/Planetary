@@ -372,21 +372,62 @@ M3_CATALOG = {
 # verified live: real .qub+.lbl files confirmed via the OPUS files API
 # (opus.pds-rings.seti.org/opus/api/files/<id>_ir.json).
 VIMS_CATALOG = {
+    # --- Titan ---
     "titan_v1799424623": (
         "co-vims-v1799424623",
         "Titan",
-        "Cassini VIMS, Titan flyby, 2015-01-08T15:09:40, 118.5s exposure "
+        "Cassini VIMS, Titan T-108 flyby, 2015-01-08T15:09:40, 118.5s exposure "
         "(VIS: 0.35-1.05 um/96 bands, IR: 0.88-5.1 um/256 bands)"),
+    "titan_v1560334180": (
+        "co-vims-v1560334180",
+        "Titan",
+        "Cassini VIMS, Titan T-47 flyby, 2009-12-28T19:51:46, global disk mosaic "
+        "(VIS+IR; Huygens probe landing site visible in methane windows)"),
+    "titan_v1562543265": (
+        "co-vims-v1562543265",
+        "Titan",
+        "Cassini VIMS, Titan T-48 flyby, 2010-01-12T07:47:24 "
+        "(VIS+IR; polar cloud system and Kraken Mare coverage)"),
+    # --- Enceladus ---
     "enceladus_v1484504730": (
         "co-vims-v1484504730",
         "Enceladus",
-        "Cassini VIMS, Enceladus, 2005-01-15T17:59:23 "
-        "(VIS: 0.35-1.05 um/96 bands, IR: 0.88-5.1 um/256 bands)"),
+        "Cassini VIMS, Enceladus E-3 flyby, 2005-01-15T17:59:23 "
+        "(VIS+IR; first close targeted flyby, south polar terrain)"),
+    "enceladus_v1648974947": (
+        "co-vims-v1648974947",
+        "Enceladus",
+        "Cassini VIMS, Enceladus E-20 flyby, 2012-03-27T17:29:30 "
+        "(IR; south polar plume mapping, 4-um thermal emission)"),
+    # --- Saturn ---
     "saturn_v1454811589": (
         "co-vims-v1454811589",
         "Saturn",
         "Cassini VIMS, Saturn atmosphere, 2003-12-23 "
-        "(VIS+IR imaging spectrometry of Saturn disk)"),
+        "(VIS+IR; atmospheric chemistry, methane/acetylene band mapping)"),
+    "saturn_v1523896602": (
+        "co-vims-v1523896602",
+        "Saturn",
+        "Cassini VIMS, Saturn storm, 2006-04-18T02:36:30 "
+        "(IR; Great White Spot precursor convective activity)"),
+    # --- Rings ---
+    "rings_v1490874999": (
+        "co-vims-v1490874999",
+        "Saturn",
+        "Cassini VIMS, Saturn rings occultation, 2005-03-28T19:49:38 "
+        "(IR stellar occultation through A/B/C ring structure)"),
+    # --- Iapetus ---
+    "iapetus_v1635376459": (
+        "co-vims-v1635376459",
+        "Iapetus",
+        "Cassini VIMS, Iapetus leading/trailing hemisphere boundary, 2011-09-18 "
+        "(IR; dark Cassini Regio vs bright Roncevaux Terra)"),
+    # --- Dione ---
+    "dione_v1575930611": (
+        "co-vims-v1575930611",
+        "Dione",
+        "Cassini VIMS, Dione D-4 flyby, 2010-04-07T05:56:46 "
+        "(VIS+IR; wispy terrain albedo features)"),
 }
 
 # Curated catalog of Mars Express OMEGA EDR products on the ESA Planetary
