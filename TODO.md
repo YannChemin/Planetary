@@ -18,8 +18,10 @@ listing, and a dedicated `<name>=` option:
 - **CRISM** (`crism=`) -- MRO/CRISM Targeted RDR, fetched directly from
   the PDS Geosciences Node's static archive tree (`pds-geosciences.wustl.edu`),
   since CRISM is indexed neither by OPUS (outer-planet/ring-science only)
-  nor the NASA PDS Federated Search. Currently one observation catalogued
-  (`FRT00003BFB`, Mawrth Vallis -- this repo's own Mars Mineralogy chapter).
+  nor the NASA PDS Federated Search. **4 science targets catalogued**:
+  Mawrth Vallis (FRT00003BFB), Nili Fossae (FRT00003E12), Jezero Crater
+  (FRT000047A3), Gale Crater (FRT0000901A) -- 8 entries total (IR + VNIR
+  for each). Footprints verified via MTRDR map-projected labels.
 - **M3** (`m3=`) -- **done this session.** Chandrayaan-1 Moon Mineralogy
   Mapper L1B radiance, fetched from the JPL PDS Imaging Node
   (`planetarydata.jpl.nasa.gov`). Verified end-to-end: real product
@@ -1267,22 +1269,22 @@ These are all dictionary entries in `p.in.archive.py`. No new import
 handlers, no new `libs/p_pds` work. Simplest possible change — just
 real URL verification + adding dict entries + doc update.
 
-**4-A-1. More CRISM observations** (currently only Mawrth Vallis)
+**4-A-1. More CRISM observations** -- **done** -- Jezero, Nili Fossae, Gale added
 
-Add 3–4 more science targets to `CRISM_CATALOG`:
-- **Jezero Crater** (Perseverance landing site, ~18.4 N / 77.7 E) --
-  phyllosilicates in delta fan; one of the most-studied CRISM targets.
-- **Nili Fossae** (~21 N / 74 E) -- olivine, carbonate, phyllosilicate
-  diversity; classic mineralogy showcase.
-- **Gale Crater** (Curiosity landing site, ~5.4 S / 137.8 E) --
-  smectite and sulfate stratigraphy.
-- **Hellas Basin rim** (~40 S) -- iron oxides and possible ices.
+Added 6 new entries (IR + VNIR for each of 3 new targets) to `CRISM_CATALOG`.
+All footprints verified via MTRDR PDS5 labels (MINIMUM/MAXIMUM_LATITUDE,
+WESTERNMOST/EASTERNMOST_LONGITUDE). Archive layout discovery: TRR3 index
+files have null CENTER_LATITUDE for early 2007 data; reliable coordinates
+only obtainable from individual MTRDR product labels.
 
-Archive: `pds-geosciences.wustl.edu/mro/mro-m-crism-3-rdr-targeted-v1/`
-Naming: `mrocr_<vol>/trdr/<year>/<doy>/<OBSID>/<OBSID>_01_IF<NNN>L_TRR3.IMG`
-(L detector, IR) + `S` detector (VNIR). Volume numbers and DOY must be
-resolved from the archive's index CSV or monthly tab. Verified live:
-the existing `FRT00003BFB` path already proves the archive works.
+- **Jezero Crater** FRT000047A3 (18.6N, 77.5E), 2007-02-26
+  `mrocr_2101/trdr/2007/2007_057/` -- keys: `jezero_crater_frt000047a3_{ir,vnir}`
+- **Nili Fossae** FRT00003E12 (22.3N, 77.1E), 2007-01-13
+  `mrocr_2101/trdr/2007/2007_013/` -- keys: `nili_fossae_frt00003e12_{ir,vnir}`
+- **Gale Crater** FRT0000901A (5.5S, 137.5E), 2007-12-27
+  `mrocr_2102/trdr/2007/2007_361/` -- keys: `gale_crater_frt0000901a_{ir,vnir}`
+
+**Hellas Basin rim** still not added (low priority, defer).
 
 **4-A-2. More OMEGA orbits** (currently orb0100–orb2500)
 
