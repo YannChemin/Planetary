@@ -1297,19 +1297,17 @@ Added 3 orbits to `OMEGA_CATALOG` (now 8 entries total), all HTTP 200 verified:
 - `orb2204_0` (2005-10-01): Hellas Basin (deepest impact basin on Mars, centre ~42°S 70°E);
   lat -72 to -31°S, lon 37–121°E; dust storm occurrence and CO₂ frost.
 
-**4-A-3. More VIMS observations** (currently 10 entries, all Saturn system)
+**4-A-3. More VIMS observations** -- **done** (now 14 entries)
 
-Targets not yet in the catalog:
-- **Phoebe** (irregular captured moon, 2004 flyby; dark primitive surface):
-  the only dedicated VIMS/Phoebe flyby sequence.
-- **Hyperion** (chaotic rotation, sponge-like morphology):
-  VIMS observed spectral diversity within the chaotic rotation.
-- **Rhea** (heavily cratered, largest airless moon after Iapetus):
-  water ice / CO₂ ice surface.
-- **Tethys** (Odysseus impact basin) -- ice + contaminant mapping.
-
-All fetchable via `opus_id=co-vims-v<SCLK>` once the OPUS IDs are
-verified against the ring node.
+Added 4 entries via OPUS data.json API (all IDs verified live):
+- `phoebe_v1465525671`: 2004-06-10, only close Phoebe flyby; dark carbonaceous
+  material + H₂O + CO₂; 356s exposure. (`co-vims-v1465525671`)
+- `hyperion_v1496991409`: 2005-06-09, early Hyperion approach; irregular sponge
+  morphology, dark lag deposits; 204s. (`co-vims-v1496991409`)
+- `rhea_v1484528108`: 2005-01-16, Rhea R-flyby; water-ice rich, heavily cratered;
+  393s. (`co-vims-v1484528108`)
+- `tethys_v1477638980`: 2004-10-28, Tethys observation; near-pure water-ice,
+  Ithaca Chasma rift; 204s. (`co-vims-v1477638980`)
 
 ### 4-B. New missions — framing cameras (PDS3/FITS, no SPICE needed for import)
 

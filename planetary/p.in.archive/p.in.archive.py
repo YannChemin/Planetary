@@ -491,6 +491,33 @@ VIMS_CATALOG = {
         "Dione",
         "Cassini VIMS, Dione D-4 flyby, 2010-04-07T05:56:46 "
         "(VIS+IR; wispy terrain albedo features)"),
+    # --- Phoebe ---
+    "phoebe_v1465525671": (
+        "co-vims-v1465525671",
+        "Phoebe",
+        "Cassini VIMS, Phoebe flyby, 2004-06-10T02:03:48, 356s exposure "
+        "(VIS+IR; only close Phoebe flyby -- captured KBO, dark carbonaceous "
+        "material + water ice + CO2 surface)"),
+    # --- Hyperion ---
+    "hyperion_v1496991409": (
+        "co-vims-v1496991409",
+        "Hyperion",
+        "Cassini VIMS, Hyperion approach, 2005-06-09T06:29:22, 204s exposure "
+        "(VIS+IR; irregular sponge-like surface, chaotic rotation, dark lag "
+        "deposits in impact craters)"),
+    # --- Rhea ---
+    "rhea_v1484528108": (
+        "co-vims-v1484528108",
+        "Rhea",
+        "Cassini VIMS, Rhea R-flyby, 2005-01-16T00:29:01, 393s exposure "
+        "(VIS+IR; second largest Saturnian moon, water-ice rich heavily "
+        "cratered surface)"),
+    # --- Tethys ---
+    "tethys_v1477638980": (
+        "co-vims-v1477638980",
+        "Tethys",
+        "Cassini VIMS, Tethys, 2004-10-28T06:50:58, 204s exposure "
+        "(VIS+IR; near-pure water-ice moon, Ithaca Chasma rift system)"),
 }
 
 # Curated catalog of Mars Express OMEGA EDR products on the ESA Planetary
