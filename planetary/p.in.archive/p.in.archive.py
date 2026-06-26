@@ -177,8 +177,17 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # % type: string
 # % required: no
 # % multiple: no
-# % label: New Horizons LEISA product: a catalog key (see -l) or a direct https URL
-# % description: Fetches a New Horizons LEISA (Linear Etalon Imaging Spectral Array) calibrated science FITS cube (256x256x270 bands, 1.25-2.50 µm) from the PDS Small Bodies Node (pds-smallbodies.astro.umd.edu). Use -l to list catalog keys.
+# % label: LEISA product (New Horizons or Lucy): a catalog key (see -l) or a direct https URL
+# % description: Fetches a LEISA (Linear Etalon Imaging Spectral Array) calibrated science FITS cube (270 bands, 1.25-2.50 µm) from New Horizons (PDS SBN) or Lucy (PDS SBN). Use -l to list catalog keys.
+# %end
+
+# %option
+# % key: juno
+# % type: string
+# % required: no
+# % multiple: no
+# % label: Juno JunoCam product: a catalog key (see -l) or a direct https URL to a JNCR_*.IMG
+# % description: Fetches a Juno JunoCam raw EDR framelet image (.LBL + .IMG, 16-bit DN, 4-color B/G/R/CH4 strips) from the PDS Imaging Node. Use -l to list catalog keys.
 # %end
 
 # %option
@@ -438,12 +447,102 @@ VIMS_CATALOG = {
 OMEGA_BASE = ("https://archives.esac.esa.int/psa/ftp/MARS-EXPRESS/OMEGA/"
               "MEX-M-OMEGA-2-EDR-FLIGHT-V1.0/DATA")
 OMEGA_CATALOG = {
+    # --- Early mission, equatorial/southern ---
     "orb0100_0": (
         f"{OMEGA_BASE}/ORB01/ORB0100_0.QUB",
         "Mars",
         "OMEGA EDR, orbit 100, 2004-02-10T18:07:10 "
-        "(352 bands, 64 samples x 424 lines)"),
+        "(352 bands, 64 samples x 424 lines; lat -78.2 to -70.3, lon 291-303 E)"),
+    # --- Southern hemisphere, June 2004 ---
+    "orb0511_0": (
+        f"{OMEGA_BASE}/ORB05/ORB0511_0.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 511, 2004-06-14T20:08:10 "
+        "(352 bands; lat -84.7 to -35.8, lon 281-326 E; southern high-latitudes, "
+        "approaching southern winter polar hood)"),
+    # --- Northern high-latitudes, October 2004 ---
+    "orb1000_0": (
+        f"{OMEGA_BASE}/ORB10/ORB1000_0.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 1000, 2004-10-29T17:08:02 "
+        "(352 bands; lat 42.8 to 81.2, lon 35-190 E; northern high-latitudes, "
+        "Vastitas Borealis / northern plains coverage)"),
+    # --- Southern mid-latitudes, August 2005 ---
+    "orb2001_0": (
+        f"{OMEGA_BASE}/ORB20/ORB2001_0.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 2001, 2005-08-05T23:56:54 "
+        "(352 bands; lat -72.5 to -33.6, lon 155-276 E; southern hemisphere, "
+        "late southern winter, wide cross-track swath)"),
+    # --- Southern polar cap, December 2005 ---
+    "orb2500_0": (
+        f"{OMEGA_BASE}/ORB25/ORB2500_0.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 2500, 2005-12-23T17:07:24 "
+        "(352 bands; lat -86.7 to -57.1, lon 193-358 E; southern polar cap "
+        "during southern summer -- CO2/H2O ice mapping)"),
 }
+
+# Curated catalog of Juno JunoCam raw EDR products on the PDS Imaging Node
+# (planetarydata.jpl.nasa.gov). Detached-label PDS3 image (.LBL + .IMG),
+# 16-bit unsigned DN. Each file is a full perijove pass: a multi-framelet
+# stack of all 4 color-filter strips (B/G/R/CH4 interleaved), hundreds of
+# bands depending on the pass. URL confirmed live via directory listing;
+# PDS Imaging Node has intermittent 503s on individual files -- use
+# p.in.archive juno=<key> and wget_resumable handles retries.
+JUNO_JNC_BASE = "https://planetarydata.jpl.nasa.gov/img/data/juno"
+JUNO_JNC_CATALOG = {
+    # ORBIT_00: JOI approach, 2016-06-29
+    "pj00_00c01576": (
+        f"{JUNO_JNC_BASE}/JNOJNC_0002/DATA/RDR/JUPITER/ORBIT_00/"
+        "JNCR_2016181_00C01576_V02.IMG",
+        f"{JUNO_JNC_BASE}/JNOJNC_0002/DATA/RDR/JUPITER/ORBIT_00/"
+        "JNCR_2016181_00C01576_V02.LBL",
+        "Jupiter",
+        "JunoCam EDR, JOI approach, 2016-06-29 (DOY 181); "
+        "4-color (B/G/R/CH4) framelet sequence; raw 16-bit DN"),
+    # ORBIT_01: PJ1 (first science perijove), 2016-07-31
+    "pj01_01c03606": (
+        f"{JUNO_JNC_BASE}/JNOJNC_0002/DATA/RDR/JUPITER/ORBIT_01/"
+        "JNCR_2016213_01C03606_V01.IMG",
+        f"{JUNO_JNC_BASE}/JNOJNC_0002/DATA/RDR/JUPITER/ORBIT_01/"
+        "JNCR_2016213_01C03606_V01.LBL",
+        "Jupiter",
+        "JunoCam EDR, PJ1 (first science perijove), 2016-07-31 (DOY 213); "
+        "Jupiter cloud belts and zones; 4-color framelet sequence; raw 16-bit DN"),
+    # ORBIT_07: PJ7, 2017-07-04
+    "pj07_07c00613": (
+        f"{JUNO_JNC_BASE}/JNOJNC_0005/DATA/RDR/JUPITER/ORBIT_07/"
+        "JNCR_2017185_07C00613_V01.IMG",
+        f"{JUNO_JNC_BASE}/JNOJNC_0005/DATA/RDR/JUPITER/ORBIT_07/"
+        "JNCR_2017185_07C00613_V01.LBL",
+        "Jupiter",
+        "JunoCam EDR, PJ7, 2017-07-04 (DOY 185); "
+        "Jupiter polar and mid-latitude cloud structure; 4-color framelet sequence"),
+}
+
+
+def resolve_juno_jnc(a):
+    """Return (img_url, lbl_url, body) for a JunoCam catalog key or direct IMG URL."""
+    if a in JUNO_JNC_CATALOG:
+        img_url, lbl_url, body, _desc = JUNO_JNC_CATALOG[a]
+        return img_url, lbl_url, body
+    if a.lower().startswith(("http://", "https://")):
+        # Direct URL to .IMG — derive .LBL by extension swap
+        lbl_url = re.sub(r"\.IMG$", ".LBL", a, flags=re.IGNORECASE)
+        return a, lbl_url, "Jupiter"
+    gs.fatal(f"Unknown JunoCam key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a JNCR_*.IMG file.")
+
+
+def print_juno_jnc_catalog():
+    gs.message("Juno JunoCam EDR raw framelets (use juno=<key>, or a direct "
+               "https URL to a JNCR_*.IMG on planetarydata.jpl.nasa.gov):")
+    gs.message(f"  {'key':<24} {'body':<10} description")
+    gs.message("  " + "-" * 90)
+    for k, (_img, _lbl, body, desc) in JUNO_JNC_CATALOG.items():
+        gs.message(f"  {k:<24} {body:<10} {desc}")
+
 
 # Curated catalog of Dawn VIR (Visible and InfraRed mapping spectrometer)
 # calibrated RDR products on the NASA PDS Small Bodies Node static archive
@@ -1593,34 +1692,76 @@ def print_akatsuki_catalog():
         gs.message(f"  {k:<30} {body:<10} {desc}")
 
 
-LEISA_BASE = ("https://pds-smallbodies.astro.umd.edu/holdings/"
-              "nh-a-leisa-3-kem2-v1.0/data")
+LEISA_NH_BASE = ("https://pds-smallbodies.astro.umd.edu/holdings/"
+                 "nh-a-leisa-3-kem2-v1.0/data")
+LEISA_LUCY_DIN_BASE = ("https://pds-smallbodies.astro.umd.edu/holdings/"
+                       "pds4-lucy.leisa:data_dinkinesh_calibrated-v1.0")
+LEISA_LUCY_DON_BASE = ("https://pds-smallbodies.astro.umd.edu/holdings/"
+                       "pds4-lucy.leisa:data_donaldjohanson_calibrated-v1.0")
+
+# Each entry: (url, body, description, mission)
 LEISA_CATALOG = {
+    # --- New Horizons / Pluto-Kuiper Belt ---
     "nh_leisa_arrokoth_20181231": (
-        f"{LEISA_BASE}/20181231_040858/lsb_0408587281_0x53c_sci.fit",
+        f"{LEISA_NH_BASE}/20181231_040858/lsb_0408587281_0x53c_sci.fit",
         "Arrokoth",
         "NH LEISA KEM2, Arrokoth (MU69) approach, 2018-12-31 "
-        "(256x256x270 bands, 1.25-2.50 µm, calibrated)"),
+        "(256x256x270 bands, 1.25-2.50 µm, calibrated)",
+        "NEW_HORIZONS"),
+    # --- Lucy / Main-Belt and Trojan asteroids ---
+    # Dinkinesh (152830): main-belt asteroid, binary system, flyby 2023-11-01.
+    # First Lucy science target; its moon Selam was discovered during the flyby.
+    "lucy_leisa_dinkinesh_02300": (
+        f"{LEISA_LUCY_DIN_BASE}/lei_0752129711_02300_sci_03.fit",
+        "Dinkinesh",
+        "Lucy LEISA, (152830) Dinkinesh flyby, 2023-11-01 "
+        "(270 bands, 1.25-2.50 µm, calibrated; ~477 MB)",
+        "LUCY"),
+    "lucy_leisa_dinkinesh_02298": (
+        f"{LEISA_LUCY_DIN_BASE}/lei_0752129330_02298_sci_04.fit",
+        "Dinkinesh",
+        "Lucy LEISA, (152830) Dinkinesh flyby, 2023-11-01 seq 02298 "
+        "(270 bands, 1.25-2.50 µm, calibrated; ~761 MB -- large file)",
+        "LUCY"),
+    # Donaldjohanson (52246): C-type main-belt asteroid, flyby 2024-04-20.
+    "lucy_leisa_donaldjohanson_02533": (
+        f"{LEISA_LUCY_DON_BASE}/lei_0798376832_02533_sci_03.fit",
+        "Donaldjohanson",
+        "Lucy LEISA, (52246) Donaldjohanson flyby, 2024-04-20 "
+        "(270 bands, 1.25-2.50 µm, calibrated; ~27 MB)",
+        "LUCY"),
+    "lucy_leisa_donaldjohanson_02534": (
+        f"{LEISA_LUCY_DON_BASE}/lei_0798377044_02534_sci_03.fit",
+        "Donaldjohanson",
+        "Lucy LEISA, (52246) Donaldjohanson flyby, 2024-04-20 seq 02534 "
+        "(270 bands, 1.25-2.50 µm, calibrated)",
+        "LUCY"),
 }
 
 
 def resolve_leisa(a):
+    """Return (url, body, mission) for a LEISA catalog key or direct URL."""
     if a in LEISA_CATALOG:
-        url, body, _desc = LEISA_CATALOG[a]
-        return url, body
+        url, body, _desc, mission = LEISA_CATALOG[a]
+        return url, body, mission
     if a.lower().startswith(("http://", "https://")):
-        return a, None
+        mission = "LUCY" if "lucy" in a.lower() else "NEW_HORIZONS"
+        return a, None, mission
     gs.fatal(f"Unknown LEISA key '{a}'. Use -l to list catalog keys, "
              "or pass a direct https URL to a *.fit file.")
 
 
 def print_leisa_catalog():
-    gs.message("New Horizons LEISA calibrated science FITS cubes (use leisa=<key>, "
-               "or a direct https URL to a *.fit on pds-smallbodies.astro.umd.edu):")
-    gs.message(f"  {'key':<30} {'body':<10} description")
-    gs.message("  " + "-" * 90)
-    for k, (_url, body, desc) in LEISA_CATALOG.items():
-        gs.message(f"  {k:<30} {body:<10} {desc}")
+    gs.message("LEISA calibrated science FITS cubes -- New Horizons and Lucy "
+               "(use leisa=<key>, or a direct https URL to a *.fit):")
+    gs.message(f"  {'key':<42} {'body':<16} description")
+    gs.message("  " + "-" * 100)
+    cur_mission = None
+    for k, (_url, body, desc, mission) in LEISA_CATALOG.items():
+        if mission != cur_mission:
+            gs.message(f"  --- {mission} ---")
+            cur_mission = mission
+        gs.message(f"  {k:<42} {body:<16} {desc}")
 
 
 
@@ -1631,7 +1772,10 @@ _BODY_PATH_TOKENS = ("mercury", "venus", "earth", "moon", "mars",
                      "ceres", "vesta", "pluto", "charon",
                      "io", "europa", "ganymede", "callisto",
                      "titan", "enceladus", "mimas", "tethys", "dione",
-                     "rhea", "iapetus", "phobos", "deimos", "comet")
+                     "rhea", "iapetus", "phobos", "deimos", "comet",
+                     "dinkinesh", "donaldjohanson", "arrokoth",
+                     "eurybates", "polymele", "leucus", "orus",
+                     "patroclus", "menoetius")
 
 
 def _infer_body_from_url(url, body_hint=None):
@@ -1900,6 +2044,7 @@ def main():
     opt_lamp         = options["lamp"]
     opt_akatsuki     = options["akatsuki"]
     opt_leisa        = options["leisa"]
+    opt_juno         = options["juno"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -1932,11 +2077,12 @@ def main():
         print_lamp_catalog()
         print_akatsuki_catalog()
         print_leisa_catalog()
-        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa)):
+        print_juno_jnc_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2007,7 +2153,7 @@ def main():
         return
 
     if opt_m3:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2054,7 +2200,7 @@ def main():
         return
 
     if opt_vims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2069,7 +2215,7 @@ def main():
         # fall through into the OPUS branch below
 
     if opt_omega:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2117,7 +2263,7 @@ def main():
         return
 
     if opt_dawn_vir:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2175,7 +2321,7 @@ def main():
         return
 
     if opt_virtis_vex:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2228,7 +2374,7 @@ def main():
         return
 
     if opt_virtis_rosetta:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("virtis_rosetta= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2281,7 +2427,7 @@ def main():
         return
 
     if opt_iuvs:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("iuvs= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2346,7 +2492,7 @@ def main():
         return
 
     if opt_nims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_lamp, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("nims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2389,7 +2535,7 @@ def main():
         return
 
     if opt_lamp:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_akatsuki, opt_leisa, opt_opus, opt_opus_id)):
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
             gs.fatal("lamp= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/akatsuki=/leisa=/opus=/opus_id=.")
         if flag_list:
             return
@@ -2496,7 +2642,7 @@ def main():
             return
         if not opt_output:
             gs.fatal("output= is required to import a LEISA product.")
-        fits_url, body_hint = resolve_leisa(opt_leisa)
+        fits_url, body_hint, leisa_mission = resolve_leisa(opt_leisa)
         gs.message(f"LEISA source: {fits_url}")
 
         body_slug = (body_hint or _infer_body_from_url(fits_url) or "misc")
@@ -2505,7 +2651,7 @@ def main():
 
         # LEISA FITS has multiple HDUs; HDU 1 is the calibrated science cube.
         gdal_path = f"FITS:{local_fits}:1"
-        gs.message("Importing NH LEISA cube via r.in.gdal …")
+        gs.message(f"Importing {leisa_mission} LEISA cube via r.in.gdal …")
         try:
             gs.run_command("r.in.gdal",
                            flags="o",
@@ -2529,18 +2675,73 @@ def main():
 
         _align_region_to_raster(f"{opt_output}.1", save_default=False)
 
+        sensor_name = "LUCY_LEISA" if leisa_mission == "LUCY" else "NH_LEISA"
         p_meta.write_planetary_metadata(
             f"{opt_output}.1",
             module="p.in.archive",
             command=" ".join(sys.argv),
             data_type="image",
-            sensor="NH_LEISA",
-            mission="NEW_HORIZONS",
+            sensor=sensor_name,
+            mission=leisa_mission,
             body=body_slug.upper(),
             source_file=fits_url,
         )
-        gs.message(f"Imported NH LEISA cube as imagery group '{opt_output}' "
+        gs.message(f"Imported {leisa_mission} LEISA cube as imagery group '{opt_output}' "
                    f"(bands '{opt_output}.1' .. '{opt_output}.270', 1.25-2.50 µm).")
+        return
+
+    if opt_juno:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega,
+                opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp,
+                opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
+            gs.fatal("juno= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims="
+                     "/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp="
+                     "/akatsuki=/leisa=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a JunoCam product.")
+        img_url, lbl_url, body_hint = resolve_juno_jnc(opt_juno)
+        gs.message(f"JunoCam source: {img_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(img_url) or "jupiter")
+        local_img = _rsdata_dest(img_url, body_hint)
+        local_lbl = os.path.join(os.path.dirname(local_img),
+                                 os.path.basename(urllib.parse.urlparse(lbl_url).path))
+        _wget_resumable(img_url, local_img)
+        gs.message(f"Fetching label: {lbl_url}")
+        _wget_resumable(lbl_url, local_lbl)
+
+        gs.message("Importing JunoCam EDR via p.in.pds3 …")
+        gs.run_command("p.in.pds3",
+                       input=local_img,
+                       label=local_lbl,
+                       output=opt_output,
+                       overwrite=True)
+
+        band_maps = gs.read_command("g.list", type="raster",
+                                    pattern=f"{opt_output}.*",
+                                    mapset=".").strip().split()
+        if band_maps:
+            gs.run_command("i.group",
+                           group=opt_output, subgroup=opt_output,
+                           input=",".join(band_maps))
+
+        _align_region_to_raster(f"{opt_output}.1", save_default=False)
+
+        p_meta.write_planetary_metadata(
+            f"{opt_output}.1",
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="JUNOCAM",
+            mission="JUNO",
+            body=body_slug.upper(),
+            source_file=img_url,
+        )
+        nb = len(band_maps)
+        gs.message(f"Imported JunoCam EDR as imagery group '{opt_output}' "
+                   f"({nb} framelet bands -- B/G/R/CH4 interleaved).")
         return
 
     if opt_cog:

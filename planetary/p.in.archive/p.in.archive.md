@@ -311,6 +311,72 @@ imported by `omega=` itself — import it separately via:
 p.in.pds3 input=<downloaded>.QUB output=omega_mirror_dn suffix_band=1
 ```
 
+Five curated entries cover the MEX mission through December 2005:
+
+| Key | Date | Geographic coverage | Science note |
+|-----|------|---------------------|--------------|
+| `orb0100_0` | 2004-02-10 | lat −78 to −70, lon 291–303 E | Early mission southern |
+| `orb0511_0` | 2004-06-14 | lat −85 to −36, lon 281–326 E | Southern high-lat, winter polar hood |
+| `orb1000_0` | 2004-10-29 | lat 43 to 81, lon 35–190 E | Northern high-lat, Vastitas Borealis |
+| `orb2001_0` | 2005-08-05 | lat −73 to −34, lon 155–276 E | Southern mid-lat, late winter |
+| `orb2500_0` | 2005-12-23 | lat −87 to −57, lon 193–358 E | Southern polar cap, summer CO₂/H₂O ice |
+
+### New Horizons and Lucy LEISA products (`leisa=`)
+
+```sh
+# List the built-in LEISA catalog (both NH and Lucy entries)
+p.in.archive -l
+
+# Import the New Horizons Arrokoth cube (270 bands, 1.25-2.50 µm, ~350 MB)
+p.in.archive leisa=nh_leisa_arrokoth_20181231 output=leisa_arrokoth
+
+# Import a Lucy Dinkinesh flyby cube (270 bands, ~477 MB)
+p.in.archive leisa=lucy_leisa_dinkinesh_02300 output=leisa_dinkinesh
+
+# Import a Lucy Donaldjohanson flyby cube (270 bands, ~27 MB -- smaller)
+p.in.archive leisa=lucy_leisa_donaldjohanson_02533 output=leisa_don
+```
+
+Calibrated PDS4 FITS science cubes from the PDS Small Bodies Node
+(`pds-smallbodies.astro.umd.edu`). Import via `r.in.gdal FITS:<path>:1`
+(HDU 1 is the calibrated science cube). `output=` becomes a GRASS
+imagery group (`output.1` .. `output.270`). Mission metadata is written
+into `planetary.json` automatically (`mission=NEW_HORIZONS` or
+`mission=LUCY`, `sensor=NH_LEISA` or `sensor=LUCY_LEISA`).
+
+The Donaldjohanson entry (`leisa=lucy_leisa_donaldjohanson_02533`) is
+only ~27 MB and is the easiest starting point; the Dinkinesh and
+Arrokoth cubes are 350–760 MB. Both Dinkinesh and Donaldjohanson are
+main-belt asteroids visited by Lucy on its way to the Jupiter Trojans.
+
+### Juno JunoCam raw EDR products (`juno=`)
+
+```sh
+# List the built-in JunoCam catalog
+p.in.archive -l
+
+# Import PJ1 (first science perijove, 2016-07-31) framelet sequence
+p.in.archive juno=pj01_01c03606 output=junocam_pj01
+
+# Import PJ7 (2017-07-04) framelet sequence
+p.in.archive juno=pj07_07c00613 output=junocam_pj07
+```
+
+Detached-label PDS3 image (`.LBL` + `.IMG`), 16-bit unsigned DN, hosted
+on the PDS Imaging Node (`planetarydata.jpl.nasa.gov`). Each file is a
+full perijove pass: a multi-framelet stack of all 4 color-filter strips
+(blue 420–520 nm, green 500–600 nm, red 590–710 nm, methane 880–900 nm)
+interleaved by color, typically hundreds of bands total. Imported via
+`p.in.pds3`; `output=` becomes a GRASS imagery group.
+
+To extract a single color channel, select every 4th band starting from
+1 (blue), 2 (green), 3 (red), or 4 (methane) and composite:
+```sh
+p.in.archive juno=pj01_01c03606 output=juno_pj01
+# Extract the red framelets (every 4th band from band 3):
+r.mapcalc "pj01_red_frame1 = juno_pj01.3"
+```
+
 ## EXAMPLES
 
 ### List products matching a keyword
