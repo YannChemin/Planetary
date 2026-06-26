@@ -1258,3 +1258,175 @@ Verified against the same real fixtures used by `p.phocube`'s own tests:
 Added `test_camera_mode_real_omega_swir_c_geometry` /
 `test_camera_mode_real_vims_ir_geometry` to `p.caminfo`'s test suite
 (both passing, ~6s combined).
+
+## 4. Next work items — simplest first, hardest last
+
+### 4-A. Catalog expansions (pure Python, zero new C/SPICE code)
+
+These are all dictionary entries in `p.in.archive.py`. No new import
+handlers, no new `libs/p_pds` work. Simplest possible change — just
+real URL verification + adding dict entries + doc update.
+
+**4-A-1. More CRISM observations** (currently only Mawrth Vallis)
+
+Add 3–4 more science targets to `CRISM_CATALOG`:
+- **Jezero Crater** (Perseverance landing site, ~18.4 N / 77.7 E) --
+  phyllosilicates in delta fan; one of the most-studied CRISM targets.
+- **Nili Fossae** (~21 N / 74 E) -- olivine, carbonate, phyllosilicate
+  diversity; classic mineralogy showcase.
+- **Gale Crater** (Curiosity landing site, ~5.4 S / 137.8 E) --
+  smectite and sulfate stratigraphy.
+- **Hellas Basin rim** (~40 S) -- iron oxides and possible ices.
+
+Archive: `pds-geosciences.wustl.edu/mro/mro-m-crism-3-rdr-targeted-v1/`
+Naming: `mrocr_<vol>/trdr/<year>/<doy>/<OBSID>/<OBSID>_01_IF<NNN>L_TRR3.IMG`
+(L detector, IR) + `S` detector (VNIR). Volume numbers and DOY must be
+resolved from the archive's index CSV or monthly tab. Verified live:
+the existing `FRT00003BFB` path already proves the archive works.
+
+**4-A-2. More OMEGA orbits** (currently orb0100–orb2500)
+
+The ESA PSA archive goes up to ORB25 (orbit ~2599). Gaps worth filling:
+- **Northern polar cap, summer 2005** (~ORB1500, ~April 2005):
+  CO₂ sublimation front, H₂O ice residual cap.
+- **Tharsis volcanic region** (any orbit with lat 0–30 N, lon 250–270 E):
+  dust, altered basalt, water ice clouds.
+- **Hellas Basin** (~ORB0700–0800, deep southern basin, frost):
+  lowest elevation on Mars, unique atmospheric column.
+
+Archive: same ESA PSA path as existing entries.
+New orbit numbers need HTTP 200 verification before adding.
+
+**4-A-3. More VIMS observations** (currently 10 entries, all Saturn system)
+
+Targets not yet in the catalog:
+- **Phoebe** (irregular captured moon, 2004 flyby; dark primitive surface):
+  the only dedicated VIMS/Phoebe flyby sequence.
+- **Hyperion** (chaotic rotation, sponge-like morphology):
+  VIMS observed spectral diversity within the chaotic rotation.
+- **Rhea** (heavily cratered, largest airless moon after Iapetus):
+  water ice / CO₂ ice surface.
+- **Tethys** (Odysseus impact basin) -- ice + contaminant mapping.
+
+All fetchable via `opus_id=co-vims-v<SCLK>` once the OPUS IDs are
+verified against the ring node.
+
+### 4-B. New missions — framing cameras (PDS3/FITS, no SPICE needed for import)
+
+These need a new `<name>=` option and catalog, but no new `libs/p_pds`
+engineering: either standard PDS3 detached-label images (handled by
+existing `p.in.pds3`) or FITS (handled by `r.in.gdal`). Ordered by
+increasing archive complexity.
+
+**4-B-1. New Horizons/LORRI** (Long Range Reconnaissance Imager)
+
+Single-band panchromatic framing camera. Calibrated RDR as PDS3
+detached-label `.FIT` (FITS) or `.IMG`. PDS Small Bodies Node:
+`pds-smallbodies.astro.umd.edu/holdings/nh-j-lorri-2-jupiter-v3.0/`
+(Jupiter flyby 2007) and
+`pds-smallbodies.astro.umd.edu/holdings/nh-p-lorri-3-plutosystem-v3.0/`
+(Pluto system 2015).
+Good catalog entries: Pluto highest-resolution pre-flyby image, Charon,
+Hydra, Nix, Arrokoth approach, Jupiter atmospheric structure.
+Import: `r.in.gdal` (FITS) or `p.in.pds3` (PDS3 `.IMG`); single raster
+(one band), no imagery group needed.
+Complexity: **very low** -- same import path as Akatsuki UVI.
+
+**4-B-2. Galileo/SSI** (Solid State Imaging camera)
+
+800×800 CCD framing camera, 8-bit PDS3 `.IMG` with attached label.
+PDS Imaging Node:
+`planetarydata.jpl.nasa.gov/img/data/galileo/` 
+Catalog entries: Io volcanic plumes (closest approach 1999), Europa
+surface ice (ice raft, lineae), Ganymede grooved terrain, Callisto
+cratered surface. Note: many Galileo images suffered data compression
+artifacts (the HGA antenna failed) -- catalog should preferably pick
+the cleaner ones (higher telemetry rate passes).
+Archive is standard PDS3 binary, `p.in.pds3` handles it.
+Complexity: **very low** -- same as NIMS archive which is already done.
+
+**4-B-3. Dawn/FC** (Framing Camera)
+
+1024×1024 framing camera (7 colour filters + clear). Calibrated FITS
+or PDS3. PDS Small Bodies Node:
+`sbnarchive.psi.edu/pds3/dawn/fc/` (Vesta and Ceres).
+Complements the Dawn/VIR already in the catalog.
+Two targets, many volumes. Import: `r.in.gdal` (FITS) or `p.in.pds3`.
+Complexity: **low** -- same archive host as Dawn/VIR, already proven
+reachable.
+
+**4-B-4. MESSENGER/MDIS** (Mercury Dual Imaging System)
+
+WAC (12 colour filters, 1024×1024) + NAC (monochrome, 1024×1024).
+PDS3 detached-label `.IMG`. PDS Geosciences Node:
+`pds-geosciences.wustl.edu/messenger/mess-e_v_h-mdis-2-edr-rawdata-v1.0/`
+(EDR) and `mess-e_v_h-mdis-5-rdr-image-v1.0/` (RDR).
+Good catalog entries: Mercury color mosaics (first-colour imaging ever
+of some terrains), Caloris Basin (giant impact structure), smooth plains,
+hollows.
+Complexity: **low-medium** -- new archive host (PDS Geosciences Node for
+imaging, same host as CRISM but a different volume tree).
+
+**4-B-5. Hayabusa2/ONC** (Optical Navigation Camera)
+
+ONC-T (telescopic, 1024×1024, 7 band-pass filters), ONC-W1/W2 (wide,
+1024×1024, monochrome). FITS. JAXA/DARTS:
+`data.darts.isas.jaxa.jp/pub/hayabusa2/onc_bundle/` (PDS4 + FITS).
+Target: Ryugu. Good catalog entries: global colour map, boulder field
+near landing site, touchdown approach sequence.
+Import: `r.in.gdal` (FITS), single or multi-band.
+Complexity: **medium** -- new JAXA archive host, PDS4 label structure
+differs from PDS3, may need label parsing for band metadata.
+
+**4-B-6. MRO/CTX** (Context Camera)
+
+Pushbroom, 5024 pixels wide, 6 m/px, monochrome, PDS3 IMG/LBL.
+PDS Geosciences Node:
+`pds-geosciences.wustl.edu/mro/mro-m-ctx-2-edr-l0-v1.0/`
+Very large data volumes; each observation can be hundreds of MB.
+Good catalog entries: Jezero Crater (context for CRISM + Perseverance),
+Gale Crater, Valles Marineris cross-section.
+Import: `p.in.pds3` (standard PDS3 binary).
+Complexity: **medium** -- pushbroom data fills 100s MB per scene; the
+import itself is straightforward but scene selection for the catalog
+requires checking index files for specific targets.
+
+### 4-C. Camera-model inverse back-projection extensions
+
+These extend `p.cam2map -c` to non-ISS instruments. The forward direction
+(`p.phocube -c`) already works for all of them. The inverse needs a
+root-search rather than a closed-form formula, since CRISM's 1-D scan
+and OMEGA's 2-D whiskbroom don't invert algebraically.
+
+**4-C-1. `p.cam2map -c` for CRISM (1-D pushbroom inverse)**
+
+For each output lat/lon, find the input (sample, line) where
+CRISM's camera ray passes through that surface point.
+- Cross-track (sample): invert `angle = a0(band) + a1(band)*sample`
+  algebraically -- same closed-form as the forward model, just solved
+  for `sample`. This part is actually trivial.
+- Along-track (line): need to find which scan line's epoch `et(line)`
+  points the instrument toward the target lat/lon. Binary search on
+  `line` (monotone along-track motion), with `sincpt_c` at each
+  candidate epoch. Convergence: ~10 iterations to sub-pixel.
+- CK must be available (kernels in raster history via `p.spiceinit`).
+- Per-output-pixel cost: ~10 `sincpt_c` calls (vs. 1 for ISS).
+Complexity: **medium-high** -- new bisect loop, but reuses all existing
+`p_spice` calls; no new library functions needed.
+
+**4-C-2. `p.cam2map -c` for OMEGA (2-D whiskbroom inverse)**
+
+For each output lat/lon, find the input (sample, line) where OMEGA's
+scanning mirror ray passes through that surface point.
+- Along-track (line): same binary search as CRISM (per-line epoch).
+- Cross-mirror (sample): given a line epoch, invert the mirror-DN
+  mapping `angle = center + slope * mirror_dn` for the `mirror_dn`
+  that produces the target ray -- requires the mirror-DN sideplane
+  raster (`mirror_dn=`) at the candidate line, which is a 1-D lookup
+  once the line is known.
+- Two nested root-searches (outer on line, inner on sample/mirror_dn).
+  Convergence: slower than CRISM -- ~100 sincpt_c calls per output pixel.
+- The `mirror_dn=` raster must be supplied (same as `p.phocube -c`).
+Complexity: **high** -- two nested bisect loops, high per-pixel cost
+for large output regions; may need spatial pre-filtering to avoid
+evaluating all output pixels naively.
