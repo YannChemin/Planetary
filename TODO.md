@@ -133,7 +133,7 @@ implementer doesn't have to re-discover this):
 
 | Body / region | Instrument | Mission | Type | Real archive |
 |---|---|---|---|---|
-| Mars | OMEGA | Mars Express | VIS+NIR imaging spectrometer, 0.38-5.1 um | ESA Planetary Science Archive (PSA) |
+| Mars | OMEGA | Mars Express | VIS+NIR imaging spectrometer, 0.38-5.1 um | **done** -- `omega=` in `p.in.archive`; 5-orbit catalog (orb0100–orb2500, covering both hemispheres + polar cap) |
 | Mars | MAVEN/IUVS | MAVEN | UV spectrograph (upper atmosphere) | NASA PDS Atmospheres Node |
 | Moon | M3 (Moon Mineralogy Mapper) | Chandrayaan-1 | VNIR imaging spectrometer, 0.43-3.0 um | NASA PDS Imaging Node (also via Astropedia's own M3 mosaic in some contexts -- check STAC first) |
 | Moon | LAMP | LRO | Far-UV spectrograph (airglow/exosphere) | **done** -- `lamp=` in `p.in.archive`, NASA PDS Imaging Node |
@@ -144,7 +144,9 @@ implementer doesn't have to re-discover this):
 | Saturn system | UVIS | Cassini | UV spectrograph (rings, atmospheres) | **done** -- `opus_id=co-uvis-euv*/co-uvis-fuv*` auto-infers `CASSINI_UVIS_EUV`/`CASSINI_UVIS_FUV` sensor in `p.in.archive` |
 | Saturn system | VIMS | Cassini | Imaging spectrometer, 0.35-5.1 um | **done** -- `vims=` with 10-entry curated catalog (Titan x3, Enceladus x2, Saturn x2, rings, Iapetus, Dione) |
 | Jupiter system | NIMS | Galileo | Near-IR imaging spectrometer | **done** -- `nims=` in `p.in.archive`, NASA PDS Imaging Node |
-| Pluto/Charon | LEISA (on Ralph) | New Horizons | IR imaging spectrometer | **done** -- `leisa=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |
+| Pluto/Charon + Arrokoth | LEISA (on Ralph) | New Horizons | IR imaging spectrometer | **done** -- `leisa=` in `p.in.archive`, NASA PDS SBN |
+| (152830) Dinkinesh, (52246) Donaldjohanson | LEISA (on L'Ralph) | Lucy | IR imaging spectrometer | **done** -- `leisa=lucy_*` catalog entries added, `mission=LUCY`, `sensor=LUCY_LEISA` |
+| Jupiter | JunoCam | Juno | 4-color visible imager | **done** -- `juno=` in `p.in.archive`, PDS Imaging Node; 3-entry catalog (JOI, PJ1, PJ7) |
 | Vesta/Ceres | VIR | Dawn | VIS+IR imaging spectrometer | **done** -- `dawn_vir=` in `p.in.archive`, NASA PDS Small Bodies Node (SBN) |
 | 67P/C-G | VIRTIS | Rosetta | Imaging spectrometer | **done** -- `virtis_rosetta=` in `p.in.archive`, ESA PSA |
 | Ryugu | NIRS3 | Hayabusa2 | NIR point spectrometer | JAXA DARTS |
