@@ -55,12 +55,16 @@ several real remote archives:
   non-degenerate per-band radiance, confirmed via `r.univar`).
 
 - **Cassini VIMS** (`vims=`) — a dedicated shortcut into the `opus_id=`
-  path below: resolves a catalog key to a real OPUS observation ID and
-  fetches it the same way `opus_id=` already does. **Raw VIMS `.qub`
-  cubes currently fail to import** (see NOTES) — `vims=` correctly
-  *fetches* the right file (and fixed a real bug in doing so, see NOTES),
-  but `p.in.pds3` now explicitly refuses to read it rather than silently
-  producing wrong data.
+  path below: resolves a catalog key (see `-l`) to a real OPUS
+  observation ID and fetches both the VIS (96 bands, 0.35–1.05 µm) and
+  IR (256 bands, 0.88–5.1 µm) channels as separate multi-band GRASS
+  imagery groups. The `vims_channel=` option (default: `ir`) selects
+  which channel to import. Per-cube camera-model metadata
+  (`sampling_mode_ir`/`sampling_mode_vis`, `x_offset`, `z_offset`,
+  `swath_width`, `swath_length`) is read from the PDS3 label and
+  written into `planetary.json` automatically, ready for `p.phocube -c
+  instrument=VIMS_IR`/`VIMS_VIS`. Ten curated entries covering Titan,
+  Enceladus, Saturn, rings, Iapetus, and Dione are built in (see `-l`).
 
 On download, the file format is detected by extension and dispatched
 to the appropriate GRASS importer:
@@ -278,28 +282,11 @@ now splices in any `^STRUCTURE`-referenced file's keywords as if they
 had been inlined; `vims=` fetches the `.fmt` files OPUS already
 enumerates alongside the `.qub`/`.lbl`.
 
-One real, benign edge case found and left as-is (not a bug): the very
-last image line of real OMEGA/VIMS cubes runs a few bytes short of a
-full line for the highest-numbered bands. `p_pds_read_row()` reports
-this as a per-row read failure; `p.in.pds3`'s existing
-`write_band()` already turns that into a GRASS NULL row rather than
-aborting, so it degrades safely (a small fraction of pixels NULL at one
-edge) instead of crashing or misreading.
-
-What else got fixed along the way:
-
-- `libs/p_pds` now parses the PDS3 QUBE `CORE_ITEMS`/`SUFFIX_ITEMS`
-  tuple convention (e.g. `CORE_ITEMS = (64,352,672)`, ordered per
-  `AXIS_NAME`) as a fallback when the older `LINES`/`LINE_SAMPLES`/
-  `BANDS` or `CORE_ITEMS_1`/`_2`/`_3` keywords aren't present.
-- The OPUS files-API suffix bug above (`opus_files()` always failing on
-  the bare/unsuffixed observation id).
-- `crism=`, `omega=`, and the OPUS `vims=`/ISS path were all silently
-  failing to apply their detector-specific `sensor=`/`mission=`
-  metadata, because `p.in.pds3` already writes a generic
-  `planetary.json` from the label's own fields, and
-  `p_meta.write_planetary_metadata()` is create-only (first-write-wins)
-  — fixed by updating the existing record in place instead.
+One real, benign edge case: the very last image line of real OMEGA/VIMS
+cubes runs a few bytes short of a full line for the highest-numbered
+bands. `p_pds_read_row()` reports this as a per-row read failure;
+`p.in.pds3`'s `write_band()` turns that into a GRASS NULL row rather
+than aborting — a small fraction of pixels NULL at one edge, not a crash.
 
 ### Mars Express OMEGA EDR products (`omega=`)
 
@@ -316,15 +303,13 @@ data, no companion `.LBL` to fetch. `output=` becomes a GRASS imagery
 group, same convention as `crism=`/`m3=`/`vims=`. Verified live: real
 352-band cube from `archives.esac.esa.int`, sane raw DN within the
 label's own declared saturation bounds (-32768/32767).
-- The `SUFFIX_ITEMS` safety guard itself, which protects *any* future
-  QUBE product from this same silent-corruption failure mode, not just
-  these two.
 
-`omega=` was not added as a CLI option this round, since it would have
-nothing to actually import yet; OMEGA's real, live ESA Planetary Science
-Archive URL pattern
-(`archives.esac.esa.int/psa/ftp/MARS-EXPRESS/OMEGA/MEX-M-OMEGA-2-EDR-FLIGHT-V1.0/DATA/ORB<NN>/ORB<NNNN>_<N>.QUB`)
-is recorded in `TODO.md` for whoever picks up the suffix-byte work next.
+The scanning mirror position sideplane (band-suffix index 1) needed by
+`p.phocube -c instrument=OMEGA_SWIR_C/SWIR_L/OMEGA_VNIR` is **not**
+imported by `omega=` itself — import it separately via:
+```sh
+p.in.pds3 input=<downloaded>.QUB output=omega_mirror_dn suffix_band=1
+```
 
 ## EXAMPLES
 
@@ -359,6 +344,35 @@ p.in.archive doi=10.17189/1520642 output=lola_dem
 p.in.archive \
     lid="urn:nasa:pds:mgs-mola-dem-mars:data:megt90n000cb" \
     output=mola_megt90
+```
+
+### Import a Mars Express OMEGA EDR cube (Mars, IR-VIS imaging spectrometer)
+
+```sh
+# Run in an XY GRASS project (raw instrument frame, not georeferenced)
+p.in.archive omega=orb0100_0 output=omega_orbit100
+# Output: imagery group omega_orbit100.1 .. omega_orbit100.352
+
+# Import the scanning mirror sideplane needed for p.phocube -c:
+p.in.pds3 input=~/RSDATA/Mars/ORB0100_0.QUB output=omega_mirror_dn suffix_band=1
+```
+
+### Import a Cassini VIMS cube (Titan, IR+VIS imaging spectrometer)
+
+```sh
+# List the curated VIMS catalog
+p.in.archive -l
+
+# Import the IR channel of a Titan T-108 flyby observation
+p.in.archive vims=titan_v1799424623 vims_channel=ir output=vims_titan_ir
+# Output: imagery group vims_titan_ir.1 .. vims_titan_ir.256
+
+# Import the VIS channel of the same observation
+p.in.archive vims=titan_v1799424623 vims_channel=vis output=vims_titan_vis
+# Output: imagery group vims_titan_vis.1 .. vims_titan_vis.96
+
+# Import an Enceladus VIMS cube and its companion VIS channel:
+p.in.archive vims=enceladus_v1484504730 vims_channel=ir output=vims_enc_ir
 ```
 
 ## Saturn ring imaging pipelines

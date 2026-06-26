@@ -76,7 +76,7 @@ p.spice.find spacecraft=CASSINI instrument=ISS_NAC \
 ```
 
 Known `instrument=` values with an IAK: `CRISM` (MRO), `ISS_NAC`/
-`ISS_WA` (CASSINI, real BORESIGHT/FOCAL_LENGTH per filter -- a pinhole
+`ISS_WAC` (CASSINI, real BORESIGHT/FOCAL_LENGTH per filter -- a pinhole
 camera model), `VIMS` (CASSINI, but only `CK_FRAME_ID`/`NAIF_BODY_CODE`
 housekeeping fixes -- no boresight/focal-length; VIMS's real geometry is
 a 2-D scan-mirror mapping, not a pinhole, so no `p.phocube` camera model

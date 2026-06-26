@@ -121,10 +121,6 @@ pixel falls back to the ellipsoid rather than failing the whole run.
   framing/pushbroom scenes short enough that spacecraft motion during
   acquisition doesn't materially change the geometry; it is not a real
   per-scanline camera model.
-- Still uses the existing ellipsoid-only shape model (no DSK/real-shape
-  intercepts) — `-s` changes *which geometry engine drives the
-  ellipsoid* (real ephemeris vs. fixed flat-field vectors), not the
-  shape model itself.
 - A generic planetary ephemeris SPK (e.g. `de430.bsp`, `de440s.bsp`)
   typically carries each *system barycenter* (e.g. MARS BARYCENTER, ID
   4) but not necessarily the individual planet body itself (e.g. MARS,

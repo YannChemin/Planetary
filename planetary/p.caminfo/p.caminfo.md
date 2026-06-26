@@ -56,10 +56,49 @@ p.spiceinit map=iss_nac target=SATURN observer=CASSINI time=2004-169T16:24:48.26
 p.caminfo input=iss_nac instrument=ISS_NAC filter1=P0 filter2=CB2
 ```
 
-Save metadata as JSON:
+Report geometry for a raw CRISM VNIR cube (MRO, Mars) and save as JSON:
 
 ```sh
-p.caminfo -j input=hirise_red instrument=CRISM_VNIR > hirise_red_caminfo.json
+p.spiceinit map=crism_frt.1 target=MARS observer=MRO \
+    time=2007-01-05T01:26:56.855 line_rate=0.266667 \
+    lsk=naif0012.tls sclk=MRO_SCLKSCET.00119.tsc fk=mro_v17.tf \
+    ik=mro_crism_v10.ti,crismAddendum001.ti pck=pck00010.tpc \
+    spk=mro_psp2.bsp,mar063.bsp ck=mro_sc_psp_070102_070108.bc
+
+p.caminfo -j input=crism_frt.1 instrument=CRISM_VNIR > crism_mawrth_geom.json
+```
+
+Report geometry for a raw MEX OMEGA SWIR-C cube (Mars, requires
+scanning mirror sideplane from the QUBE band-suffix):
+
+```sh
+p.in.archive omega=orb0100_0 output=omega
+p.in.pds3 input=~/RSDATA/Mars/ORB0100_0.QUB output=omega_mirror_dn suffix_band=1
+p.spiceinit map=omega.1 target=MARS observer=-41 \
+    time=2004-02-10T18:08:35 line_rate=0.401 \
+    lsk=naif0012.tls sclk=MEX_260522_STEP.TSC \
+    ik=MEX_OMEGA_V03.TI fk=MEX_V16.TF \
+    pck=MARS_IAU2000_V0.TPC,pck00010.tpc \
+    spk=MEX_ROB_040101_041231_003.BSP,de432s.bsp,mar099.bsp \
+    ck=ATNM_MEASURED_040101_050101_V03.BC
+
+p.caminfo input=omega.1 instrument=OMEGA_SWIR_C mirror_dn=omega_mirror_dn
+```
+
+Report geometry for a Cassini VIMS IR cube (Titan flyby):
+
+```sh
+p.in.archive vims=titan_v1799424623 vims_channel=ir output=vims_titan_ir
+p.spiceinit map=vims_titan_ir.1 target=TITAN observer=CASSINI \
+    time=2015-008T15:09:40.135 \
+    lsk=naif0012.tls sclk=cas00172.tsc \
+    ik=cas_vims_v06.ti,vimsAddendum04.ti fk=cas_v43.tf \
+    pck=cpck_rock_21Jan2011_merged.tpc,pck00010.tpc \
+    spk=150108AP_SCPSE_14365_15016.bsp ck=15008_15013ra.bc
+
+# sampling_mode/x_offset/z_offset/swath_width/swath_length are read
+# automatically from vims_titan_ir.1's planetary.json (set by p.in.archive):
+p.caminfo input=vims_titan_ir.1 instrument=VIMS_IR
 ```
 
 ## NOTES
