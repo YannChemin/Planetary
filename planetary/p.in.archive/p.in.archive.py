@@ -535,6 +535,28 @@ OMEGA_CATALOG = {
         "OMEGA EDR, orbit 2500, 2005-12-23T17:07:24 "
         "(352 bands; lat -86.7 to -57.1, lon 193-358 E; southern polar cap "
         "during southern summer -- CO2/H2O ice mapping)"),
+    # --- Tharsis volcanic region, April 2004 ---
+    "orb0331_2": (
+        f"{OMEGA_BASE}/ORB03/ORB0331_2.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 331 segment 2, 2004-04-23T17:36:14 "
+        "(352 bands; lat 11.2 to 32.7 N, lon 255-263 E; Tharsis plateau -- "
+        "Ascraeus Mons (11.3N,256E) and Ceraunius Tholus (24N,262E); "
+        "dust aerosols, altered basalt, water-ice clouds)"),
+    # --- Northern polar cap, northern summer 2004 ---
+    "orb0751_0": (
+        f"{OMEGA_BASE}/ORB07/ORB0751_0.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 751, 2004-08-21T00:00:26 "
+        "(352 bands; lat 44.4 to 84.7 N, lon 143-202 E; northern polar cap "
+        "during northern summer -- CO2 sublimated, H2O residual cap exposed)"),
+    # --- Hellas Basin, southern autumn 2005 ---
+    "orb2204_0": (
+        f"{OMEGA_BASE}/ORB22/ORB2204_0.QUB",
+        "Mars",
+        "OMEGA EDR, orbit 2204, 2005-10-01T20:15:32 "
+        "(352 bands; lat -71.5 to -31.0 S, lon 37-121 E; Hellas Basin "
+        "(deepest basin, centre ~42S 70E); dust storm occurrence, CO2 frost)"),
 }
 
 # Curated catalog of Juno JunoCam raw EDR products on the PDS Imaging Node

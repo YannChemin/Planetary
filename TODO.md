@@ -135,7 +135,7 @@ implementer doesn't have to re-discover this):
 
 | Body / region | Instrument | Mission | Type | Real archive |
 |---|---|---|---|---|
-| Mars | OMEGA | Mars Express | VIS+NIR imaging spectrometer, 0.38-5.1 um | **done** -- `omega=` in `p.in.archive`; 5-orbit catalog (orb0100–orb2500, covering both hemispheres + polar cap) |
+| Mars | OMEGA | Mars Express | VIS+NIR imaging spectrometer, 0.38-5.1 um | **done** -- `omega=` in `p.in.archive`; 8-orbit catalog (orb0100–orb2500 + Tharsis/N.polar cap/Hellas additions) |
 | Mars | MAVEN/IUVS | MAVEN | UV spectrograph (upper atmosphere) | NASA PDS Atmospheres Node |
 | Moon | M3 (Moon Mineralogy Mapper) | Chandrayaan-1 | VNIR imaging spectrometer, 0.43-3.0 um | NASA PDS Imaging Node (also via Astropedia's own M3 mosaic in some contexts -- check STAC first) |
 | Moon | LAMP | LRO | Far-UV spectrograph (airglow/exosphere) | **done** -- `lamp=` in `p.in.archive`, NASA PDS Imaging Node |
@@ -1286,18 +1286,16 @@ only obtainable from individual MTRDR product labels.
 
 **Hellas Basin rim** still not added (low priority, defer).
 
-**4-A-2. More OMEGA orbits** (currently orb0100–orb2500)
+**4-A-2. More OMEGA orbits** -- **done**
 
-The ESA PSA archive goes up to ORB25 (orbit ~2599). Gaps worth filling:
-- **Northern polar cap, summer 2005** (~ORB1500, ~April 2005):
-  CO₂ sublimation front, H₂O ice residual cap.
-- **Tharsis volcanic region** (any orbit with lat 0–30 N, lon 250–270 E):
-  dust, altered basalt, water ice clouds.
-- **Hellas Basin** (~ORB0700–0800, deep southern basin, frost):
-  lowest elevation on Mars, unique atmospheric column.
-
-Archive: same ESA PSA path as existing entries.
-New orbit numbers need HTTP 200 verification before adding.
+Added 3 orbits to `OMEGA_CATALOG` (now 8 entries total), all HTTP 200 verified:
+- `orb0331_2` (2004-04-23): Tharsis volcanic plateau, lat 11–33°N, lon 255–263°E;
+  covers Ascraeus Mons (11.3°N, 256°E) and Ceraunius Tholus (24°N, 262°E).
+  Found by scanning ORB03 segment labels: ORB0331 crosses lon ~260°E at equatorial latitudes.
+- `orb0751_0` (2004-08-21): Northern polar cap during northern summer (H₂O residual cap
+  fully exposed, CO₂ sublimated); lat 44–85°N, lon 143–202°E.
+- `orb2204_0` (2005-10-01): Hellas Basin (deepest impact basin on Mars, centre ~42°S 70°E);
+  lat -72 to -31°S, lon 37–121°E; dust storm occurrence and CO₂ frost.
 
 **4-A-3. More VIMS observations** (currently 10 entries, all Saturn system)
 

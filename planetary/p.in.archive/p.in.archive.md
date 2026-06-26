@@ -334,9 +334,12 @@ Five curated entries cover the MEX mission through December 2005:
 | Key | Date | Geographic coverage | Science note |
 |-----|------|---------------------|--------------|
 | `orb0100_0` | 2004-02-10 | lat −78 to −70, lon 291–303 E | Early mission southern |
+| `orb0331_2` | 2004-04-23 | lat 11 to 33 N, lon 255–263 E | Tharsis plateau — Ascraeus Mons, Ceraunius Tholus |
 | `orb0511_0` | 2004-06-14 | lat −85 to −36, lon 281–326 E | Southern high-lat, winter polar hood |
+| `orb0751_0` | 2004-08-21 | lat 44 to 85 N, lon 143–202 E | Northern polar cap, northern summer (H₂O residual cap) |
 | `orb1000_0` | 2004-10-29 | lat 43 to 81, lon 35–190 E | Northern high-lat, Vastitas Borealis |
 | `orb2001_0` | 2005-08-05 | lat −73 to −34, lon 155–276 E | Southern mid-lat, late winter |
+| `orb2204_0` | 2005-10-01 | lat −72 to −31 S, lon 37–121 E | Hellas Basin (deepest impact basin, ~42°S 70°E) |
 | `orb2500_0` | 2005-12-23 | lat −87 to −57, lon 193–358 E | Southern polar cap, summer CO₂/H₂O ice |
 
 ### New Horizons and Lucy LEISA products (`leisa=`)
