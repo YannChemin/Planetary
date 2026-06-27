@@ -1346,17 +1346,19 @@ PDS3 label); PDS Imaging Node was not used — OPUS mirror is the reliable sourc
 `FC_CATALOG`, `resolve_fc()`, `print_fc_catalog()` added. Sensor tag:
 `DAWN_FC2`, mission `DAWN`. Direct https URL pass-through supported.
 
-**4-B-4. MESSENGER/MDIS** (Mercury Dual Imaging System)
+**4-B-4. MESSENGER/MDIS** (Mercury Dual Imaging System) -- **DONE**
 
-WAC (12 colour filters, 1024×1024) + NAC (monochrome, 1024×1024).
-PDS3 detached-label `.IMG`. PDS Geosciences Node:
-`pds-geosciences.wustl.edu/messenger/mess-e_v_h-mdis-2-edr-rawdata-v1.0/`
-(EDR) and `mess-e_v_h-mdis-5-rdr-image-v1.0/` (RDR).
-Good catalog entries: Mercury color mosaics (first-colour imaging ever
-of some terrains), Caloris Basin (giant impact structure), smooth plains,
-hollows.
-Complexity: **low-medium** -- new archive host (PDS Geosciences Node for
-imaging, same host as CRISM but a different volume tree).
+`mdis=` option added. Catalog has 2 curated NAC CDR entries from the PDS
+Imaging Node (`planetarydata.jpl.nasa.gov/img/data/messenger/MSGRMDS_2001/`):
+- `mercury_nac_caloris_pantheon`: NAC CDR 2011-05-09, 1024×1024, 748 nm,
+  2146 km alt, lat 30.7°N lon 163.1°E — Pantheon Fossae / Apollodorus Crater,
+  Caloris Basin interior (the "Spider" radial-trough system).
+- `mercury_nac_final_orbit`: NAC CDR 2015-04-30, 512×512 binned, 748 nm,
+  23 km alt, lat 68.6°N lon 220.1°E — highest-res Mercury surface image,
+  northern plains, from the final orbit before MESSENGER impacted.
+PDS3 attached label (no separate .LBL), 32-bit float calibrated radiance
+(W/m²/μm/sr), imported via `p.in.pds3`. Sensor tag: `MDIS_NAC`/`MDIS_WAC`,
+mission `MESSENGER`. Direct https URL pass-through supported.
 
 **4-B-5. Hayabusa2/ONC** (Optical Navigation Camera)
 

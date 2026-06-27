@@ -465,6 +465,31 @@ OPUS holdings.
 | `ganymede_c0359946135_g2` | 1996-09-06 | 4,412 km | Ganymede G2; grooved terrain (sulci) at lat 35°N |
 | `callisto_c0401505300_c9` | 1997-06-25 | 16,362 km | Callisto C9; heavily cratered ancient surface |
 
+### MESSENGER MDIS calibrated CDR images (`mdis=`)
+
+```sh
+# List the built-in MDIS catalog
+p.in.archive -l
+
+# Import Pantheon Fossae (Caloris interior Spider) NAC image (May 2011)
+p.in.archive mdis=mercury_nac_caloris_pantheon output=mdis_caloris_pantheon
+
+# Import final-orbit NAC image (April 30, 2015, impact day, 23 km altitude)
+p.in.archive mdis=mercury_nac_final_orbit output=mdis_final_orbit
+```
+
+PDS3 attached-label calibrated radiance CDR (level 4, `MESS-E/V/H-MDIS-4-CDR-CALDATA-V1.0`),
+32-bit IEEE float in W/m²/μm/sr, hosted on the PDS Imaging Node
+(`planetarydata.jpl.nasa.gov`). NAC is 1024×1024 (or binned 512×512) with 1.5°
+FOV (~7 m/px at 2000 km). Imported via `p.in.pds3` (no separate `.LBL`).
+Pass a direct `https://` URL to any `*_RA_5.IMG` file on planetarydata.jpl.nasa.gov
+to import any MDIS observation.
+
+| Key | Date | Altitude | Scene |
+|---|---|---|---|
+| `mercury_nac_caloris_pantheon` | 2011-05-09 | 2146 km | Pantheon Fossae / Apollodorus Crater at 30.7°N, 163.1°E in Caloris Basin interior |
+| `mercury_nac_final_orbit` | 2015-04-30 | 23 km | Northern plains at 68.6°N, 220.1°E — highest-res Mercury image, final orbit before impact |
+
 ### Dawn FC calibrated FITS images (`fc=`)
 
 ```sh
