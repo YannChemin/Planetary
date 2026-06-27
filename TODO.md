@@ -1325,18 +1325,14 @@ Arrokoth/MU69 flyby 2019 (281,989 km). Import: `r.in.gdal` on single-band
 panchromatic FITS (1024×1024, 16-bit DN). PDS Small Bodies Node returned 403
 for direct file access; OPUS mirror is the reliable source.
 
-**4-B-2. Galileo/SSI** (Solid State Imaging camera)
+~~**4-B-2. Galileo/SSI** (Solid State Imaging camera)~~ DONE
 
-800×800 CCD framing camera, 8-bit PDS3 `.IMG` with attached label.
-PDS Imaging Node:
-`planetarydata.jpl.nasa.gov/img/data/galileo/` 
-Catalog entries: Io volcanic plumes (closest approach 1999), Europa
-surface ice (ice raft, lineae), Ganymede grooved terrain, Callisto
-cratered surface. Note: many Galileo images suffered data compression
-artifacts (the HGA antenna failed) -- catalog should preferably pick
-the cleaner ones (higher telemetry rate passes).
-Archive is standard PDS3 binary, `p.in.pds3` handles it.
-Complexity: **very low** -- same as NIMS archive which is already done.
+`ssi=` option added. 4 catalog entries via OPUS mirror (opus.pds-rings.seti.org):
+Io I27 closest flyby 2000-02-22 at 35,114 km (198 km altitude, closest ever Io flyby),
+Europa E12 chaotic terrain 1997-12-16 at 1,785 km, Ganymede G2 grooved terrain
+1996-09-06, Callisto C9 1997-06-25. Format: VICAR `.IMG` + detached PDS3 `.LBL`.
+Import: `p.in.pds3 input=.IMG label=.LBL`. Note: `.IMG` has VICAR header (not embedded
+PDS3 label); PDS Imaging Node was not used — OPUS mirror is the reliable source.
 
 **4-B-3. Dawn/FC** (Framing Camera)
 

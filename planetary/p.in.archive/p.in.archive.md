@@ -432,6 +432,39 @@ to import any observation from the OPUS holdings.
 | `hydra_lor0299191027` | 2015-07-14 | 158,072 km | Hydra (small irregular moon of Pluto) |
 | `arrokoth_lor0408607187` | 2019-01-01 | 281,989 km | Arrokoth (2014 MU69), contact-binary KBO |
 
+### Galileo SSI raw EDR images (`ssi=`)
+
+```sh
+# List the built-in SSI catalog
+p.in.archive -l
+
+# Import Io I27 (closest Io flyby, 198 km altitude, Feb 22 2000)
+p.in.archive ssi=io_c0539940100_i27 output=ssi_io_i27
+
+# Import Europa E12 chaotic terrain (1,785 km, Dec 16 1997)
+p.in.archive ssi=europa_c0426272378_e12 output=ssi_europa_e12
+
+# Import Ganymede G2 grooved terrain (Sep 6 1996)
+p.in.archive ssi=ganymede_c0359946135_g2 output=ssi_ganymede_g2
+
+# Import Callisto C9 cratered surface (Jun 25 1997)
+p.in.archive ssi=callisto_c0401505300_c9 output=ssi_callisto_c9
+```
+
+PDS3 with VICAR-formatted `.IMG` and detached `.LBL`, 8-bit unsigned DN,
+hosted on the OPUS/PDS-Rings mirror (`opus.pds-rings.seti.org`). Each image
+is 800×800 pixels, single panchromatic band (380–980 nm). Imported via
+`p.in.pds3` (both `.IMG` and `.LBL` are downloaded). Pass a direct
+`https://` URL to a `*R.IMG` file to import any SSI observation from the
+OPUS holdings.
+
+| Key | Date | Distance | Scene |
+|---|---|---|---|
+| `io_c0539940100_i27` | 2000-02-22 | 35,114 km | Io I27 closest flyby (198 km alt); Loki/Prometheus region |
+| `europa_c0426272378_e12` | 1997-12-16 | 1,785 km | Europa E12; chaos terrain, rafted ice blocks, lineae |
+| `ganymede_c0359946135_g2` | 1996-09-06 | 4,412 km | Ganymede G2; grooved terrain (sulci) at lat 35°N |
+| `callisto_c0401505300_c9` | 1997-06-25 | 16,362 km | Callisto C9; heavily cratered ancient surface |
+
 ## EXAMPLES
 
 ### List products matching a keyword
