@@ -465,6 +465,31 @@ OPUS holdings.
 | `ganymede_c0359946135_g2` | 1996-09-06 | 4,412 km | Ganymede G2; grooved terrain (sulci) at lat 35°N |
 | `callisto_c0401505300_c9` | 1997-06-25 | 16,362 km | Callisto C9; heavily cratered ancient surface |
 
+### Dawn FC calibrated FITS images (`fc=`)
+
+```sh
+# List the built-in Dawn FC catalog
+p.in.archive -l
+
+# Import Vesta Snowman craters LAMO image (Dec 2011, 193 km altitude)
+p.in.archive fc=vesta_fc2_snowman_lamo output=fc_vesta_snowman
+
+# Import Ceres Occator Crater LAMO image (Feb 2016, Bright Spots)
+p.in.archive fc=ceres_fc2_occator_lamo output=fc_ceres_occator
+```
+
+Standard FITS (`.FIT`) calibrated images from the PDS Small Bodies Node
+(`sbnarchive.psi.edu`). FC is a 1024×1024 CCD framing camera with one clear
+filter (F1) plus 7 narrow-band filters (440–980 nm). LAMO (Low Altitude
+Mapping Orbit) provides ~20 m/px at Vesta and ~35 m/px at Ceres. Imported
+via `r.in.gdal`. Pass a direct `https://` URL to any `*.FIT` on
+sbnarchive.psi.edu to import any FC observation.
+
+| Key | Date | Altitude | Scene |
+|---|---|---|---|
+| `vesta_fc2_snowman_lamo` | 2011-12-18 | 193 km | Vesta LAMO; Snowman craters Marcia/Calpurnia/Minucia at 22°N, 205°E |
+| `ceres_fc2_occator_lamo` | 2016-02-17 | 362 km | Ceres LAMO; Occator Crater (Cerealia/Vinalia Faculae bright spots) at 20°N, 238°E |
+
 ## EXAMPLES
 
 ### List products matching a keyword

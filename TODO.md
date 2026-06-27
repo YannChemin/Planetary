@@ -1334,15 +1334,17 @@ Europa E12 chaotic terrain 1997-12-16 at 1,785 km, Ganymede G2 grooved terrain
 Import: `p.in.pds3 input=.IMG label=.LBL`. Note: `.IMG` has VICAR header (not embedded
 PDS3 label); PDS Imaging Node was not used — OPUS mirror is the reliable source.
 
-**4-B-3. Dawn/FC** (Framing Camera)
+**4-B-3. Dawn/FC** (Framing Camera) -- **DONE**
 
-1024×1024 framing camera (7 colour filters + clear). Calibrated FITS
-or PDS3. PDS Small Bodies Node:
-`sbnarchive.psi.edu/pds3/dawn/fc/` (Vesta and Ceres).
-Complements the Dawn/VIR already in the catalog.
-Two targets, many volumes. Import: `r.in.gdal` (FITS) or `p.in.pds3`.
-Complexity: **low** -- same archive host as Dawn/VIR, already proven
-reachable.
+`fc=` option added. Catalog has 2 curated LAMO entries:
+- `vesta_fc2_snowman_lamo`: Vesta LAMO 2011-12-18, filter 1 (clear),
+  193 km alt, lat 22°N lon 205°E — Snowman craters (Marcia/Calpurnia/Minucia).
+  FITS from `DWNVFC2_1B`, imported via `r.in.gdal`.
+- `ceres_fc2_occator_lamo`: Ceres LAMO 2016-02-17, filter 1 (clear),
+  362 km alt, lat 20°N lon 238°E — Occator Crater (Cerealia/Vinalia Faculae
+  bright spots). FITS from `DWNCLFC2_1B`, imported via `r.in.gdal`.
+`FC_CATALOG`, `resolve_fc()`, `print_fc_catalog()` added. Sensor tag:
+`DAWN_FC2`, mission `DAWN`. Direct https URL pass-through supported.
 
 **4-B-4. MESSENGER/MDIS** (Mercury Dual Imaging System)
 
