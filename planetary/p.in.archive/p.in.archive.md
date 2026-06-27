@@ -398,6 +398,40 @@ p.in.archive juno=pj01_01c03606 output=juno_pj01
 r.mapcalc "pj01_red_frame1 = juno_pj01.3"
 ```
 
+### New Horizons LORRI calibrated science images (`lorri=`)
+
+```sh
+# List the built-in LORRI catalog
+p.in.archive -l
+
+# Import Pluto pre-closest-approach image (Tombaugh Regio visible)
+p.in.archive lorri=pluto_lor0299152709 output=lorri_pluto
+
+# Import Charon at closest approach (~32,000 km)
+p.in.archive lorri=charon_lor0299180364 output=lorri_charon
+
+# Import Arrokoth (2014 MU69) Kuiper Belt Object
+p.in.archive lorri=arrokoth_lor0408607187 output=lorri_arrokoth
+
+# Import Jupiter closest-approach sequence (Feb 28 2007, 2.3 M km)
+p.in.archive lorri=jupiter_lor0034955519 output=lorri_jupiter
+```
+
+Single-band panchromatic FITS (350–850 nm, 1024×1024 pixels, 16-bit DN),
+calibrated science products from the OPUS/PDS-Rings mirror
+(`opus.pds-rings.seti.org`). Imported via `r.in.gdal` directly on the
+FITS file. Catalog covers Jupiter flyby (2007), Pluto/Charon/Hydra (2015),
+and Arrokoth (2019). Pass a direct `https://` URL to a `*_sci.fit` file
+to import any observation from the OPUS holdings.
+
+| Key | Date | Distance | Scene |
+|---|---|---|---|
+| `jupiter_lor0034955519` | 2007-02-28 | 2,310,143 km | Jupiter closest-approach, Jovian cloud bands |
+| `pluto_lor0299152709` | 2015-07-14 | 382,109 km | Pluto pre-flyby, Tombaugh Regio heart visible |
+| `charon_lor0299180364` | 2015-07-14 | 31,946 km | Charon at closest approach, Mordor Macula |
+| `hydra_lor0299191027` | 2015-07-14 | 158,072 km | Hydra (small irregular moon of Pluto) |
+| `arrokoth_lor0408607187` | 2019-01-01 | 281,989 km | Arrokoth (2014 MU69), contact-binary KBO |
+
 ## EXAMPLES
 
 ### List products matching a keyword

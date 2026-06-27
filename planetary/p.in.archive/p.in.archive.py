@@ -191,6 +191,15 @@ LICENSE:   The Unlicense (https://unlicense.org)
 # %end
 
 # %option
+# % key: lorri
+# % type: string
+# % required: no
+# % multiple: no
+# % label: New Horizons LORRI product: a catalog key (see -l) or a direct https URL
+# % description: Fetches a New Horizons LORRI calibrated science FITS image (1024x1024 panchromatic, 16-bit) from the OPUS/PDS-Rings mirror (Jupiter 2007, Pluto/Charon/Hydra 2015, Arrokoth 2019). Use -l to list catalog keys.
+# %end
+
+# %option
 # % key: opus_id
 # % type: string
 # % required: no
@@ -1867,6 +1876,70 @@ def print_leisa_catalog():
         gs.message(f"  {k:<42} {body:<16} {desc}")
 
 
+# Curated catalog of New Horizons LORRI calibrated science FITS images from
+# the OPUS/PDS-Rings mirror (opus.pds-rings.seti.org). LORRI is a 1024x1024
+# panchromatic framing camera (350-850 nm, 16-bit DN). Files are single-band
+# FITS; import via r.in.gdal (same path as Akatsuki UVI).
+_LORRI_OPUS = "https://opus.pds-rings.seti.org/holdings/volumes/NHxxLO_xxxx"
+LORRI_CATALOG = {
+    # --- Jupiter flyby, February 2007 ---
+    "jupiter_lor0034955519": (
+        f"{_LORRI_OPUS}/NHJULO_2001/data/20070228_003495"
+        "/lor_0034955519_0x630_sci.fit",
+        "Jupiter",
+        "NH LORRI, Jupiter closest-approach sequence, 2007-02-28T08:00:01 "
+        "(1024x1024 pan; 2,310,143 km, 0x630 mode; shows Jovian cloud bands "
+        "at unprecedented detail during NH Jupiter gravity-assist flyby)"),
+    # --- Pluto system, July 2015 ---
+    "pluto_lor0299152709": (
+        f"{_LORRI_OPUS}/NHPELO_2001/data/20150714_029915"
+        "/lor_0299152709_0x636_sci.fit",
+        "Pluto",
+        "NH LORRI, Pluto pre-closest-approach, 2015-07-14T04:06:30 "
+        "(1024x1024 pan; 382,109 km, 0x636 high-res mode; Tombaugh Regio "
+        "heart-shaped N2 ice plain visible)"),
+    "charon_lor0299180364": (
+        f"{_LORRI_OPUS}/NHPELO_2001/data/20150714_029918"
+        "/lor_0299180364_0x630_sci.fit",
+        "Charon",
+        "NH LORRI, Charon at closest approach, 2015-07-14T11:47:25 "
+        "(1024x1024 pan; 31,946 km, 0.010 s; Mordor Macula dark polar cap "
+        "and Serenity Chasma rift system)"),
+    "hydra_lor0299191027": (
+        f"{_LORRI_OPUS}/NHPELO_2001/data/20150714_029919"
+        "/lor_0299191027_0x636_sci.fit",
+        "Hydra",
+        "NH LORRI, Hydra post-flyby, 2015-07-14T14:45:08 "
+        "(1024x1024 pan; 158,072 km; irregularly shaped small moon of Pluto)"),
+    # --- Arrokoth (2014 MU69) flyby, January 2019 ---
+    "arrokoth_lor0408607187": (
+        f"{_LORRI_OPUS}/NHKELO_2001/data/20190101_040860"
+        "/lor_0408607187_0x630_sci.fit",
+        "Arrokoth",
+        "NH LORRI, Arrokoth (2014 MU69) flyby, 2019-01-01T00:07:48 "
+        "(1024x1024 pan; 281,989 km; contact-binary Kuiper Belt Object, "
+        "reddish bilobate shape from primordial planetesimal accretion)"),
+}
+
+
+def resolve_lorri(a):
+    if a in LORRI_CATALOG:
+        url, body, _desc = LORRI_CATALOG[a]
+        return url, body
+    if a.lower().startswith(("http://", "https://")):
+        return a, None
+    gs.fatal(f"Unknown LORRI key '{a}'. Use -l to list catalog keys, "
+             "or pass a direct https URL to a *_sci.fit file.")
+
+
+def print_lorri_catalog():
+    gs.message("New Horizons LORRI calibrated science FITS images "
+               "(use lorri=<key>, or a direct https URL to a *_sci.fit):")
+    gs.message(f"  {'key':<32} {'body':<12} description")
+    gs.message("  " + "-" * 95)
+    for k, (_url, body, desc) in LORRI_CATALOG.items():
+        gs.message(f"  {k:<32} {body:<12} {desc}")
+
 
 # Body-name segments recognised in S3/HTTP URL paths (astrogeo-ard, USGS, PDS).
 # Order matters: longer/distinctive names first so substrings don't shadow.
@@ -2148,6 +2221,7 @@ def main():
     opt_akatsuki     = options["akatsuki"]
     opt_leisa        = options["leisa"]
     opt_juno         = options["juno"]
+    opt_lorri        = options["lorri"]
     opt_opus         = options["opus"]
     opt_opus_id      = options["opus_id"]
     opt_vims_channel = options["vims_channel"] or "vis"
@@ -2181,12 +2255,13 @@ def main():
         print_akatsuki_catalog()
         print_leisa_catalog()
         print_juno_jnc_catalog()
-        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno)):
+        print_lorri_catalog()
+        if not any((opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri)):
             return
 
     if opt_crism:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("crism= cannot be combined with doi=/lid=/search=/cog=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2256,8 +2331,8 @@ def main():
         return
 
     if opt_m3:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("m3= cannot be combined with doi=/lid=/search=/cog=/crism=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2303,8 +2378,8 @@ def main():
         return
 
     if opt_vims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("vims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2318,8 +2393,8 @@ def main():
         # fall through into the OPUS branch below
 
     if opt_omega:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("omega= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/dawn_vir=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2366,8 +2441,8 @@ def main():
         return
 
     if opt_dawn_vir:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("dawn_vir= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/virtis_vex=/virtis_rosetta=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2424,8 +2499,8 @@ def main():
         return
 
     if opt_virtis_vex:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_rosetta=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("virtis_vex= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_rosetta=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2477,8 +2552,8 @@ def main():
         return
 
     if opt_virtis_rosetta:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("virtis_rosetta= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("virtis_rosetta= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/nims=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2530,8 +2605,8 @@ def main():
         return
 
     if opt_iuvs:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("iuvs= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_nims, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("iuvs= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/nims=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2595,8 +2670,8 @@ def main():
         return
 
     if opt_nims:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("nims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/lamp=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_lamp, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("nims= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/lamp=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2638,8 +2713,8 @@ def main():
         return
 
     if opt_lamp:
-        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
-            gs.fatal("lamp= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/akatsuki=/leisa=/opus=/opus_id=.")
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
+            gs.fatal("lamp= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2684,7 +2759,7 @@ def main():
 
     if opt_akatsuki:
         if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_leisa, opt_opus, opt_opus_id)):
-            gs.fatal("akatsuki= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp=/leisa=/opus=/opus_id=.")
+            gs.fatal("akatsuki= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2740,7 +2815,7 @@ def main():
 
     if opt_leisa:
         if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega, opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp, opt_akatsuki, opt_opus, opt_opus_id)):
-            gs.fatal("leisa= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp=/akatsuki=/opus=/opus_id=.")
+            gs.fatal("leisa= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims=/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp=/akatsuki=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2796,10 +2871,10 @@ def main():
     if opt_juno:
         if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega,
                 opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp,
-                opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
+                opt_akatsuki, opt_leisa, opt_juno, opt_lorri, opt_opus, opt_opus_id)):
             gs.fatal("juno= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims="
                      "/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp="
-                     "/akatsuki=/leisa=/opus=/opus_id=.")
+                     "/akatsuki=/leisa=/lorri=/opus=/opus_id=.")
         if flag_list:
             return
         if not opt_output:
@@ -2845,6 +2920,53 @@ def main():
         nb = len(band_maps)
         gs.message(f"Imported JunoCam EDR as imagery group '{opt_output}' "
                    f"({nb} framelet bands -- B/G/R/CH4 interleaved).")
+        return
+
+    if opt_lorri:
+        if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega,
+                opt_dawn_vir, opt_virtis_vex, opt_virtis_rosetta, opt_iuvs, opt_nims, opt_lamp,
+                opt_akatsuki, opt_leisa, opt_juno, opt_opus, opt_opus_id)):
+            gs.fatal("lorri= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims="
+                     "/omega=/dawn_vir=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/lamp="
+                     "/akatsuki=/leisa=/juno=/opus=/opus_id=.")
+        if flag_list:
+            return
+        if not opt_output:
+            gs.fatal("output= is required to import a LORRI product.")
+        fits_url, body_hint = resolve_lorri(opt_lorri)
+        gs.message(f"LORRI source: {fits_url}")
+
+        body_slug = (body_hint or _infer_body_from_url(fits_url) or "misc")
+        local_fits = _rsdata_dest(fits_url, body_hint)
+        _wget_resumable(fits_url, local_fits)
+
+        gs.message("Importing NH LORRI science image via r.in.gdal …")
+        try:
+            gs.run_command("r.in.gdal",
+                           flags="o",
+                           input=local_fits,
+                           output=opt_output,
+                           overwrite=True)
+        except grass.exceptions.CalledModuleError:
+            gs.run_command("r.in.gdal",
+                           input=local_fits,
+                           output=opt_output,
+                           overwrite=True)
+
+        _align_region_to_raster(opt_output, save_default=False)
+
+        p_meta.write_planetary_metadata(
+            opt_output,
+            module="p.in.archive",
+            command=" ".join(sys.argv),
+            data_type="image",
+            sensor="NH_LORRI",
+            mission="NEW_HORIZONS",
+            body=body_slug.upper(),
+            source_file=fits_url,
+        )
+        gs.message(f"Imported NH LORRI image as '{opt_output}' "
+                   f"(1024x1024 panchromatic, 16-bit DN).")
         return
 
     if opt_cog:
@@ -3117,7 +3239,7 @@ def main():
     n_src = sum(1 for x in (opt_doi, opt_lid, opt_search) if x)
     if n_src == 0:
         gs.fatal("Provide exactly one of doi=, lid=, search=, cog=, crism=, "
-                 "opus=, or opus_id= (or -l to list options).")
+                 "lorri=, opus=, or opus_id= (or -l to list options).")
     if n_src > 1:
         gs.fatal("Provide exactly one of doi=, lid=, or search= "
                  "(got multiple).")

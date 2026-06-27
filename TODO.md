@@ -1316,19 +1316,14 @@ engineering: either standard PDS3 detached-label images (handled by
 existing `p.in.pds3`) or FITS (handled by `r.in.gdal`). Ordered by
 increasing archive complexity.
 
-**4-B-1. New Horizons/LORRI** (Long Range Reconnaissance Imager)
+~~**4-B-1. New Horizons/LORRI** (Long Range Reconnaissance Imager)~~ DONE
 
-Single-band panchromatic framing camera. Calibrated RDR as PDS3
-detached-label `.FIT` (FITS) or `.IMG`. PDS Small Bodies Node:
-`pds-smallbodies.astro.umd.edu/holdings/nh-j-lorri-2-jupiter-v3.0/`
-(Jupiter flyby 2007) and
-`pds-smallbodies.astro.umd.edu/holdings/nh-p-lorri-3-plutosystem-v3.0/`
-(Pluto system 2015).
-Good catalog entries: Pluto highest-resolution pre-flyby image, Charon,
-Hydra, Nix, Arrokoth approach, Jupiter atmospheric structure.
-Import: `r.in.gdal` (FITS) or `p.in.pds3` (PDS3 `.IMG`); single raster
-(one band), no imagery group needed.
-Complexity: **very low** -- same import path as Akatsuki UVI.
+`lorri=` option added. 5 catalog entries via OPUS mirror (opus.pds-rings.seti.org):
+Jupiter closest-approach 2007 (2.31 M km), Pluto pre-flyby 2015 (382,109 km),
+Charon at closest approach (31,946 km), Hydra (158,072 km),
+Arrokoth/MU69 flyby 2019 (281,989 km). Import: `r.in.gdal` on single-band
+panchromatic FITS (1024×1024, 16-bit DN). PDS Small Bodies Node returned 403
+for direct file access; OPUS mirror is the reliable source.
 
 **4-B-2. Galileo/SSI** (Solid State Imaging camera)
 
