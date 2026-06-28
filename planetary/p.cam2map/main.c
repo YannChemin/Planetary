@@ -93,10 +93,11 @@
 /* closed-form algebraic inverse. Deliberately not implemented yet      */
 /* (see TODO.md) -- instrument= fails loudly for them, not a guess.     */
 /* ------------------------------------------------------------------ */
-/* IssCameraModel is also used for CRISM (pushbroom) and OMEGA (whiskbroom).
+/* IssCameraModel covers ISS/CRISM/OMEGA/VIMS.
+ * ISS:   is_pushbroom=0, real K1 distortion, per-filter focal length.
  * CRISM: is_pushbroom=1, k1=0, per-line epoch from line_rate.
- * OMEGA: is_omega=1, is_pushbroom=1, per-line epoch + mirror scan; mirror
- *        parameters and omega_rot (detector→MEX_SPACECRAFT) loaded from IK. */
+ * OMEGA: is_omega=1, is_pushbroom=1, per-line epoch + mirror scan.
+ * VIMS:  is_vims=1, closed-form 2-axis angular scan inverse (no pushbroom).*/
 typedef struct {
     int    naif_id;
     char   frame[64];
@@ -105,16 +106,28 @@ typedef struct {
     double pixel_pitch;
     double focal_length;
     double k1;
-    int    is_pushbroom; /* 1=CRISM/OMEGA per-line epoch, 0=ISS framing */
+    int    is_pushbroom; /* 1=CRISM/OMEGA per-line epoch, 0=ISS/VIMS */
     int    is_omega;     /* 1=OMEGA whiskbroom mirror scan */
     double omega_rot[3][3]; /* detector frame → MEX_SPACECRAFT rotation */
     double mirror_center;   /* INS-41420_MIRROR_CENTER_POSITION */
     double mirror_slope;    /* INS-41420_MIRROR_SLOPE (deg/DN) */
+    int    is_vims;      /* 1=Cassini VIMS 2-axis angular scan */
+    double vims_x_pixsize;  /* rad/pixel, cross-track (sample) axis */
+    double vims_y_pixsize;  /* rad/pixel, down-track (line) axis */
+    double vims_x_bore;     /* boresight sample in 64x64 FOV grid */
+    double vims_y_bore;     /* boresight line in 64x64 FOV grid */
+    int    vims_samp_offset; /* swath sample offset into 64x64 grid */
+    int    vims_line_offset; /* swath line offset into 64x64 grid */
 } IssCameraModel;
 
 static void load_iss_camera_model(const char *instrument,
                                    const char *input_map,
                                    const char *filter1, const char *filter2,
+                                   const char *sampling_mode,
+                                   const char *x_offset_s,
+                                   const char *z_offset_s,
+                                   const char *swath_width_s,
+                                   const char *swath_length_s,
                                    int image_cols, int image_rows,
                                    IssCameraModel *cam)
 {
@@ -156,9 +169,99 @@ static void load_iss_camera_model(const char *instrument,
         cam->naif_id = -82361;
         snprintf(cam->frame, sizeof(cam->frame), "CASSINI_ISS_WAC_USGS");
     }
+    else if (strcmp(instrument, "VIMS_IR")  == 0 ||
+             strcmp(instrument, "VIMS_VIS") == 0) {
+        int is_ir = (strcmp(instrument, "VIMS_IR") == 0);
+        cam->naif_id = is_ir ? -82371 : -82370;  /* corrected IAK IDs */
+        snprintf(cam->frame, sizeof(cam->frame),
+                 is_ir ? "CASSINI_VIMS_IR" : "CASSINI_VIMS_V");
+        cam->is_vims = 1;
+
+        /* Resolve sampling mode: CLI override > planetary.json */
+        char samp_mode[16] = "";
+        if (sampling_mode && sampling_mode[0])
+            snprintf(samp_mode, sizeof(samp_mode), "%s", sampling_mode);
+        else {
+            const char *field = is_ir ? "sampling_mode_ir" : "sampling_mode_vis";
+            char buf[32];
+            if (p_meta_read_string_field(input_map, "raster", field,
+                                         buf, sizeof(buf)) == 0)
+                snprintf(samp_mode, sizeof(samp_mode), "%s", buf);
+        }
+        if (!samp_mode[0])
+            G_fatal_error(_("VIMS_%s requires sampling_mode= (NORMAL or HI-RES) "
+                            "-- pass it explicitly or import via p.in.archive "
+                            "vims= (which writes it to planetary.json)."),
+                           is_ir ? "IR" : "VIS");
+
+        /* Resolve swath metadata: CLI > planetary.json */
+        const char *vims_fields[4]    = {"x_offset","z_offset","swath_width","swath_length"};
+        const char *vims_overrides[4] = {x_offset_s, z_offset_s, swath_width_s, swath_length_s};
+        long x_offset = 1, z_offset = 1, swath_width = 64, swath_length = 64;
+        long *vims_out[4] = {&x_offset, &z_offset, &swath_width, &swath_length};
+        for (int i = 0; i < 4; i++) {
+            if (vims_overrides[i] && vims_overrides[i][0]) {
+                *vims_out[i] = atol(vims_overrides[i]);
+            } else {
+                char buf[32];
+                if (p_meta_read_string_field(input_map, "raster", vims_fields[i],
+                                              buf, sizeof(buf)) == 0)
+                    *vims_out[i] = atol(buf);
+                else
+                    G_fatal_error(_("VIMS_%s requires %s= -- pass it explicitly "
+                                    "or import via p.in.archive vims=."),
+                                   is_ir ? "IR" : "VIS", vims_fields[i]);
+            }
+        }
+
+        int hires = (strcasecmp(samp_mode, "HI-RES") == 0);
+        int camSampOffset, camLineOffset;
+        double xPixSize, yPixSize, xBore, yBore;
+
+        if (!is_ir) {            /* VIMS_VIS (channel V) */
+            if (!hires) {
+                xPixSize = yPixSize = 0.00051;
+                xBore = yBore = 31;
+                camSampOffset = (int)x_offset - 1;
+                camLineOffset = (int)z_offset - 1;
+            } else {
+                xPixSize = yPixSize = 0.00051 / 3.0;
+                xBore = yBore = 94;
+                camSampOffset = (3 * ((int)x_offset + (int)swath_width / 2)) -
+                                (int)swath_width / 2;
+                camLineOffset = (3 * ((int)z_offset + (int)swath_length / 2)) -
+                                (int)swath_length / 2;
+            }
+        } else {                /* VIMS_IR */
+            if (!hires) {
+                xPixSize = yPixSize = 0.000495;
+                xBore = yBore = 31;
+                camSampOffset = (int)x_offset - 1;
+                camLineOffset = (int)z_offset - 1;
+            } else {
+                xPixSize = 0.000495 / 2.0;
+                yPixSize = 0.000495;
+                xBore = 62.5;
+                yBore = 31;
+                camSampOffset = 2 * (((int)x_offset - 1) +
+                                     (((int)swath_width - 1) / 4));
+                camLineOffset = (int)z_offset - 1;
+            }
+        }
+
+        cam->vims_x_pixsize  = xPixSize;
+        cam->vims_y_pixsize  = yPixSize;
+        cam->vims_x_bore     = xBore;
+        cam->vims_y_bore     = yBore;
+        cam->vims_samp_offset = camSampOffset;
+        cam->vims_line_offset = camLineOffset;
+        return;
+    }
     else
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
-                        "(supported: CRISM_VNIR, CRISM_IR, ISS_NAC, ISS_WAC)."),
+                        "(supported: CRISM_VNIR, CRISM_IR, OMEGA_SWIR_C, "
+                        "OMEGA_SWIR_L, OMEGA_VNIR, ISS_NAC, ISS_WAC, "
+                        "VIMS_IR, VIMS_VIS)."),
                        instrument);
 
     char varname[80];
@@ -456,6 +559,8 @@ int main(int argc, char *argv[])
     struct Option  *opt_a, *opt_b, *opt_c;
     struct Option  *opt_interp;
     struct Option  *opt_instrument, *opt_filter1, *opt_filter2, *opt_mirror_dn;
+    struct Option  *opt_sampling_mode, *opt_x_offset, *opt_z_offset;
+    struct Option  *opt_swath_width, *opt_swath_length;
     struct Option  *opt_projection, *opt_clon;
     struct Flag    *flag_camera;
     struct History  history;
@@ -496,7 +601,7 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = NO;
-    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,ISS_NAC,ISS_WAC";
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
     opt_instrument->description = _("Instrument camera model to use with -c. "
         "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch binary search, "
         "requires line_rate= in p.spiceinit history). "
@@ -524,6 +629,40 @@ int main(int argc, char *argv[])
     opt_mirror_dn->description = _("OMEGA_SWIR_C/OMEGA_SWIR_L/OMEGA_VNIR: "
         "mirror-DN sideplane raster (same dimensions as input, one mirror "
         "position per pixel -- written by p.in.pds3 -g for OMEGA cubes)");
+
+    opt_sampling_mode = G_define_option();
+    opt_sampling_mode->key      = "sampling_mode";
+    opt_sampling_mode->type     = TYPE_STRING;
+    opt_sampling_mode->required = NO;
+    opt_sampling_mode->options  = "NORMAL,HI-RES";
+    opt_sampling_mode->description = _("VIMS_IR/VIMS_VIS: sampling mode "
+        "(if not stored in planetary.json by p.in.archive vims=)");
+
+    opt_x_offset = G_define_option();
+    opt_x_offset->key      = "x_offset";
+    opt_x_offset->type     = TYPE_INTEGER;
+    opt_x_offset->required = NO;
+    opt_x_offset->description = _("VIMS_IR/VIMS_VIS: X_OFFSET from the cube label "
+        "(swath start sample in the 64x64 FOV grid)");
+
+    opt_z_offset = G_define_option();
+    opt_z_offset->key      = "z_offset";
+    opt_z_offset->type     = TYPE_INTEGER;
+    opt_z_offset->required = NO;
+    opt_z_offset->description = _("VIMS_IR/VIMS_VIS: Z_OFFSET from the cube label "
+        "(swath start line in the 64x64 FOV grid)");
+
+    opt_swath_width = G_define_option();
+    opt_swath_width->key      = "swath_width";
+    opt_swath_width->type     = TYPE_INTEGER;
+    opt_swath_width->required = NO;
+    opt_swath_width->description = _("VIMS_IR/VIMS_VIS: SWATH_WIDTH from the cube label");
+
+    opt_swath_length = G_define_option();
+    opt_swath_length->key      = "swath_length";
+    opt_swath_length->type     = TYPE_INTEGER;
+    opt_swath_length->required = NO;
+    opt_swath_length->description = _("VIMS_IR/VIMS_VIS: SWATH_LENGTH from the cube label");
 
     opt_a = G_define_option(); opt_a->key="a_radius"; opt_a->type=TYPE_DOUBLE;
     opt_a->required=NO; opt_a->answer="3396.19";
@@ -571,7 +710,7 @@ int main(int argc, char *argv[])
     if (camera_mode && !opt_instrument->answer)
         G_fatal_error(_("-c requires instrument= (CRISM_VNIR, CRISM_IR, "
                         "OMEGA_SWIR_C, OMEGA_SWIR_L, OMEGA_VNIR, "
-                        "ISS_NAC, or ISS_WAC)."));
+                        "VIMS_IR, VIMS_VIS, ISS_NAC, or ISS_WAC)."));
 
     double a_km = atof(opt_a->answer);
     double b_km = atof(opt_b->answer);
@@ -691,6 +830,9 @@ int main(int argc, char *argv[])
 
         load_iss_camera_model(opt_instrument->answer, opt_input->answer,
                                opt_filter1->answer, opt_filter2->answer,
+                               opt_sampling_mode->answer,
+                               opt_x_offset->answer, opt_z_offset->answer,
+                               opt_swath_width->answer, opt_swath_length->answer,
                                in_cols, in_rows, &cam);
 
         if (cam.is_omega && !mirror_dn_data)
@@ -768,11 +910,61 @@ int main(int argc, char *argv[])
                                     lon_deg, lat_deg, spoint) < 0) {
                     have_pixel = 0;
                 }
+                else if (cam.is_vims) {
+                    /* VIMS 2-axis angular scan: closed-form inverse.
+                     * Single epoch (no per-line timing; VIMS scan is captured
+                     * in the look-direction model, not the CK). Two-epoch
+                     * rotation matches ISS (fixref at et-lt, cam frame at et). */
+                    double pos[3], lt;
+                    if (p_spice_pos(target_upper, et, fixref, "LT+S",
+                                     spice_info.observer, pos, &lt) < 0) {
+                        have_pixel = 0;
+                    } else {
+                        double ray[3] = { spoint[0]+pos[0], spoint[1]+pos[1],
+                                           spoint[2]+pos[2] };
+                        double rot_fix2j2000[3][3], rot_j2000_2cam[3][3];
+                        if (p_spice_pxform(fixref, "J2000", et-lt,
+                                            rot_fix2j2000) < 0 ||
+                            p_spice_pxform("J2000", cam.frame, et,
+                                            rot_j2000_2cam) < 0) {
+                            have_pixel = 0;
+                        } else {
+                            double inertial[3];
+                            for (int i=0;i<3;i++)
+                                inertial[i]=rot_fix2j2000[i][0]*ray[0]+
+                                             rot_fix2j2000[i][1]*ray[1]+
+                                             rot_fix2j2000[i][2]*ray[2];
+                            double dvec[3];
+                            for (int i=0;i<3;i++)
+                                dvec[i]=rot_j2000_2cam[i][0]*inertial[0]+
+                                         rot_j2000_2cam[i][1]*inertial[1]+
+                                         rot_j2000_2cam[i][2]*inertial[2];
+
+                            /* VimsGroundMap::LookDirection forward:
+                             *   v=(sin(θ)cos(φ), cos(θ), -sin(θ)sin(φ))
+                             * Inverse: θ=acos(dvec[1]), φ=atan2(-dvec[2],dvec[0])
+                             *   x = xBore + (φ+π/2)/xPixSize
+                             *   y = yBore + (π/2-θ)/yPixSize
+                             *   sample = x - camSampOffset - 1  (0-based)
+                             *   line   = y - camLineOffset - 1  (0-based) */
+                            double cos_theta = dvec[1];
+                            if (cos_theta < -1.0) cos_theta = -1.0;
+                            if (cos_theta >  1.0) cos_theta =  1.0;
+                            double theta = acos(cos_theta);
+                            double phi   = atan2(-dvec[2], dvec[0]);
+                            double x = cam.vims_x_bore
+                                     + (phi + M_PI/2.0) / cam.vims_x_pixsize;
+                            double y = cam.vims_y_bore
+                                     + (M_PI/2.0 - theta) / cam.vims_y_pixsize;
+                            in_col_f = x - cam.vims_samp_offset - 1.0;
+                            in_row_f = y - cam.vims_line_offset - 1.0;
+                        }
+                    }
+                }
                 else if (!cam.is_pushbroom) {
                     /* ISS framing camera: single epoch for the whole frame.
                      * Two-epoch rotation (fixref at et-lt, camera frame at et)
-                     * is required for bodies far from the spacecraft -- see the
-                     * long comment that was here before this branch was split. */
+                     * is required for bodies far from the spacecraft. */
                     double pos[3], lt;
                     if (p_spice_pos(target_upper, et, fixref, "LT+S",
                                      spice_info.observer, pos, &lt) < 0) {

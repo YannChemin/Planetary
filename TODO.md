@@ -1434,3 +1434,22 @@ Two-step inverse (no nested sincpt calls):
   set to `MEX_SPACECRAFT` for all subsequent pxform calls.
 - Mirror params (`INS-41420_MIRROR_CENTER_POSITION`, `INS-41420_MIRROR_SLOPE`)
   read from MEX_OMEGA_V03.TI via `p_spice_gdpool_d` at camera-model load time.
+
+**4-C-3. `p.cam2map -c` for VIMS_IR/VIMS_VIS (2-axis angular scan inverse)** -- **DONE**
+
+VIMS_IR and VIMS_VIS added to `p.cam2map -c`. Inverse is fully algebraic --
+no binary search needed (the VIMS scan model maps (sample, line) to a unit
+look vector, and the inverse is closed-form):
+- Two-epoch rotation (same as ISS: fixref at et-lt, cam frame at et).
+- `θ = acos(dvec[1])`, `φ = atan2(-dvec[2], dvec[0])` (from VimsGroundMap inverse).
+- `x = xBore + (φ+π/2)/xPixSize`, `y = yBore + (π/2-θ)/yPixSize`.
+- `sample = x - camSampOffset - 1`, `line = y - camLineOffset - 1` (0-based).
+- Four-branch constants (channel VIMS_IR/VIMS_VIS × sampling mode NORMAL/HI-RES)
+  ported verbatim from VimsGroundMap.cpp/VimsCamera.cpp (same values as p.phocube -c).
+- Per-cube metadata (`sampling_mode=`, `x_offset=`, `z_offset=`, `swath_width=`,
+  `swath_length=`) read from `planetary.json` (written by `p.in.archive vims=`)
+  or from new CLI overrides.
+- NAIF IDs use IAK-corrected values: CASSINI_VIMS_V=-82370, CASSINI_VIMS_IR=-82371.
+- No is_pushbroom flag (single epoch for whole cube); new is_vims flag added to
+  IssCameraModel struct to distinguish from ISS framing.
+- Per-pixel SPICE cost: ~3 calls (spkpos + 2 pxform) -- same as ISS.

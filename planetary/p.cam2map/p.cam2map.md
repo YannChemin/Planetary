@@ -45,8 +45,18 @@ Supported instruments in camera mode:
   sub-pixel by interpolation. The `mirror_dn=` raster (written by
   `p.in.pds3 -g` for OMEGA cubes) must be supplied.
 
-Cassini VIMS is **not** yet supported: VIMS needs a 2-axis scan model inverse.
-See `TODO.md`.
+- **`VIMS_IR` / `VIMS_VIS`** (Cassini): closed-form algebraic inverse -- single epoch
+  for the whole frame (no per-line timing). Ported from ISIS3's `VimsGroundMap::
+  LookDirection()`: `θ = acos(dvec[1])`, `φ = atan2(-dvec[2], dvec[0])`, then
+  `x = xBore + (φ + π/2)/xPixSize`, `y = yBore + (π/2 - θ)/yPixSize`,
+  `sample = x - camSampOffset - 1`, `line = y - camLineOffset - 1`.
+  `xPixSize`/`yPixSize`/`xBore`/`yBore`/`camSampOffset`/`camLineOffset` are the
+  same four-branch constants (channel × sampling mode) as `p.phocube -c`.
+  Per-cube metadata (`sampling_mode=`, `x_offset=`, `z_offset=`, `swath_width=`,
+  `swath_length=`) are read from `planetary.json` (written by `p.in.archive
+  vims=`) or from CLI overrides. Note: unlike ISS, VIMS has no K1 lens
+  distortion and no IAK-sourced boresight/focal-length -- the scan model is
+  the complete pointing description.
 
 **Without -c** (legacy mode): a simple flat-field ellipsoid resample --
 for each output pixel, computes a local radius from the given ellipsoid
@@ -143,6 +153,21 @@ p.spiceinit map=crism_vnir target=MARS observer=MRO \
 
 g.region n=18.6 s=18.1 e=77.9 w=77.4 res=0.001
 p.cam2map -c input=crism_vnir output=crism_map instrument=CRISM_VNIR
+```
+
+Back-project a Cassini VIMS IR cube onto a real lat/lon grid
+(metadata read from `planetary.json` written by `p.in.archive vims=`):
+
+```sh
+p.spiceinit map=vims_ir target=TITAN observer=CASSINI \
+    time=2015-008T15:09:40 \
+    lsk=naif0012.tls sclk=cas00172.tsc \
+    ik=cas_vims_v06.ti,vimsAddendum04.ti fk=cas_v43.tf \
+    pck=cpck_rock_21Jan2011_merged.tpc,pck00010.tpc \
+    spk=150108AP_SCPSE_14365_15016.bsp ck=15008_15013ra.bc
+
+g.region n=75 s=-75 e=110 w=-70 res=1
+p.cam2map -c input=vims_ir output=vims_map instrument=VIMS_IR
 ```
 
 Back-project a MEX OMEGA SWIR_C cube onto a real lat/lon grid
