@@ -2234,16 +2234,114 @@ HRSC_CATALOG = {
         f"{_HRSC_PSA}/0010/H0010_0000_ND3.IMG",
         "Mars",
         "MEX HRSC nadir RDR, Mars, 2004-01-10T13:51:51 "
-        "(54552x5176 px, 16-bit reflectance, ~19.8 m/px, lat 32-48°S lon 88-92°E -- "
-        "eastern Hellas Planitia rim, deepest impact basin on Mars; "
-        "MARS-REGIONAL-STEREO, orbit 10; ~542 MB)"),
+        "(54552x5176 px, macropixel=1, 16-bit reflectance, ~19.8 m/px, "
+        "lat 32-48°S lon 88-92°E -- eastern Hellas Planitia rim; "
+        "instrument=HRSC_NADIR hrsc_macropixel=1; ~542 MB)"),
     "mars_hrsc_noachis_nd3": (
         f"{_HRSC_PSA}/1962/H1962_0000_ND3.IMG",
         "Mars",
         "MEX HRSC nadir RDR, Mars, 2005-07-26T02:53:49 "
-        "(35704x5176 px, 16-bit reflectance, ~21.4 m/px, lat 19-33°S lon ~297°E -- "
-        "Noachis Terra / southern Coprates region, Valles Marineris approach; "
-        "MARS-REGIONAL-MAPPING, orbit 1962; ~355 MB)"),
+        "(35704x5176 px, macropixel=1, 16-bit reflectance, ~21.4 m/px, "
+        "lat 19-33°S lon ~297°E -- Noachis Terra / southern Coprates region; "
+        "instrument=HRSC_NADIR hrsc_macropixel=1; ~355 MB)"),
+    # Orbit 10 -- Hellas Planitia rim (lat 32-48°S, lon 88-92°E)
+    "mars_hrsc_hellas_bl3": (
+        f"{_HRSC_PSA}/0010/H0010_0000_BL3.IMG",
+        "Mars",
+        "MEX HRSC blue (430 nm) RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(6856x640 px, macropixel=8, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_BLUE hrsc_macropixel=8; ~9 MB)"),
+    "mars_hrsc_hellas_gr3": (
+        f"{_HRSC_PSA}/0010/H0010_0000_GR3.IMG",
+        "Mars",
+        "MEX HRSC green (530 nm) RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(6832x640 px, macropixel=8, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_GREEN hrsc_macropixel=8; ~9 MB)"),
+    "mars_hrsc_hellas_re3": (
+        f"{_HRSC_PSA}/0010/H0010_0000_RE3.IMG",
+        "Mars",
+        "MEX HRSC red (750 nm) RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(6760x640 px, macropixel=8, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_RED hrsc_macropixel=8; ~9 MB)"),
+    "mars_hrsc_hellas_ir3": (
+        f"{_HRSC_PSA}/0010/H0010_0000_IR3.IMG",
+        "Mars",
+        "MEX HRSC IR (970 nm) RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(6984x640 px, macropixel=8, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_IR hrsc_macropixel=8; ~9 MB)"),
+    "mars_hrsc_hellas_s13": (
+        f"{_HRSC_PSA}/0010/H0010_0000_S13.IMG",
+        "Mars",
+        "MEX HRSC forward stereo RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(27288x2584 px, macropixel=2, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_S1 hrsc_macropixel=2; ~143 MB)"),
+    "mars_hrsc_hellas_s23": (
+        f"{_HRSC_PSA}/0010/H0010_0000_S23.IMG",
+        "Mars",
+        "MEX HRSC aft stereo RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(27008x2584 px, macropixel=2, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_S2 hrsc_macropixel=2; ~141 MB)"),
+    "mars_hrsc_hellas_p13": (
+        f"{_HRSC_PSA}/0010/H0010_0000_P13.IMG",
+        "Mars",
+        "MEX HRSC photometry-1 RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(13816x1288 px, macropixel=4, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_P1 hrsc_macropixel=4; ~36 MB)"),
+    "mars_hrsc_hellas_p23": (
+        f"{_HRSC_PSA}/0010/H0010_0000_P23.IMG",
+        "Mars",
+        "MEX HRSC photometry-2 RDR, Mars, 2004-01-10, Hellas Planitia rim "
+        "(13536x1288 px, macropixel=4, lat ~32-48°S lon ~88-92°E; "
+        "instrument=HRSC_P2 hrsc_macropixel=4; ~36 MB)"),
+    # Orbit 1962 -- Noachis Terra (lat 19-33°S, lon ~297°E)
+    "mars_hrsc_noachis_bl3": (
+        f"{_HRSC_PSA}/1962/H1962_0000_BL3.IMG",
+        "Mars",
+        "MEX HRSC blue (430 nm) RDR, Mars, 2005-07-26, Noachis Terra "
+        "(8968x1288 px, macropixel=4, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_BLUE hrsc_macropixel=4; ~24 MB)"),
+    "mars_hrsc_noachis_gr3": (
+        f"{_HRSC_PSA}/1962/H1962_0000_GR3.IMG",
+        "Mars",
+        "MEX HRSC green (530 nm) RDR, Mars, 2005-07-26, Noachis Terra "
+        "(8896x1288 px, macropixel=4, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_GREEN hrsc_macropixel=4; ~24 MB)"),
+    "mars_hrsc_noachis_re3": (
+        f"{_HRSC_PSA}/1962/H1962_0000_RE3.IMG",
+        "Mars",
+        "MEX HRSC red (750 nm) RDR, Mars, 2005-07-26, Noachis Terra "
+        "(9160x1288 px, macropixel=4, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_RED hrsc_macropixel=4; ~24 MB)"),
+    "mars_hrsc_noachis_ir3": (
+        f"{_HRSC_PSA}/1962/H1962_0000_IR3.IMG",
+        "Mars",
+        "MEX HRSC IR (970 nm) RDR, Mars, 2005-07-26, Noachis Terra "
+        "(8792x1288 px, macropixel=4, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_IR hrsc_macropixel=4; ~23 MB)"),
+    "mars_hrsc_noachis_s13": (
+        f"{_HRSC_PSA}/1962/H1962_0000_S13.IMG",
+        "Mars",
+        "MEX HRSC forward stereo RDR, Mars, 2005-07-26, Noachis Terra "
+        "(17640x2584 px, macropixel=2, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_S1 hrsc_macropixel=2; ~92 MB)"),
+    "mars_hrsc_noachis_s23": (
+        f"{_HRSC_PSA}/1962/H1962_0000_S23.IMG",
+        "Mars",
+        "MEX HRSC aft stereo RDR, Mars, 2005-07-26, Noachis Terra "
+        "(18520x2584 px, macropixel=2, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_S2 hrsc_macropixel=2; ~97 MB)"),
+    "mars_hrsc_noachis_p13": (
+        f"{_HRSC_PSA}/1962/H1962_0000_P13.IMG",
+        "Mars",
+        "MEX HRSC photometry-1 RDR, Mars, 2005-07-26, Noachis Terra "
+        "(8360x1288 px, macropixel=4, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_P1 hrsc_macropixel=4; ~22 MB)"),
+    "mars_hrsc_noachis_p23": (
+        f"{_HRSC_PSA}/1962/H1962_0000_P23.IMG",
+        "Mars",
+        "MEX HRSC photometry-2 RDR, Mars, 2005-07-26, Noachis Terra "
+        "(9088x1288 px, macropixel=4, lat ~19-33°S lon ~297°E; "
+        "instrument=HRSC_P2 hrsc_macropixel=4; ~24 MB)"),
 }
 
 
@@ -3649,7 +3747,16 @@ def main():
 
         if p_meta.PlanetaryMetadata.exists(opt_output):
             meta = p_meta.PlanetaryMetadata.load(opt_output)
-            meta.sensor = "MEX_HRSC"
+            # Infer the per-channel sensor name from the URL suffix (ND3, BL3, …).
+            _hrsc_ch = img_url.rsplit("_", 1)[-1].replace(".IMG", "").upper()
+            _hrsc_ch_map = {
+                "ND3": "MEX_HRSC_NADIR", "BL3": "MEX_HRSC_BLUE",
+                "GR3": "MEX_HRSC_GREEN", "RE3": "MEX_HRSC_RED",
+                "IR3": "MEX_HRSC_IR",   "P13": "MEX_HRSC_P1",
+                "P23": "MEX_HRSC_P2",   "S13": "MEX_HRSC_S1",
+                "S23": "MEX_HRSC_S2",
+            }
+            meta.sensor = _hrsc_ch_map.get(_hrsc_ch, "MEX_HRSC")
             meta.mission = "MEX"
             meta.body = body_slug.upper()
             meta.source_file = img_url
