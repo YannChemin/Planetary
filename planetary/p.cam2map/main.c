@@ -145,6 +145,7 @@ static void load_iss_camera_model(const char *instrument,
                                    const char *swath_width_s,
                                    const char *swath_length_s,
                                    int image_cols, int image_rows,
+                                   int hrsc_macropixel,
                                    IssCameraModel *cam)
 {
     memset(cam, 0, sizeof(*cam));
@@ -443,6 +444,25 @@ static void load_iss_camera_model(const char *instrument,
             double transx_buf[3] = {0.0, 0.0, 0.0};
             if (p_spice_gdpool_d(varname, 0, 3, &n, transx_buf) == 0 && n >= 1)
                 cam->focal_plane_x0 = transx_buf[0];
+            /* Macropixel (binning) correction.  All 9 HRSC CCDs share a 5184-pixel
+             * full-resolution detector width; with macropixel_size=B the active area
+             * is B*image_cols wide, centred in the detector:
+             *   left_trim = (5184 - B*image_cols) / 2   [full-res pixels]
+             *   boresight_sample_binned = (boresight_iak - left_trim - 0.5)/B + 0.5
+             * B=1 still corrects the 4-px edge trim of the 5176-px ND3 image.
+             * TRANSX[0] is in focal-plane mm and needs no binning correction. */
+            {
+                int B = (hrsc_macropixel < 1) ? 1 : hrsc_macropixel;
+                double left_trim = (5184.0 - (double)B * image_cols) / 2.0;
+                cam->boresight_sample =
+                    (cam->boresight_sample - left_trim - 0.5) / B + 0.5;
+                cam->pixel_pitch *= (double)B;
+                if (B > 1)
+                    G_message(_("Camera mode (-c): HRSC macropixel=%d, "
+                                "adjusting boresight to %.1f and pixel pitch "
+                                "to %.3f mm."), B,
+                               cam->boresight_sample, cam->pixel_pitch);
+            }
             /* pushbroom_x_sign=-1 already set in dispatch; no distortion. */
             return;
         }
@@ -706,7 +726,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_interp;
     struct Option  *opt_instrument, *opt_filter1, *opt_filter2, *opt_mirror_dn;
     struct Option  *opt_sampling_mode, *opt_x_offset, *opt_z_offset;
-    struct Option  *opt_swath_width, *opt_swath_length;
+    struct Option  *opt_swath_width, *opt_swath_length, *opt_hrsc_macropixel;
     struct Option  *opt_projection, *opt_clon;
     struct Flag    *flag_camera;
     struct History  history;
@@ -818,6 +838,17 @@ int main(int argc, char *argv[])
     opt_swath_length->type     = TYPE_INTEGER;
     opt_swath_length->required = NO;
     opt_swath_length->description = _("VIMS_IR/VIMS_VIS: SWATH_LENGTH from the cube label");
+
+    opt_hrsc_macropixel = G_define_option();
+    opt_hrsc_macropixel->key      = "hrsc_macropixel";
+    opt_hrsc_macropixel->type     = TYPE_INTEGER;
+    opt_hrsc_macropixel->required = NO;
+    opt_hrsc_macropixel->answer   = "1";
+    opt_hrsc_macropixel->options  = "1,2,4,8";
+    opt_hrsc_macropixel->description = _("HRSC_*: MACROPIXEL_SIZE from the PDS3 label "
+        "(1=ND3/full-res, 2=S13/S23, 4=P13/P23, 8=BL3/GR3/RE3/IR3). "
+        "Corrects boresight and pixel pitch for the binned detector active area "
+        "(all 9 HRSC CCDs share a 5184-pixel full-resolution frame).");
 
     opt_a = G_define_option(); opt_a->key="a_radius"; opt_a->type=TYPE_DOUBLE;
     opt_a->required=NO; opt_a->answer="3396.19";
@@ -983,12 +1014,14 @@ int main(int argc, char *argv[])
         uppercase_copy(target_upper, sizeof(target_upper), spice_info.target);
         snprintf(fixref, sizeof(fixref), "IAU_%s", target_upper);
 
+        int hrsc_macropixel = opt_hrsc_macropixel->answer
+                              ? atoi(opt_hrsc_macropixel->answer) : 1;
         load_iss_camera_model(opt_instrument->answer, opt_input->answer,
                                opt_filter1->answer, opt_filter2->answer,
                                opt_sampling_mode->answer,
                                opt_x_offset->answer, opt_z_offset->answer,
                                opt_swath_width->answer, opt_swath_length->answer,
-                               in_cols, in_rows, &cam);
+                               in_cols, in_rows, hrsc_macropixel, &cam);
 
         if (cam.is_omega && !mirror_dn_data)
             G_fatal_error(_("OMEGA_SWIR_C/OMEGA_SWIR_L/OMEGA_VNIR require "
