@@ -101,8 +101,8 @@
  * CTX:      is_ctx=1, is_pushbroom=1, along-track=X, OD_K[3] distortion.
  * LROC_NAC: is_lroc_nac=1, is_pushbroom=1, along-track=X, custom K1 model;
  *            pushbroom_y_sign=+1 (NACL) or -1 (NACR, flipped cross-track).
- * HRSC_ND3: is_pushbroom=1, along-track=Y (same as CRISM), no distortion,
- *            frame=MEX_HRSC_HEAD (-41210), pushbroom_x_sign=-1, focal_plane_x0≠0. */
+ * HRSC_*:   is_pushbroom=1, along-track=Y (same as CRISM), no distortion,
+ *            frame=MEX_HRSC_HEAD (-41210) for all 9 channels, pushbroom_x_sign=-1. */
 typedef struct {
     int    naif_id;
     char   frame[64];
@@ -179,13 +179,58 @@ static void load_iss_camera_model(const char *instrument,
         cam->is_pushbroom = 1;
         cam->pushbroom_x_sign = 1;
     }
-    else if (strcmp(instrument, "HRSC_ND3") == 0) {
-        /* Nadir channel (-41215) but rotate via the shared MEX_HRSC_HEAD frame (-41210).
-         * TRANSX[1]=-pixel_pitch (reversed cross-track vs CRISM); TRANSX[0]≠0. */
+    /* MEX HRSC: all 9 channels share MEX_HRSC_HEAD (-41210) as the rotation
+     * frame. TRANSX[1]=-pixel_pitch for all (reversed vs CRISM). TRANSX[0]
+     * is the per-channel focal-plane X offset loaded from hrscAddendum004.ti.
+     * No radial distortion (OD_K=0,0,0); pushbroom_x_sign=-1 for all.
+     * NAIF IDs from hrsc2isis MexHrscKernels.trn:
+     *   S2=-41211 RED=-41212 P2=-41213 BLUE=-41214 NADIR=-41215
+     *   GREEN=-41216 P1=-41217 IR=-41218 S1=-41219 */
+    else if (strcmp(instrument, "HRSC_NADIR") == 0 ||
+             strcmp(instrument, "HRSC_ND3")   == 0) {   /* ND3 alias kept */
         cam->naif_id = -41215;
         snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
-        cam->is_pushbroom = 1;
-        cam->pushbroom_x_sign = -1;
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_RED") == 0) {
+        cam->naif_id = -41212;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_GREEN") == 0) {
+        cam->naif_id = -41216;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_BLUE") == 0) {
+        cam->naif_id = -41214;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_IR") == 0) {
+        cam->naif_id = -41218;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_P1") == 0) {
+        cam->naif_id = -41217;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_P2") == 0) {
+        cam->naif_id = -41213;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_S1") == 0) {
+        cam->naif_id = -41219;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    else if (strcmp(instrument, "HRSC_S2") == 0) {
+        cam->naif_id = -41211;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
+        cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
     }
     else if (strcmp(instrument, "CTX") == 0) {
         cam->naif_id = -74021;
@@ -308,7 +353,9 @@ static void load_iss_camera_model(const char *instrument,
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
                         "(supported: CRISM_VNIR, CRISM_IR, OMEGA_SWIR_C, "
                         "OMEGA_SWIR_L, OMEGA_VNIR, CTX, LROC_NACL, LROC_NACR, "
-                        "HRSC_ND3, VIMS_IR, VIMS_VIS, ISS_NAC, ISS_WAC)."),
+                        "HRSC_NADIR, HRSC_RED, HRSC_GREEN, HRSC_BLUE, HRSC_IR, "
+                        "HRSC_P1, HRSC_P2, HRSC_S1, HRSC_S2, "
+                        "VIMS_IR, VIMS_VIS, ISS_NAC, ISS_WAC)."),
                        instrument);
 
     char varname[80];
@@ -317,7 +364,7 @@ static void load_iss_camera_model(const char *instrument,
     const char *iak_hint = cam->is_pushbroom
         ? (cam->is_ctx        ? "the MROCTX addendum kernel (mroctxAddendum005.ti)"
          : cam->is_lroc_nac   ? "the LRO LROC IK (lro_lroc_v20.ti)"
-         : cam->naif_id==-41215 ? "the HRSC IAK (hrscAddendum004.ti)"
+         : (cam->naif_id >= -41219 && cam->naif_id <= -41211) ? "the HRSC IAK (hrscAddendum004.ti)"
                                 : "the CRISM addendum kernel (crismAddendum001.ti)")
         : "the IssNAAddendum/IssWAAddendum instrument addendum kernel";
 
@@ -379,7 +426,7 @@ static void load_iss_camera_model(const char *instrument,
                                 "from the loaded IK."), varname);
             return;
         }
-        if (cam->naif_id == -41215) {
+        if (cam->naif_id >= -41219 && cam->naif_id <= -41211) {
             /* HRSC ND3: FOCAL_LENGTH from channel IAK (-41215); PIXEL_PITCH is
              * shared under -41210 (already loaded above from INS-41215_PIXEL_PITCH
              * — note: the shared INS-41210_PIXEL_PITCH is the canonical value, but
@@ -700,7 +747,7 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = NO;
-    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,CTX,LROC_NACL,LROC_NACR,HRSC_ND3,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,CTX,LROC_NACL,LROC_NACR,HRSC_NADIR,HRSC_RED,HRSC_GREEN,HRSC_BLUE,HRSC_IR,HRSC_P1,HRSC_P2,HRSC_S1,HRSC_S2,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
     opt_instrument->description = _("Instrument camera model to use with -c. "
         "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch, requires "
         "line_rate= in p.spiceinit history). "
@@ -709,8 +756,10 @@ int main(int argc, char *argv[])
         "LROC_NACL/LROC_NACR: LRO Narrow Angle Camera pushbroom (per-line epoch, "
         "single K1 LroNarrowAngleDistortionMap, requires line_rate= and "
         "lro_lroc_v20.ti via ik=; NACR has flipped cross-track axis). "
-        "HRSC_ND3: MEX HRSC nadir pushbroom (along-track=Y, reversed cross-track, "
-        "TRANSX[0] offset; requires line_rate= and hrscAddendum004.ti via ik=). "
+        "HRSC_NADIR/RED/GREEN/BLUE/IR/P1/P2/S1/S2: MEX HRSC pushbroom channels "
+        "(all use frame MEX_HRSC_HEAD; along-track=Y, reversed cross-track X, "
+        "per-channel TRANSX[0] offset; no distortion; requires line_rate= "
+        "and hrscAddendum004.ti via ik=; HRSC_ND3 is an alias for HRSC_NADIR). "
         "ISS_NAC/ISS_WAC: Cassini ISS framing camera (closed-form inverse).");
 
     opt_filter1 = G_define_option();
