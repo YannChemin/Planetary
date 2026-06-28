@@ -465,6 +465,55 @@ OPUS holdings.
 | `ganymede_c0359946135_g2` | 1996-09-06 | 4,412 km | Ganymede G2; grooved terrain (sulci) at lat 35°N |
 | `callisto_c0401505300_c9` | 1997-06-25 | 16,362 km | Callisto C9; heavily cratered ancient surface |
 
+### MRO CTX EDR images (`ctx=`)
+
+```sh
+# List the built-in CTX catalog
+p.in.archive -l
+
+# Import the first CTX view of Jezero Crater, Perseverance Mars 2020 landing site (~36 MB)
+p.in.archive ctx=mars_ctx_jezero_edr output=ctx_jezero
+
+# Import the first CTX view of Gale Crater, Curiosity MSL landing site (~93 MB)
+p.in.archive ctx=mars_ctx_gale_edr output=ctx_gale
+```
+
+Raw EDR (Level 0), 8-bit square-root-encoded DN (not calibrated reflectance), 5024 science
+pixels wide, ~6 m/px. Attached-label PDS3 IMG hosted on the PDS Imaging Node
+(`planetarydata.jpl.nasa.gov/img/data/mro/ctx/`). Over 5500 volumes; each scene is a
+pushbroom strip up to hundreds of MB. Imported via `p.in.pds3`. Pass a direct `https://`
+URL to any `*.IMG` on planetarydata.jpl.nasa.gov to import any CTX observation.
+
+| Key | Date | Lines | Scene |
+|---|---|---|---|
+| `mars_ctx_jezero_edr` | 2006-12-16 | 7168 | Jezero Crater (Perseverance Mars 2020 landing site); ancient river delta at 18.5°N 77.3°E |
+| `mars_ctx_gale_edr` | 2006-09-29 | 18417 | Gale Crater (Curiosity MSL landing site); Aeolis Mons (Mt. Sharp) layered deposits at 5.1°S 137.4°E |
+
+### Hayabusa2 ONC calibrated I/F images (`onc=`)
+
+```sh
+# List the built-in ONC catalog
+p.in.archive -l
+
+# Import ONC-T v-band global view of Ryugu (July 2018, Box-A ~20 km altitude)
+p.in.archive onc=ryugu_onct_20180712_global output=onc_ryugu_global
+
+# Import ONC-T v-band MINERVA-II1 close-up (~55 m altitude, Sept 2018)
+p.in.archive onc=ryugu_onct_20180921_minerva output=onc_ryugu_minerva
+```
+
+PDS4 + standard FITS (`*_l2d.fit`) calibrated I/F (radiance factor, dimensionless),
+32-bit float, hosted on the JAXA/DARTS archive (`data.darts.isas.jaxa.jp`). Image
+data is in the first FITS extension (primary HDU is empty). ONC-T is 1024×1024 with 7
+narrow-band filters (v:550nm, w:700nm, x:860nm, b:480nm, u:ultraviolet, Na, p:NIR).
+Imported via `r.in.gdal`. Pass a direct `https://` URL to any `*_l2d.fit` on
+data.darts.isas.jaxa.jp to import any ONC observation.
+
+| Key | Date | Altitude | Scene |
+|---|---|---|---|
+| `ryugu_onct_20180712_global` | 2018-07-12 | ~20 km | Box-A home position; global disk view of diamond-shaped C-type Ryugu, 550 nm |
+| `ryugu_onct_20180921_minerva` | 2018-09-21 | ~55 m | MINERVA-II1 rover deployment; close-up of boulder-covered equatorial surface |
+
 ### MESSENGER MDIS calibrated CDR images (`mdis=`)
 
 ```sh

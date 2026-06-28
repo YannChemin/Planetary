@@ -1360,29 +1360,32 @@ PDS3 attached label (no separate .LBL), 32-bit float calibrated radiance
 (W/m²/μm/sr), imported via `p.in.pds3`. Sensor tag: `MDIS_NAC`/`MDIS_WAC`,
 mission `MESSENGER`. Direct https URL pass-through supported.
 
-**4-B-5. Hayabusa2/ONC** (Optical Navigation Camera)
+**4-B-5. Hayabusa2/ONC** (Optical Navigation Camera) -- **DONE**
 
-ONC-T (telescopic, 1024×1024, 7 band-pass filters), ONC-W1/W2 (wide,
-1024×1024, monochrome). FITS. JAXA/DARTS:
-`data.darts.isas.jaxa.jp/pub/hayabusa2/onc_bundle/` (PDS4 + FITS).
-Target: Ryugu. Good catalog entries: global colour map, boulder field
-near landing site, touchdown approach sequence.
-Import: `r.in.gdal` (FITS), single or multi-band.
-Complexity: **medium** -- new JAXA archive host, PDS4 label structure
-differs from PDS3, may need label parsing for band metadata.
+`onc=` option added. Catalog has 2 curated ONC-T l2d I/F entries from the
+JAXA/DARTS PDS4 archive (`data.darts.isas.jaxa.jp/pub/pds4/data/hyb2/hyb2_onc/data_iof/proximity/`):
+- `ryugu_onct_20180712_global`: ONC-T 550nm v-band, 2018-07-12T06:45:13,
+  1024×1024, Box-A home position ~20 km alt — global disk view of Ryugu.
+- `ryugu_onct_20180921_minerva`: ONC-T 550nm v-band, 2018-09-21T03:34:42,
+  1024×1024, MINERVA-II1 deployment ~55 m alt — boulder-covered close-up.
+Standard FITS (image in first extension, primary HDU NAXIS=0), imported via
+`r.in.gdal`. Sensor tag: `ONC_T`/`ONC_W1`/`ONC_W2`, mission `HAYABUSA2`.
+32-bit float calibrated I/F (radiance factor, dimensionless).
 
-**4-B-6. MRO/CTX** (Context Camera)
+**4-B-6. MRO/CTX** (Context Camera) -- **DONE**
 
-Pushbroom, 5024 pixels wide, 6 m/px, monochrome, PDS3 IMG/LBL.
-PDS Geosciences Node:
-`pds-geosciences.wustl.edu/mro/mro-m-ctx-2-edr-l0-v1.0/`
-Very large data volumes; each observation can be hundreds of MB.
-Good catalog entries: Jezero Crater (context for CRISM + Perseverance),
-Gale Crater, Valles Marineris cross-section.
-Import: `p.in.pds3` (standard PDS3 binary).
-Complexity: **medium** -- pushbroom data fills 100s MB per scene; the
-import itself is straightforward but scene selection for the catalog
-requires checking index files for specific targets.
+`ctx=` option added. Archive is PDS Imaging Node (NOT pds-geosciences.wustl.edu;
+CTX is not hosted there). URL: `planetarydata.jpl.nasa.gov/img/data/mro/ctx/`.
+Over 5500 volumes (mrox_0001--mrox_5532). Catalog has 2 entries found via
+cumulative index geographic search (col 16=CENTER_LONGITUDE°W, col 17=CENTER_LATITUDE):
+- `mars_ctx_jezero_edr`: P02_001820_1984_XI_18N282W.IMG in mrox_0023,
+  2006-12-16T06:27:29, 7168×5024, lat 18.47°N lon 282.67°W, ~36 MB.
+  RATIONALE: "Crater southeast of Hargraves Crater" (Jezero region).
+- `mars_ctx_gale_edr`: T01_000815_1749_XN_05S222W.IMG in mrox_0003,
+  2006-09-29T00:20:10, 18417×5024, lat 5.14°S lon 222.59°W, ~93 MB.
+  RATIONALE: "Gale Crater landforms".
+Attached-label PDS3 (LABEL_RECORDS=1, ^IMAGE=2), 8-bit uint sqrt-encoded DN.
+Imported via p.in.pds3. Sensor: CTX, mission: MRO.
 
 ### 4-C. Camera-model inverse back-projection extensions
 
