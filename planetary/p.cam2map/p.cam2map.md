@@ -57,6 +57,16 @@ Supported instruments in camera mode:
   5176 columns); binned CTX data would need manual boresight rescaling.
   `mroctxAddendum005.ti` must be included in `p.spiceinit`'s `ik=` list.
 
+- **`HRSC_ND3`** (MEX): pushbroom per-line binary search, nadir channel (NAIF −41215),
+  frame `MEX_HRSC_HEAD` (−41210) — the shared head frame used by all 9 HRSC CCD
+  strips in ISIS3. Along-track = Y (same as CRISM: binary search converges on
+  dvec[1]≈0). Cross-track = X, but `TRANSX[1] = −pixel_pitch` (sign reversed vs
+  CRISM's `+pixel_pitch`), plus a constant focal-plane offset `TRANSX[0] ≈ +0.034 mm`
+  loaded from `hrscAddendum004.ti`. Sample inversion: `sample = boresight_sample −
+  (x_fp − TRANSX[0]) / pixel_pitch − 1`. No radial distortion (OD_K=0,0,0). Parameters:
+  FOCAL_LENGTH≈175 mm, PIXEL_PITCH=7 µm, BORESIGHT_SAMPLE=2592.5 (all from IAK).
+  `hrscAddendum004.ti` must be in `p.spiceinit`'s `ik=` list.
+
 - **`LROC_NACL` / `LROC_NACR`** (LRO): pushbroom per-line binary search, same
   `line_rate=` mechanism as CRISM and CTX. Axis orientation is identical to CTX
   (along-track = X = dvec[0], cross-track = Y = dvec[1]). Distortion uses the custom
@@ -192,6 +202,20 @@ p.spiceinit map=vims_ir target=TITAN observer=CASSINI \
 
 g.region n=75 s=-75 e=110 w=-70 res=1
 p.cam2map -c input=vims_ir output=vims_map instrument=VIMS_IR
+```
+
+Back-project a MEX HRSC ND3 nadir strip onto a real lat/lon grid
+(requires `line_rate=`, `hrscAddendum004.ti`, and the MEX FK/SPK/CK):
+
+```sh
+p.spiceinit map=hrsc_nd3 target=MARS observer=MEX \
+    time=2004-01-10T13:51:51 line_rate=0.00512 \
+    lsk=naif0012.tls sclk=MEX_210101_STEP.TSC \
+    ik=MEX_HRSC_V04.TI,hrscAddendum004.ti fk=MEX_V16.TF \
+    pck=pck00010.tpc spk=ORMM__040101000000_01795.BSP ck=ATNM_RECONSTITUTED_00001.BC
+
+g.region n=-32 s=-48 e=92 w=88 res=0.0002
+p.cam2map -c input=hrsc_nd3 output=hrsc_map instrument=HRSC_ND3
 ```
 
 Back-project an LRO LROC NAC-L image of the Apollo 11 landing site

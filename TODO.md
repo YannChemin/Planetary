@@ -1510,3 +1510,16 @@ from `lro_lroc_v20.ti`), forward `uy = dy/(1+K1·dy²)`, inverse fixed-point
 (ITRANSS[2]=−142.857) so `sample = boresight_sample − yt/pixel_pitch − 1`; NACL uses
 +1. Parameters (FOCAL_LENGTH, PIXEL_PITCH, BORESIGHT_SAMPLE, OD_K) all from the IK
 `lro_lroc_v20.ti` (not an IAK). Full-resolution (5064 columns) assumed.
+
+**4-C-6. `p.cam2map -c` for HRSC_ND3 (pushbroom, reversed TRANSX)** -- **DONE**
+
+MEX HRSC nadir channel (`instrument=HRSC_ND3`, NAIF −41215) added to `p.cam2map -c`.
+Same binary-search path as CRISM (along-track = Y = dvec[1]). Two differences from CRISM:
+- **TRANSX sign**: HRSC has TRANSX[1]=−pixel_pitch (reversed), so cross-track inversion
+  uses `pushbroom_x_sign=−1`: `sample = boresight_sample − (x_fp − TRANSX[0])/pixel_pitch − 1`.
+  CRISM now uses `pushbroom_x_sign=+1` via the same generalized formula.
+- **TRANSX[0] offset**: HRSC boresight is displaced from focal-plane origin by
+  `TRANSX[0] ≈ +0.034 mm` (loaded from `hrscAddendum004.ti`, stored as `focal_plane_x0`).
+- Frame: `MEX_HRSC_HEAD` (−41210) — the shared head frame for all 9 HRSC channels
+  (as per ISIS3's `HrscCamera.cpp: instrumentRotation()->SetFrame(-41210)`).
+- No radial distortion (OD_K=0,0,0); FOCAL_LENGTH ≈ 175 mm, PIXEL_PITCH=7 µm.
