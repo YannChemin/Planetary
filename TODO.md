@@ -1470,6 +1470,16 @@ look vector, and the inverse is closed-form):
   IssCameraModel struct to distinguish from ISS framing.
 - Per-pixel SPICE cost: ~3 calls (spkpos + 2 pxform) -- same as ISS.
 
+**4-B-8. LRO/LROC NAC** (Narrow Angle Camera) -- **DONE**
+
+LRO LROC NAC (`lronac=`) added to `p.in.archive`. Two cameras: NAC-L (−85600) and NAC-R
+(−85610), each 5064 px wide at 7 µm pixel pitch. CDR (calibrated DN), PDS3 attached-label
+`IMG`, LABEL_RECORDS=1, ^IMAGE=2, 16-bit LSB signed int. Archive: `pds.lroc.asu.edu`
+(redirects to `pds.lroc.im-ldi.com`). URL suffix `LC.IMG`/`RC.IMG` selects NACL/NACR.
+Two catalog entries verified (HTTP 200, ~505 MB each):
+- `moon_lronac_apollo11_l`: Apollo 11 landing site, 2009-07-12, orbit 212, ~1.22 m/px
+- `moon_lronac_apollo12_l`: Apollo 12 / Surveyor 3 site, 2009-08-11, orbit 582, ~1.10 m/px
+
 **4-C-4. `p.cam2map -c` for CTX (pushbroom + OD_K radial distortion)** -- **DONE**
 
 MRO CTX (`instrument=CTX`) added to `p.cam2map -c`. Same per-line binary-search
@@ -1489,3 +1499,14 @@ mechanism as CRISM, with two instrument-specific differences:
   `mroctxAddendum005.ti`; frame `MRO_CTX` (NAIF ID −74021).
 - Full-resolution (SpatialSumming=1, 5176 columns) assumed; binned data needs
   manual boresight rescaling (not in scope).
+
+**4-C-5. `p.cam2map -c` for LROC_NACL / LROC_NACR** -- **DONE**
+
+LRO LROC NAC-L and NAC-R added to `p.cam2map -c`. Same CTX-style axis orientation
+(along-track = X = dvec[0], binary search; cross-track = Y = dvec[1]). Distortion
+follows ISIS3's `LroNarrowAngleDistortionMap`: single K1 (NACL=1.81e-5, NACR=1.83e-5
+from `lro_lroc_v20.ti`), forward `uy = dy/(1+K1·dy²)`, inverse fixed-point
+`yt = uy·(1+K1·yt²)` iterated to `|Δyt| < 1e-10`. NACR has `pushbroom_y_sign=−1`
+(ITRANSS[2]=−142.857) so `sample = boresight_sample − yt/pixel_pitch − 1`; NACL uses
++1. Parameters (FOCAL_LENGTH, PIXEL_PITCH, BORESIGHT_SAMPLE, OD_K) all from the IK
+`lro_lroc_v20.ti` (not an IAK). Full-resolution (5064 columns) assumed.

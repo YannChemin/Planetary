@@ -93,12 +93,14 @@
 /* closed-form algebraic inverse. Deliberately not implemented yet      */
 /* (see TODO.md) -- instrument= fails loudly for them, not a guess.     */
 /* ------------------------------------------------------------------ */
-/* IssCameraModel covers ISS/CRISM/OMEGA/VIMS/CTX.
- * ISS:   is_pushbroom=0, real K1 distortion, per-filter focal length.
- * CRISM: is_pushbroom=1, k1=0, per-line epoch from line_rate.
- * OMEGA: is_omega=1, is_pushbroom=1, per-line epoch + mirror scan.
- * VIMS:  is_vims=1, closed-form 2-axis angular scan inverse (no pushbroom).
- * CTX:   is_ctx=1, is_pushbroom=1, along-track=X axis, OD_K[3] distortion. */
+/* IssCameraModel covers ISS/CRISM/OMEGA/VIMS/CTX/LROC_NAC.
+ * ISS:      is_pushbroom=0, real K1 distortion, per-filter focal length.
+ * CRISM:    is_pushbroom=1, k1=0, per-line epoch from line_rate.
+ * OMEGA:    is_omega=1, is_pushbroom=1, per-line epoch + mirror scan.
+ * VIMS:     is_vims=1, closed-form 2-axis angular scan inverse (no pushbroom).
+ * CTX:      is_ctx=1, is_pushbroom=1, along-track=X, OD_K[3] distortion.
+ * LROC_NAC: is_lroc_nac=1, is_pushbroom=1, along-track=X, custom K1 model;
+ *            pushbroom_y_sign=+1 (NACL) or -1 (NACR, flipped cross-track). */
 typedef struct {
     int    naif_id;
     char   frame[64];
@@ -121,6 +123,9 @@ typedef struct {
     int    vims_line_offset; /* swath line offset into 64x64 grid */
     int    is_ctx;       /* 1=MRO CTX: along-track=X, cross-track=Y, OD_K */
     double odk[3];       /* CTX radial distortion: drOverR=odk[0]+r²*(odk[1]+r²*odk[2]) */
+    int    is_lroc_nac;  /* 1=LRO LROC NAC-L/NAC-R: along-track=X, custom K1 distortion */
+    double nac_k1;       /* LROC NAC: single OD_K coeff; model: uy=dy/(1+K1*dy²) */
+    int    pushbroom_y_sign; /* +1=NACL/CTX (Y cross-track positive), -1=NACR (Y flipped) */
 } IssCameraModel;
 
 static void load_iss_camera_model(const char *instrument,
@@ -169,6 +174,21 @@ static void load_iss_camera_model(const char *instrument,
         snprintf(cam->frame, sizeof(cam->frame), "MRO_CTX");
         cam->is_pushbroom = 1;
         cam->is_ctx = 1;
+        cam->pushbroom_y_sign = 1;
+    }
+    else if (strcmp(instrument, "LROC_NACL") == 0) {
+        cam->naif_id = -85600;
+        snprintf(cam->frame, sizeof(cam->frame), "LRO_LROCNACL");
+        cam->is_pushbroom = 1;
+        cam->is_lroc_nac = 1;
+        cam->pushbroom_y_sign = 1;
+    }
+    else if (strcmp(instrument, "LROC_NACR") == 0) {
+        cam->naif_id = -85610;
+        snprintf(cam->frame, sizeof(cam->frame), "LRO_LROCNACR");
+        cam->is_pushbroom = 1;
+        cam->is_lroc_nac = 1;
+        cam->pushbroom_y_sign = -1;
     }
     else if (strcmp(instrument, "ISS_NAC") == 0) {
         cam->naif_id = -82360;
@@ -269,16 +289,17 @@ static void load_iss_camera_model(const char *instrument,
     else
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
                         "(supported: CRISM_VNIR, CRISM_IR, OMEGA_SWIR_C, "
-                        "OMEGA_SWIR_L, OMEGA_VNIR, CTX, ISS_NAC, ISS_WAC, "
-                        "VIMS_IR, VIMS_VIS)."),
+                        "OMEGA_SWIR_L, OMEGA_VNIR, CTX, LROC_NACL, LROC_NACR, "
+                        "VIMS_IR, VIMS_VIS, ISS_NAC, ISS_WAC)."),
                        instrument);
 
     char varname[80];
     int n;
 
     const char *iak_hint = cam->is_pushbroom
-        ? (cam->is_ctx ? "the MROCTX addendum kernel (mroctxAddendum005.ti)"
-                       : "the CRISM addendum kernel (crismAddendum001.ti)")
+        ? (cam->is_ctx      ? "the MROCTX addendum kernel (mroctxAddendum005.ti)"
+         : cam->is_lroc_nac ? "the LRO LROC IK (lro_lroc_v20.ti)"
+                            : "the CRISM addendum kernel (crismAddendum001.ti)")
         : "the IssNAAddendum/IssWAAddendum instrument addendum kernel";
 
     snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
@@ -337,6 +358,22 @@ static void load_iss_camera_model(const char *instrument,
             if (p_spice_gdpool_d(varname, 0, 3, &n, cam->odk) < 0 || n != 3)
                 G_fatal_error(_("Camera mode (-c): could not read %s (3 values) "
                                 "from the loaded IK."), varname);
+            return;
+        }
+        if (cam->is_lroc_nac) {
+            /* LROC NAC-L/NAC-R: focal length + single OD_K coefficient.
+             * Distortion model (LroNarrowAngleDistortionMap): uy = dy/(1+K1*dy²).
+             * Along-track = X (dvec[0]); cross-track = Y (dvec[1]).
+             * NACR has pushbroom_y_sign=-1 (ITRANSS[2]=-142.857). */
+            snprintf(varname, sizeof(varname), "INS%d_FOCAL_LENGTH", cam->naif_id);
+            if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
+                G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
+                                "IK -- has lro_lroc_v20.ti been attached via "
+                                "p.spiceinit's ik=?"), varname);
+            snprintf(varname, sizeof(varname), "INS%d_OD_K", cam->naif_id);
+            if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->nac_k1) < 0 || n != 1)
+                G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                               varname);
             return;
         }
         /* CRISM: single FOCAL_LENGTH scalar */
@@ -624,12 +661,15 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = NO;
-    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,CTX,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,CTX,LROC_NACL,LROC_NACR,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
     opt_instrument->description = _("Instrument camera model to use with -c. "
         "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch, requires "
         "line_rate= in p.spiceinit history). "
         "CTX: MRO Context Camera pushbroom (per-line epoch, OD_K distortion, "
         "requires line_rate= and mroctxAddendum005.ti via ik=). "
+        "LROC_NACL/LROC_NACR: LRO Narrow Angle Camera pushbroom (per-line epoch, "
+        "single K1 LroNarrowAngleDistortionMap, requires line_rate= and "
+        "lro_lroc_v20.ti via ik=; NACR has flipped cross-track axis). "
         "ISS_NAC/ISS_WAC: Cassini ISS framing camera (closed-form inverse).");
 
     opt_filter1 = G_define_option();
@@ -1059,8 +1099,9 @@ int main(int argc, char *argv[])
 #define OMEGA_F(dv) (cam.omega_rot[0][1]*(dv)[0] + \
                      cam.omega_rot[1][1]*(dv)[1] + \
                      cam.omega_rot[2][1]*(dv)[2])
-/* CTX: along-track = X (dvec[0]); CRISM: along-track = Y (dvec[1]) */
-#define PUSHBROOM_F(dv) (cam.is_omega ? OMEGA_F(dv) : (cam.is_ctx ? (dv)[0] : (dv)[1]))
+/* CTX/LROC_NAC: along-track = X (dvec[0]); CRISM: along-track = Y (dvec[1]) */
+#define PUSHBROOM_F(dv) (cam.is_omega ? OMEGA_F(dv) \
+    : ((cam.is_ctx || cam.is_lroc_nac) ? (dv)[0] : (dv)[1]))
 
                     double mid_line_f = (in_rows - 1) / 2.0;
                     int pb_ok = 1;
@@ -1183,6 +1224,21 @@ int main(int argc, char *argv[])
                         }
                         double dy = (rp > 0.0) ? (uy / (1.0 - drOverR)) : 0.0;
                         in_col_f = cam.boresight_sample + dy / cam.pixel_pitch - 1.0;
+                        in_row_f = in_row_best;
+                    } else if (cam.is_lroc_nac) {
+                        /* LROC NAC cross-track: dvec[1] (Y) is cross-track.
+                         * LroNarrowAngleDistortionMap: uy=dy/(1+K1*dy²), so
+                         * inverse (undist→dist): yt = uy*(1+K1*yt²), iterate. */
+                        double uy = dvec_best[1] * cam.focal_length / dvec_best[2];
+                        double yt = uy;
+                        double yprev = 1e30;
+                        for (int ni = 0; ni < 50 && fabs(yt - yprev) > 1e-10; ni++) {
+                            yprev = yt;
+                            yt = uy * (1.0 + cam.nac_k1 * yt * yt);
+                        }
+                        /* cam.pushbroom_y_sign: +1 for NACL, -1 for NACR */
+                        in_col_f = cam.boresight_sample
+                                 + cam.pushbroom_y_sign * yt / cam.pixel_pitch - 1.0;
                         in_row_f = in_row_best;
                     } else {
                         /* CRISM cross-track inversion: pinhole, no distortion. */

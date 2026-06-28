@@ -57,6 +57,18 @@ Supported instruments in camera mode:
   5176 columns); binned CTX data would need manual boresight rescaling.
   `mroctxAddendum005.ti` must be included in `p.spiceinit`'s `ik=` list.
 
+- **`LROC_NACL` / `LROC_NACR`** (LRO): pushbroom per-line binary search, same
+  `line_rate=` mechanism as CRISM and CTX. Axis orientation is identical to CTX
+  (along-track = X = dvec[0], cross-track = Y = dvec[1]). Distortion uses the custom
+  `LroNarrowAngleDistortionMap` with a **single** `OD_K` coefficient K1 (NACL=1.81e-5,
+  NACR=1.83e-5, from `lro_lroc_v20.ti`): forward `uy = dy/(1+K1·dy²)`, inverse
+  `yt = uy·(1+K1·yt²)` iterated to `|Δyt| < 1e-10` (≤50 steps). NACR has a
+  **flipped cross-track** (ITRANSS[2]=−142.857 vs NACL's +142.857): stored as
+  `pushbroom_y_sign=−1`, so `sample = boresight_sample − yt/pixel_pitch − 1`. Both
+  cameras share `pixel_pitch=7 µm`; boresight_sample=2548 (NACL) / 2496 (NACR).
+  Full-resolution (5064 columns, SpatialSumming=1) assumed.
+  `lro_lroc_v20.ti` must be included in `p.spiceinit`'s `ik=` list.
+
 - **`VIMS_IR` / `VIMS_VIS`** (Cassini): closed-form algebraic inverse -- single epoch
   for the whole frame (no per-line timing). Ported from ISIS3's `VimsGroundMap::
   LookDirection()`: `θ = acos(dvec[1])`, `φ = atan2(-dvec[2], dvec[0])`, then
@@ -180,6 +192,20 @@ p.spiceinit map=vims_ir target=TITAN observer=CASSINI \
 
 g.region n=75 s=-75 e=110 w=-70 res=1
 p.cam2map -c input=vims_ir output=vims_map instrument=VIMS_IR
+```
+
+Back-project an LRO LROC NAC-L image of the Apollo 11 landing site
+(requires `line_rate=` from `LINE_EXPOSURE_DURATION` and `lro_lroc_v20.ti`):
+
+```sh
+p.spiceinit map=lronac target=MOON observer=LRO \
+    time=2009-07-12T05:06:37.568 line_rate=0.000764267 \
+    lsk=naif0012.tls sclk=lro_clkcor_2022196_v00.tsc \
+    ik=lro_lroc_v20.ti,lro_instrumentAddendum_v05.ti fk=lro_v30.tf \
+    pck=pck00010.tpc spk=lrorg_2009182_2009214_v01.bsp ck=lrolc_2009193_v03.bc
+
+g.region n=1.0 s=0.0 e=23.8 w=22.8 res=0.00001
+p.cam2map -c input=lronac output=lronac_map instrument=LROC_NACL
 ```
 
 Back-project an MRO CTX image onto a real lat/lon grid

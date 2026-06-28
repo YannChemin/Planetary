@@ -598,6 +598,38 @@ HRSC `.IMG` not in the catalog.
 | `mars_hrsc_hellas_nd3` | 2004-01-10 | 10 | ~19.8 m/px | Eastern Hellas Planitia rim, 32–48°S, 88–92°E; deepest impact basin on Mars |
 | `mars_hrsc_noachis_nd3` | 2005-07-26 | 1962 | ~21.4 m/px | Noachis Terra / southern Coprates, 19–33°S, ~297°E; ancient cratered highlands |
 
+### LRO LROC NAC CDR images (`lronac=`)
+
+```sh
+# List the built-in LROC NAC catalog
+p.in.archive -l
+
+# Import the Apollo 11 landing site NAC-L strip (~505 MB)
+p.in.archive lronac=moon_lronac_apollo11_l output=lronac_apollo11
+
+# Import the Apollo 12 landing site NAC-L strip (~505 MB)
+p.in.archive lronac=moon_lronac_apollo12_l output=lronac_apollo12
+
+# Import any LROC NAC file directly by URL
+p.in.archive lronac=https://pds.lroc.asu.edu/data/LRO-L-LROC-3-CDR-V1.0/LROLRC_XXXX/DATA/COM/YYYYDDD/NAC/MXXXXXXXXLC.IMG output=lronac_custom
+```
+
+Single-band attached-label PDS3 `.IMG` files from the LROC PDS archive
+(`pds.lroc.asu.edu`, which redirects to `pds.lroc.im-ldi.com`). LRO LROC
+(Lunar Reconnaissance Orbiter Camera) has two NAC cameras: NAC-L (NAIF ID −85600,
+frame `LRO_LROCNACL`) and NAC-R (−85610, `LRO_LROCNACR`), both 5064 pixels wide
+at 7 µm pixel pitch (focal lengths 699.62 mm / 701.57 mm respectively). Calibrated
+DN (CDR), `RECORD_BYTES=5064, LABEL_RECORDS=1, ^IMAGE=2`, 16-bit LSB signed integer.
+Ground sampling distance varies from ~0.5 m/px (50 km nominal orbit) to ~1.3 m/px
+(commissioning 120 km orbit). NAC-L and NAC-R images do not overlap and are
+imported independently. Sensor tag written to `planetary.json` as `LRO_LROC_NACL`
+or `LRO_LROC_NACR` depending on URL suffix (`LC.IMG` / `RC.IMG`).
+
+| Key | Camera | Date | Orbit | Resolution | Scene |
+|---|---|---|---|---|---|
+| `moon_lronac_apollo11_l` | NAC-L | 2009-07-12 | 212 | ~1.22 m/px | Apollo 11 landing site, 0.51°N 23.27°E; first human Moon landing |
+| `moon_lronac_apollo12_l` | NAC-L | 2009-08-11 | 582 | ~1.10 m/px | Apollo 12 / Surveyor 3 landing site, 3.22°S 336.47°E (23.53°W) |
+
 ## EXAMPLES
 
 ### List products matching a keyword
