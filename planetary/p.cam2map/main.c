@@ -93,9 +93,10 @@
 /* closed-form algebraic inverse. Deliberately not implemented yet      */
 /* (see TODO.md) -- instrument= fails loudly for them, not a guess.     */
 /* ------------------------------------------------------------------ */
-/* IssCameraModel is also used for CRISM (pushbroom), which shares the
- * same pinhole fields (boresight_sample/pixel_pitch/focal_length) but
- * has is_pushbroom=1, k1=0, and a per-line epoch from line_rate. */
+/* IssCameraModel is also used for CRISM (pushbroom) and OMEGA (whiskbroom).
+ * CRISM: is_pushbroom=1, k1=0, per-line epoch from line_rate.
+ * OMEGA: is_omega=1, is_pushbroom=1, per-line epoch + mirror scan; mirror
+ *        parameters and omega_rot (detector→MEX_SPACECRAFT) loaded from IK. */
 typedef struct {
     int    naif_id;
     char   frame[64];
@@ -104,7 +105,11 @@ typedef struct {
     double pixel_pitch;
     double focal_length;
     double k1;
-    int    is_pushbroom; /* 1=CRISM per-line epoch, 0=ISS framing */
+    int    is_pushbroom; /* 1=CRISM/OMEGA per-line epoch, 0=ISS framing */
+    int    is_omega;     /* 1=OMEGA whiskbroom mirror scan */
+    double omega_rot[3][3]; /* detector frame → MEX_SPACECRAFT rotation */
+    double mirror_center;   /* INS-41420_MIRROR_CENTER_POSITION */
+    double mirror_slope;    /* INS-41420_MIRROR_SLOPE (deg/DN) */
 } IssCameraModel;
 
 static void load_iss_camera_model(const char *instrument,
@@ -115,7 +120,25 @@ static void load_iss_camera_model(const char *instrument,
 {
     memset(cam, 0, sizeof(*cam));
 
-    if (strcmp(instrument, "CRISM_VNIR") == 0) {
+    if (strcmp(instrument, "OMEGA_SWIR_C") == 0) {
+        cam->naif_id = -41421;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_SWIR_C");
+        cam->is_pushbroom = 1;
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "OMEGA_SWIR_L") == 0) {
+        cam->naif_id = -41422;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_SWIR_L");
+        cam->is_pushbroom = 1;
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "OMEGA_VNIR") == 0) {
+        cam->naif_id = -41410;
+        snprintf(cam->frame, sizeof(cam->frame), "MEX_OMEGA_VNIR");
+        cam->is_pushbroom = 1;
+        cam->is_omega = 1;
+    }
+    else if (strcmp(instrument, "CRISM_VNIR") == 0) {
         cam->naif_id = -74017;
         snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_VNIR");
         cam->is_pushbroom = 1;
@@ -161,11 +184,36 @@ static void load_iss_camera_model(const char *instrument,
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                        varname);
 
-    /* CRISM: no radial distortion (k1=0, left zero-initialised), and a
-     * single scalar FOCAL_LENGTH (not per-filter-pair). Return early -- the
-     * ISS-specific summing correction and per-filter focal-length lookup
-     * below don't apply. */
+    /* OMEGA/CRISM pushbroom: no K1, no summing correction, no per-filter
+     * focal length. OMEGA also needs the mirror parameters and the fixed
+     * detector-to-spacecraft rotation. Return early for both. */
     if (cam->is_pushbroom) {
+        if (cam->is_omega) {
+            /* Mirror parameters live under the shared SWIR id (-41420) --
+             * one physical mirror drives all three OMEGA channels. */
+            if (p_spice_gdpool_d("INS-41420_MIRROR_CENTER_POSITION", 0, 1, &n,
+                                  &cam->mirror_center) < 0 || n != 1)
+                G_fatal_error(_("Camera mode (-c): could not read "
+                                "INS-41420_MIRROR_CENTER_POSITION from the "
+                                "loaded IK (MEX_OMEGA_V03.TI)."));
+            if (p_spice_gdpool_d("INS-41420_MIRROR_SLOPE", 0, 1, &n,
+                                  &cam->mirror_slope) < 0 || n != 1)
+                G_fatal_error(_("Camera mode (-c): could not read "
+                                "INS-41420_MIRROR_SLOPE from the loaded IK "
+                                "(MEX_OMEGA_V03.TI)."));
+            /* Pre-rotate from the channel's detector frame into MEX_SPACECRAFT
+             * (fixed TKFRAME chain, et=0 is fine). cam.frame becomes
+             * MEX_SPACECRAFT for all subsequent pxform calls. */
+            if (p_spice_pxform(cam->frame, "MEX_SPACECRAFT", 0.0,
+                                cam->omega_rot) < 0)
+                G_fatal_error(_("Camera mode (-c): pxform('%s' -> "
+                                "'MEX_SPACECRAFT') failed -- is the MEX "
+                                "frame kernel (MEX_V16.TF) attached via "
+                                "p.spiceinit's fk=?"), cam->frame);
+            snprintf(cam->frame, sizeof(cam->frame), "MEX_SPACECRAFT");
+            return;
+        }
+        /* CRISM: single FOCAL_LENGTH scalar */
         snprintf(varname, sizeof(varname), "INS%d_FOCAL_LENGTH", cam->naif_id);
         if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
             G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
@@ -407,7 +455,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_input, *opt_output;
     struct Option  *opt_a, *opt_b, *opt_c;
     struct Option  *opt_interp;
-    struct Option  *opt_instrument, *opt_filter1, *opt_filter2;
+    struct Option  *opt_instrument, *opt_filter1, *opt_filter2, *opt_mirror_dn;
     struct Option  *opt_projection, *opt_clon;
     struct Flag    *flag_camera;
     struct History  history;
@@ -448,7 +496,7 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = NO;
-    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC";
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,ISS_NAC,ISS_WAC";
     opt_instrument->description = _("Instrument camera model to use with -c. "
         "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch binary search, "
         "requires line_rate= in p.spiceinit history). "
@@ -469,6 +517,13 @@ int main(int argc, char *argv[])
     opt_filter2->required    = NO;
     opt_filter2->description = _("ISS_NAC/ISS_WAC: second filter wheel position "
                                   "(e.g. CL2)");
+
+    opt_mirror_dn = G_define_standard_option(G_OPT_R_INPUT);
+    opt_mirror_dn->key         = "mirror_dn";
+    opt_mirror_dn->required    = NO;
+    opt_mirror_dn->description = _("OMEGA_SWIR_C/OMEGA_SWIR_L/OMEGA_VNIR: "
+        "mirror-DN sideplane raster (same dimensions as input, one mirror "
+        "position per pixel -- written by p.in.pds3 -g for OMEGA cubes)");
 
     opt_a = G_define_option(); opt_a->key="a_radius"; opt_a->type=TYPE_DOUBLE;
     opt_a->required=NO; opt_a->answer="3396.19";
@@ -515,6 +570,7 @@ int main(int argc, char *argv[])
 
     if (camera_mode && !opt_instrument->answer)
         G_fatal_error(_("-c requires instrument= (CRISM_VNIR, CRISM_IR, "
+                        "OMEGA_SWIR_C, OMEGA_SWIR_L, OMEGA_VNIR, "
                         "ISS_NAC, or ISS_WAC)."));
 
     double a_km = atof(opt_a->answer);
@@ -565,6 +621,35 @@ int main(int argc, char *argv[])
     }
     Rast_close(fd_in);
     G_free(in_buf);
+
+    /* Load mirror_dn sideplane raster if supplied (OMEGA camera mode).
+     * Must have the same dimensions as the input raster. */
+    DCELL **mirror_dn_data = NULL;
+    if (opt_mirror_dn->answer) {
+        const char *mdn_mapset = G_find_raster(opt_mirror_dn->answer, "");
+        if (!mdn_mapset)
+            G_fatal_error(_("mirror_dn raster <%s> not found"),
+                           opt_mirror_dn->answer);
+        struct Cell_head mdn_region;
+        Rast_get_cellhd(opt_mirror_dn->answer, mdn_mapset, &mdn_region);
+        if (mdn_region.rows != in_rows || mdn_region.cols != in_cols)
+            G_fatal_error(_("mirror_dn raster <%s> is %dx%d but input is "
+                            "%dx%d -- they must have identical dimensions."),
+                           opt_mirror_dn->answer, mdn_region.rows,
+                           mdn_region.cols, in_rows, in_cols);
+        Rast_set_window(&in_region);
+        int fd_mdn = Rast_open_old(opt_mirror_dn->answer, mdn_mapset);
+        DCELL *mdn_buf = Rast_allocate_d_buf();
+        mirror_dn_data = (DCELL **)G_malloc((size_t)in_rows * sizeof(DCELL *));
+        for (int r = 0; r < in_rows; r++) {
+            mirror_dn_data[r] = (DCELL *)G_malloc((size_t)in_cols * sizeof(DCELL));
+            Rast_get_d_row(fd_mdn, mdn_buf, r);
+            memcpy(mirror_dn_data[r], mdn_buf, (size_t)in_cols * sizeof(DCELL));
+        }
+        Rast_close(fd_mdn);
+        G_free(mdn_buf);
+    }
+
     Rast_set_window(&out_region);
 
     /* Camera mode (-c) setup: real target/observer/time/kernels from the
@@ -607,6 +692,11 @@ int main(int argc, char *argv[])
         load_iss_camera_model(opt_instrument->answer, opt_input->answer,
                                opt_filter1->answer, opt_filter2->answer,
                                in_cols, in_rows, &cam);
+
+        if (cam.is_omega && !mirror_dn_data)
+            G_fatal_error(_("OMEGA_SWIR_C/OMEGA_SWIR_L/OMEGA_VNIR require "
+                            "mirror_dn= (the mirror-DN sideplane raster "
+                            "written by p.in.pds3 -g for OMEGA cubes)."));
 
         G_message(_("Camera mode (-c): instrument=%s target=%s observer=%s "
                     "time=%s (et=%.6f)"), opt_instrument->answer, target_upper,
@@ -733,18 +823,26 @@ int main(int argc, char *argv[])
                     }
                 }
                 else {
-                    /* CRISM pushbroom: each scan line has its own epoch
+                    /* CRISM/OMEGA pushbroom: each scan line has its own epoch
                      * et_line = et + (line - mid_line) * line_rate.
-                     * Binary search over lines: find the scan line where the
-                     * surface point's along-track component (dvec[1]) crosses
-                     * zero (surface point is exactly cross-track at that epoch).
-                     * ~log2(nrows) ≈ 9-10 iterations for CRISM's 480-row cube. */
+                     * Outer binary search: find the scan line where the surface
+                     * point's along-track component crosses zero.
+                     *
+                     * CRISM criterion: dvec_mex[1] (Y in MRO_CRISM frame).
+                     * OMEGA criterion: dvec_det[1] = Y in OMEGA detector frame
+                     *   = omega_rot[:,1] · dvec_mex  (omega_rot^T row 1).
+                     *   The OMEGA mirror rotates around Y, so Y is along-track. */
                     if (!spice_info.have_line_rate || spice_info.line_rate == 0.0)
-                        G_fatal_error(_("Camera mode (-c) with CRISM requires "
+                        G_fatal_error(_("Camera mode (-c) with CRISM/OMEGA requires "
                                         "line_rate in the SPICE history of <%s> "
                                         "(run p.spiceinit with line_rate= attached "
                                         "to the input raster)."),
                                        opt_input->answer);
+
+#define OMEGA_F(dv) (cam.omega_rot[0][1]*(dv)[0] + \
+                     cam.omega_rot[1][1]*(dv)[1] + \
+                     cam.omega_rot[2][1]*(dv)[2])
+#define PUSHBROOM_F(dv) (cam.is_omega ? OMEGA_F(dv) : (dv)[1])
 
                     double mid_line_f = (in_rows - 1) / 2.0;
                     int pb_ok = 1;
@@ -759,7 +857,7 @@ int main(int argc, char *argv[])
                                              fixref, cam.frame, target_upper,
                                              spice_info.observer, dvec_hi) < 0
                      || (dvec_lo[2] <= 0.0 && dvec_hi[2] <= 0.0)
-                     || dvec_lo[1] * dvec_hi[1] > 0.0) {
+                     || PUSHBROOM_F(dvec_lo) * PUSHBROOM_F(dvec_hi) > 0.0) {
                         pb_ok = 0;
                     }
 
@@ -768,7 +866,7 @@ int main(int argc, char *argv[])
 
                     if (pb_ok) {
                         int lo = 0, hi = in_rows - 1;
-                        double f_lo = dvec_lo[1];
+                        double f_lo = PUSHBROOM_F(dvec_lo);
                         memcpy(dvec_best, dvec_lo, sizeof(dvec_lo));
 
                         for (int iter = 0; iter < 20 && hi - lo > 1; iter++) {
@@ -781,23 +879,72 @@ int main(int argc, char *argv[])
                                 pb_ok = 0;
                                 break;
                             }
-                            if (f_lo * dvec_mid[1] <= 0.0) {
+                            double f_mid = PUSHBROOM_F(dvec_mid);
+                            if (f_lo * f_mid <= 0.0) {
                                 hi = mid;
                                 memcpy(dvec_best, dvec_mid, sizeof(dvec_mid));
                             } else {
                                 lo = mid;
-                                f_lo = dvec_mid[1];
+                                f_lo = f_mid;
                                 memcpy(dvec_best, dvec_mid, sizeof(dvec_mid));
                             }
                         }
                         in_row_best = (lo + hi) / 2.0;
                     }
+#undef OMEGA_F
+#undef PUSHBROOM_F
 
                     if (!pb_ok || dvec_best[2] <= 0.0) {
                         have_pixel = 0;
+                    } else if (cam.is_omega) {
+                        /* OMEGA inner sample resolution: rotate dvec_best
+                         * (in MEX_SPACECRAFT frame) back to OMEGA detector
+                         * frame via omega_rot^T, extract the mirror angle,
+                         * invert to get target mirror DN, then binary search
+                         * in the mirror_dn sideplane for the matching sample. */
+                        int line_int = (int)(in_row_best + 0.5);
+                        if (line_int < 0) line_int = 0;
+                        if (line_int >= in_rows) line_int = in_rows - 1;
+
+                        double dvec_det[3];
+                        for (int i = 0; i < 3; i++)
+                            dvec_det[i] = cam.omega_rot[0][i]*dvec_best[0]
+                                        + cam.omega_rot[1][i]*dvec_best[1]
+                                        + cam.omega_rot[2][i]*dvec_best[2];
+
+                        double theta = atan2(dvec_det[0], dvec_det[2]);
+                        double offset_deg = theta * RAD2DEG;
+                        double target_dn = offset_deg / cam.mirror_slope
+                                         + cam.mirror_center;
+
+                        /* Binary search in mirror_dn_data[line_int][*].
+                         * mirror_dn is monotone across samples (mirror sweeps
+                         * linearly). Determine the direction from endpoints. */
+                        DCELL *mdn_row = mirror_dn_data[line_int];
+                        int mlo = 0, mhi = in_cols - 1;
+                        int increasing = (mdn_row[0] <= mdn_row[in_cols - 1]);
+
+                        for (int iter = 0; iter < 20 && mhi - mlo > 1; iter++) {
+                            int mmid = (mlo + mhi) / 2;
+                            if (increasing
+                                ? (mdn_row[mmid] < target_dn)
+                                : (mdn_row[mmid] > target_dn))
+                                mlo = mmid;
+                            else
+                                mhi = mmid;
+                        }
+
+                        /* Interpolate sub-pixel between mlo and mhi */
+                        double dn_lo = mdn_row[mlo], dn_hi = mdn_row[mhi];
+                        double frac = (dn_hi != dn_lo)
+                            ? (target_dn - dn_lo) / (dn_hi - dn_lo) : 0.5;
+                        if (frac < 0.0) frac = 0.0;
+                        if (frac > 1.0) frac = 1.0;
+
+                        in_col_f = mlo + frac;
+                        in_row_f = in_row_best;
                     } else {
-                        /* Cross-track inversion: dx = dvec[0] * f/dvec[2].
-                         * CRISM has no radial distortion (k1=0). */
+                        /* CRISM cross-track inversion: pinhole, no distortion. */
                         double dx = dvec_best[0] * cam.focal_length / dvec_best[2];
                         in_col_f = cam.boresight_sample + dx / cam.pixel_pitch - 1.0;
                         in_row_f = in_row_best;

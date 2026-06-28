@@ -32,9 +32,20 @@ Supported instruments in camera mode:
   iterations converge to sub-pixel. The cross-track sample is then a direct
   algebraic inversion (no radial distortion). `line_rate=` must have been
   passed to `p.spiceinit`. Per-pixel SPICE cost: ~30-60 calls (vs 3 for ISS).
+- **`OMEGA_SWIR_C` / `OMEGA_SWIR_L` / `OMEGA_VNIR`** (MEX): 2-D whiskbroom
+  inverse. Outer binary search over scan lines (same `line_rate=` mechanism as
+  CRISM): finds the line where the surface point's along-track component in the
+  OMEGA detector frame (`dvec_det[1]`, Y-axis, the axis orthogonal to the
+  mirror sweep) crosses zero. Inner sample resolution: the ray from the surface
+  point is rotated into the OMEGA detector frame via the precomputed fixed
+  `omega_rot` matrix; the mirror elevation angle is extracted algebraically
+  (`θ = atan2(dvec_det[0], dvec_det[2])`), converted to a target mirror DN
+  (`dn = θ_deg / mirror_slope + mirror_center`), and then a binary search in
+  the per-line `mirror_dn=` sideplane raster finds the matching sample
+  sub-pixel by interpolation. The `mirror_dn=` raster (written by
+  `p.in.pds3 -g` for OMEGA cubes) must be supplied.
 
-MEX OMEGA and Cassini VIMS are **not** yet supported: OMEGA needs a nested
-2-D root-search (line + mirror-DN); VIMS needs a 2-axis scan model inverse.
+Cassini VIMS is **not** yet supported: VIMS needs a 2-axis scan model inverse.
 See `TODO.md`.
 
 **Without -c** (legacy mode): a simple flat-field ellipsoid resample --
@@ -132,6 +143,22 @@ p.spiceinit map=crism_vnir target=MARS observer=MRO \
 
 g.region n=18.6 s=18.1 e=77.9 w=77.4 res=0.001
 p.cam2map -c input=crism_vnir output=crism_map instrument=CRISM_VNIR
+```
+
+Back-project a MEX OMEGA SWIR_C cube onto a real lat/lon grid
+(requires both `line_rate=` in `p.spiceinit` and the `mirror_dn=` sideplane
+raster that `p.in.pds3 -g` writes alongside the main spectral cube):
+
+```sh
+p.spiceinit map=omega_swir_c target=MARS observer=MEX \
+    time=2004-020T12:30:00 line_rate=0.001 \
+    lsk=naif0012.tls sclk=MEX_210101_STEP.TSC \
+    ik=MEX_OMEGA_V03.TI fk=MEX_V16.TF \
+    pck=pck00010.tpc spk=ORMM__080101000000_01795.BSP ck=ATNM_RECONSTITUTED_00003.BC
+
+g.region n=20 s=10 e=50 w=40 res=0.01
+p.cam2map -c input=omega_swir_c output=omega_map \
+    instrument=OMEGA_SWIR_C mirror_dn=omega_swir_c_mirror_dn
 ```
 
 Legacy flat-field ellipsoid resample (no SPICE):

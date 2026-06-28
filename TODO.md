@@ -1419,19 +1419,18 @@ Note: binary-search convergence assumes monotone along-track motion (spacecraft
 moves in a straight enough arc over the cube acquisition ~1-2 s). Valid for
 MRO orbital geometry. Does NOT use sincpt_c (uses spkpos+pxform only).
 
-**4-C-2. `p.cam2map -c` for OMEGA (2-D whiskbroom inverse)**
+**4-C-2. `p.cam2map -c` for OMEGA (2-D whiskbroom inverse)** -- **DONE**
 
-For each output lat/lon, find the input (sample, line) where OMEGA's
-scanning mirror ray passes through that surface point.
-- Along-track (line): same binary search as CRISM (per-line epoch).
-- Cross-mirror (sample): given a line epoch, invert the mirror-DN
-  mapping `angle = center + slope * mirror_dn` for the `mirror_dn`
-  that produces the target ray -- requires the mirror-DN sideplane
-  raster (`mirror_dn=`) at the candidate line, which is a 1-D lookup
-  once the line is known.
-- Two nested root-searches (outer on line, inner on sample/mirror_dn).
-  Convergence: slower than CRISM -- ~100 sincpt_c calls per output pixel.
-- The `mirror_dn=` raster must be supplied (same as `p.phocube -c`).
-Complexity: **high** -- two nested bisect loops, high per-pixel cost
-for large output regions; may need spatial pre-filtering to avoid
-evaluating all output pixels naively.
+OMEGA_SWIR_C, OMEGA_SWIR_L, OMEGA_VNIR added to `p.cam2map -c`.
+Two-step inverse (no nested sincpt calls):
+- Outer binary search on `dvec_det[1]` (Y in OMEGA detector frame via
+  precomputed fixed `omega_rot` matrix) -- same line_rate= mechanism as CRISM.
+- Inner algebraic sample resolution: `θ = atan2(dvec_det[0], dvec_det[2])`,
+  `target_dn = θ_deg / mirror_slope + mirror_center`, binary search in the
+  per-line `mirror_dn=` sideplane raster (monotone) + sub-pixel interpolation.
+  No nested SPICE calls; per-pixel cost ≈ same as CRISM (~30-60 pxform calls).
+- `mirror_dn=` raster required (written by `p.in.pds3 -g` for OMEGA cubes).
+- `omega_rot` pre-rotated at load time (TKFRAME chain, et=0), `cam.frame`
+  set to `MEX_SPACECRAFT` for all subsequent pxform calls.
+- Mirror params (`INS-41420_MIRROR_CENTER_POSITION`, `INS-41420_MIRROR_SLOPE`)
+  read from MEX_OMEGA_V03.TI via `p_spice_gdpool_d` at camera-model load time.
