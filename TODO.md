@@ -1394,21 +1394,30 @@ These extend `p.cam2map -c` to non-ISS instruments. The forward direction
 root-search rather than a closed-form formula, since CRISM's 1-D scan
 and OMEGA's 2-D whiskbroom don't invert algebraically.
 
-**4-C-1. `p.cam2map -c` for CRISM (1-D pushbroom inverse)**
+**4-C-1. `p.cam2map -c` for CRISM (1-D pushbroom inverse)** -- **DONE**
 
-For each output lat/lon, find the input (sample, line) where
-CRISM's camera ray passes through that surface point.
-- Cross-track (sample): invert `angle = a0(band) + a1(band)*sample`
-  algebraically -- same closed-form as the forward model, just solved
-  for `sample`. This part is actually trivial.
-- Along-track (line): need to find which scan line's epoch `et(line)`
-  points the instrument toward the target lat/lon. Binary search on
-  `line` (monotone along-track motion), with `sincpt_c` at each
-  candidate epoch. Convergence: ~10 iterations to sub-pixel.
-- CK must be available (kernels in raster history via `p.spiceinit`).
-- Per-output-pixel cost: ~10 `sincpt_c` calls (vs. 1 for ISS).
-Complexity: **medium-high** -- new bisect loop, but reuses all existing
-`p_spice` calls; no new library functions needed.
+`CRISM_VNIR` and `CRISM_IR` added to `p.cam2map -c instrument=`.
+
+Implementation in `p.cam2map/main.c`:
+- `IssCameraModel.is_pushbroom=1` flag added to struct; CRISM path sets it.
+- `SpiceHistoryInfo.line_rate`/`have_line_rate` added; parsed from `SPICE_LINE_RATE`
+  in history (written by p.spiceinit's `line_rate=` option).
+- `eval_pushbroom_frame()` helper: for a given scan-line epoch, computes
+  camera-frame direction vector (spkpos + two pxform + two mat-vec) using the
+  same two-epoch rotation as the ISS path (fixref at et-lt, cam frame at et).
+- Binary search over `line ∈ [0, nrows-1]`, ~20 iterations (log2(480)≈9 for
+  standard CRISM cubes): criterion is dvec[1] (along-track component) crossing
+  zero. Same-sign bracket → outside FOV → null output pixel.
+- Cross-track inversion: `dx = dvec_best[0]*focal_length/dvec_best[2]`,
+  `sample = boresight_sample + dx/pixel_pitch`. No radial distortion (k1=0).
+- Model parameters from crismAddendum001.ti IAK: PIXEL_PITCH, BORESIGHT_SAMPLE,
+  BORESIGHT_LINE, FOCAL_LENGTH (single scalar, not per-filter-pair).
+- Per-pixel SPICE cost: ~(10-20) iters × 3 calls = ~30-60 spkpos/pxform calls
+  (vs 3 for ISS). Acceptable for CRISM's typical small FOV areas.
+
+Note: binary-search convergence assumes monotone along-track motion (spacecraft
+moves in a straight enough arc over the cube acquisition ~1-2 s). Valid for
+MRO orbital geometry. Does NOT use sincpt_c (uses spkpos+pxform only).
 
 **4-C-2. `p.cam2map -c` for OMEGA (2-D whiskbroom inverse)**
 

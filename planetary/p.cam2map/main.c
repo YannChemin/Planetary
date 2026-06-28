@@ -13,10 +13,12 @@
  *               instrument's pinhole camera model (boresight/pixel-pitch/
  *               focal-length/radial distortion, read from the loaded IK/IAK
  *               -- same model and same real, ISIS3-sourced IAK values as
- *               p.phocube's -c instrument=ISS_NAC/ISS_WAC) to a fractional
- *               (sample, line) in the raw input image, and bilinearly
- *               samples the input DN there. Requires p.spiceinit to have
- *               attached target/observer/time/kernels to the input map.
+ *               p.phocube's -c) to a fractional (sample, line) in the raw
+ *               input image, and bilinearly samples the input DN there.
+ *               ISS_NAC/ISS_WAC: closed-form framing inverse (single epoch).
+ *               CRISM_VNIR/CRISM_IR: per-line epoch binary search (pushbroom).
+ *               Requires p.spiceinit to have attached target/observer/time/
+ *               kernels to the input map.
  *               The output region's north/south/east/west are interpreted
  *               directly as real lat/lon degrees, by convention -- run
  *               this in the same (typically PROJECTION_XY) location as
@@ -91,6 +93,9 @@
 /* closed-form algebraic inverse. Deliberately not implemented yet      */
 /* (see TODO.md) -- instrument= fails loudly for them, not a guess.     */
 /* ------------------------------------------------------------------ */
+/* IssCameraModel is also used for CRISM (pushbroom), which shares the
+ * same pinhole fields (boresight_sample/pixel_pitch/focal_length) but
+ * has is_pushbroom=1, k1=0, and a per-line epoch from line_rate. */
 typedef struct {
     int    naif_id;
     char   frame[64];
@@ -99,6 +104,7 @@ typedef struct {
     double pixel_pitch;
     double focal_length;
     double k1;
+    int    is_pushbroom; /* 1=CRISM per-line epoch, 0=ISS framing */
 } IssCameraModel;
 
 static void load_iss_camera_model(const char *instrument,
@@ -109,7 +115,17 @@ static void load_iss_camera_model(const char *instrument,
 {
     memset(cam, 0, sizeof(*cam));
 
-    if (strcmp(instrument, "ISS_NAC") == 0) {
+    if (strcmp(instrument, "CRISM_VNIR") == 0) {
+        cam->naif_id = -74017;
+        snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_VNIR");
+        cam->is_pushbroom = 1;
+    }
+    else if (strcmp(instrument, "CRISM_IR") == 0) {
+        cam->naif_id = -74018;
+        snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_IR");
+        cam->is_pushbroom = 1;
+    }
+    else if (strcmp(instrument, "ISS_NAC") == 0) {
         cam->naif_id = -82360;
         snprintf(cam->frame, sizeof(cam->frame), "CASSINI_ISS_NAC_USGS");
     }
@@ -119,20 +135,21 @@ static void load_iss_camera_model(const char *instrument,
     }
     else
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
-                        "(only ISS_NAC and ISS_WAC are implemented -- "
-                        "see TODO.md for CRISM/OMEGA/VIMS, which need a "
-                        "time-search inverse, not a closed-form one)."),
+                        "(supported: CRISM_VNIR, CRISM_IR, ISS_NAC, ISS_WAC)."),
                        instrument);
 
     char varname[80];
     int n;
 
+    const char *iak_hint = cam->is_pushbroom
+        ? "the CRISM instrument addendum kernel (crismAddendum001.ti)"
+        : "the IssNAAddendum/IssWAAddendum instrument addendum kernel";
+
     snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->pixel_pitch) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
-                        "IK -- has the IssNAAddendum/IssWAAddendum instrument "
-                        "addendum kernel been attached via p.spiceinit's ik=, "
-                        "in addition to the regular IK?"), varname);
+                        "IK -- has %s been attached via p.spiceinit's ik=, "
+                        "in addition to the regular IK?"), varname, iak_hint);
 
     snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_SAMPLE", cam->naif_id);
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_sample) < 0 || n != 1)
@@ -143,6 +160,18 @@ static void load_iss_camera_model(const char *instrument,
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_line) < 0 || n != 1)
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                        varname);
+
+    /* CRISM: no radial distortion (k1=0, left zero-initialised), and a
+     * single scalar FOCAL_LENGTH (not per-filter-pair). Return early -- the
+     * ISS-specific summing correction and per-filter focal-length lookup
+     * below don't apply. */
+    if (cam->is_pushbroom) {
+        snprintf(varname, sizeof(varname), "INS%d_FOCAL_LENGTH", cam->naif_id);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                           varname);
+        return;
+    }
 
     snprintf(varname, sizeof(varname), "INS%d_K1", cam->naif_id);
     if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->k1) < 0 || n != 1)
@@ -236,11 +265,12 @@ static void load_iss_camera_model(const char *instrument,
  * read_spice_history() (not shared via a library -- see that module for
  * the line_rate/DSK variants this camera shape doesn't need). */
 typedef struct {
-    char target[64];
-    char observer[64];
-    char time[64];
-    int  have_target, have_observer, have_time;
-    int  n_kernels_loaded;
+    char   target[64];
+    char   observer[64];
+    char   time[64];
+    double line_rate;
+    int    have_target, have_observer, have_time, have_line_rate;
+    int    n_kernels_loaded;
 } SpiceHistoryInfo;
 
 static void spice_load_paths(const char *value, int *n_loaded)
@@ -296,6 +326,10 @@ static SpiceHistoryInfo read_spice_history(const char *mapname, const char *maps
             snprintf(info.time, sizeof(info.time), "%s", value);
             info.have_time = 1;
         }
+        else if (strcmp(key, "LINE_RATE") == 0) {
+            info.line_rate = atof(value);
+            info.have_line_rate = 1;
+        }
         else if (strcmp(key, "LSK") == 0 || strcmp(key, "SCLK") == 0 ||
                  strcmp(key, "CK") == 0 || strcmp(key, "SPK") == 0 ||
                  strcmp(key, "IK") == 0 || strcmp(key, "FK") == 0 ||
@@ -319,6 +353,44 @@ static SpiceHistoryInfo read_spice_history(const char *mapname, const char *maps
                        mapname);
 
     return info;
+}
+
+/* Compute the camera-frame direction vector to a body-fixed surface point
+ * at a given epoch (one scan line's worth of SPICE work: spkpos + two
+ * pxform + two matrix-vector multiplies).  Returns 0 on success, -1 on
+ * any SPICE failure.  Used by the CRISM pushbroom binary search. */
+static int eval_pushbroom_frame(const double spoint[3],
+                                 double et_line,
+                                 const char *fixref,
+                                 const char *cam_frame,
+                                 const char *target,
+                                 const char *observer,
+                                 double dvec_out[3])
+{
+    double pos[3], lt;
+    if (p_spice_pos(target, et_line, fixref, "LT+S", observer, pos, &lt) < 0)
+        return -1;
+
+    double ray[3] = { spoint[0] + pos[0],
+                      spoint[1] + pos[1],
+                      spoint[2] + pos[2] };
+
+    double rot_fix2j2000[3][3], rot_j2000_2cam[3][3];
+    if (p_spice_pxform(fixref, "J2000", et_line - lt, rot_fix2j2000) < 0)
+        return -1;
+    if (p_spice_pxform("J2000", cam_frame, et_line, rot_j2000_2cam) < 0)
+        return -1;
+
+    double inertial[3];
+    for (int i = 0; i < 3; i++)
+        inertial[i] = rot_fix2j2000[i][0]*ray[0]
+                    + rot_fix2j2000[i][1]*ray[1]
+                    + rot_fix2j2000[i][2]*ray[2];
+    for (int i = 0; i < 3; i++)
+        dvec_out[i] = rot_j2000_2cam[i][0]*inertial[0]
+                    + rot_j2000_2cam[i][1]*inertial[1]
+                    + rot_j2000_2cam[i][2]*inertial[2];
+    return 0;
 }
 
 static void uppercase_copy(char *dst, size_t n, const char *src)
@@ -376,8 +448,11 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = NO;
-    opt_instrument->options  = "ISS_NAC,ISS_WAC";
-    opt_instrument->description = _("Instrument camera model to use with -c");
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,ISS_NAC,ISS_WAC";
+    opt_instrument->description = _("Instrument camera model to use with -c. "
+        "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch binary search, "
+        "requires line_rate= in p.spiceinit history). "
+        "ISS_NAC/ISS_WAC: Cassini ISS framing camera (closed-form inverse).");
 
     opt_filter1 = G_define_option();
     opt_filter1->key         = "filter1";
@@ -439,7 +514,8 @@ int main(int argc, char *argv[])
     int camera_mode = flag_camera->answer;
 
     if (camera_mode && !opt_instrument->answer)
-        G_fatal_error(_("-c requires instrument= (ISS_NAC or ISS_WAC)."));
+        G_fatal_error(_("-c requires instrument= (CRISM_VNIR, CRISM_IR, "
+                        "ISS_NAC, or ISS_WAC)."));
 
     double a_km = atof(opt_a->answer);
     double b_km = atof(opt_b->answer);
@@ -602,16 +678,11 @@ int main(int argc, char *argv[])
                                     lon_deg, lat_deg, spoint) < 0) {
                     have_pixel = 0;
                 }
-                else {
-                    /* Vector from body centre to spacecraft, in fixref, at
-                     * the spacecraft's own epoch et, with the identical
-                     * "LT+S" aberration-correction convention p.phocube's
-                     * forward sincpt(target, et, fixref, "LT+S", observer,
-                     * ...) call uses (target=BODY, observer=SPACECRAFT --
-                     * light travels from the body's surface to the
-                     * spacecraft). fixref's origin is the body centre by
-                     * definition, so pos = bodycentre - spacecraft =
-                     * -spacecraft_pos_in_fixref. */
+                else if (!cam.is_pushbroom) {
+                    /* ISS framing camera: single epoch for the whole frame.
+                     * Two-epoch rotation (fixref at et-lt, camera frame at et)
+                     * is required for bodies far from the spacecraft -- see the
+                     * long comment that was here before this branch was split. */
                     double pos[3], lt;
                     if (p_spice_pos(target_upper, et, fixref, "LT+S",
                                      spice_info.observer, pos, &lt) < 0) {
@@ -621,28 +692,6 @@ int main(int argc, char *argv[])
                         double ray[3] = { spoint[0] + pos[0],
                                            spoint[1] + pos[1],
                                            spoint[2] + pos[2] };
-                        /* spkpos_c's own docs: for a "received radiation"
-                         * abcorr (LT+S here) and a non-inertial output
-                         * frame, "the orientation of the frame is
-                         * evaluated at et-ltcent" -- so pos's components
-                         * are expressed in fixref AS ORIENTED AT (et-lt),
-                         * not at et. spoint's body-fixed components are
-                         * epoch-independent (Ellipsoid latsrf has no time-
-                         * varying shape), so ray = spoint+pos is valid in
-                         * fixref-at-(et-lt) axes. The camera frame's own
-                         * orientation, however, is the spacecraft's real
-                         * orientation at the RECEPTION epoch et (no light-
-                         * time offset for the observer's own frame). A
-                         * single pxform(fixref, cam.frame, ONE_epoch) call
-                         * cannot represent this two-epoch rotation -- go
-                         * through the (epoch-independent) inertial J2000
-                         * frame as an intermediate, each leg evaluated at
-                         * its own correct epoch. Ignoring this (single
-                         * epoch et for both) was confirmed, via a real
-                         * 8.29M km Cassini-Saturn observation (lt~27.6s,
-                         * Saturn's ~0.26 deg/27.6s rotation), to misplace
-                         * every ray by ~0.25 deg -- comparable to the
-                         * NAC's entire ~0.35 deg FOV. */
                         double rot_fix2j2000[3][3], rot_j2000_2cam[3][3];
                         if (p_spice_pxform(fixref, "J2000", et - lt,
                                             rot_fix2j2000) < 0 ||
@@ -663,8 +712,6 @@ int main(int argc, char *argv[])
                                           rot_j2000_2cam[i][2]*inertial[2];
 
                             if (dvec[2] <= 0.0) {
-                                /* Point is behind the camera (or exactly
-                                 * edge-on) -- cannot be imaged. */
                                 have_pixel = 0;
                             }
                             else {
@@ -683,6 +730,77 @@ int main(int argc, char *argv[])
                                 in_row_f = line_1based   - 1.0;
                             }
                         }
+                    }
+                }
+                else {
+                    /* CRISM pushbroom: each scan line has its own epoch
+                     * et_line = et + (line - mid_line) * line_rate.
+                     * Binary search over lines: find the scan line where the
+                     * surface point's along-track component (dvec[1]) crosses
+                     * zero (surface point is exactly cross-track at that epoch).
+                     * ~log2(nrows) ≈ 9-10 iterations for CRISM's 480-row cube. */
+                    if (!spice_info.have_line_rate || spice_info.line_rate == 0.0)
+                        G_fatal_error(_("Camera mode (-c) with CRISM requires "
+                                        "line_rate in the SPICE history of <%s> "
+                                        "(run p.spiceinit with line_rate= attached "
+                                        "to the input raster)."),
+                                       opt_input->answer);
+
+                    double mid_line_f = (in_rows - 1) / 2.0;
+                    int pb_ok = 1;
+                    double dvec_lo[3], dvec_hi[3];
+
+                    if (eval_pushbroom_frame(spoint,
+                                             et + (0 - mid_line_f) * spice_info.line_rate,
+                                             fixref, cam.frame, target_upper,
+                                             spice_info.observer, dvec_lo) < 0
+                     || eval_pushbroom_frame(spoint,
+                                             et + ((in_rows-1) - mid_line_f) * spice_info.line_rate,
+                                             fixref, cam.frame, target_upper,
+                                             spice_info.observer, dvec_hi) < 0
+                     || (dvec_lo[2] <= 0.0 && dvec_hi[2] <= 0.0)
+                     || dvec_lo[1] * dvec_hi[1] > 0.0) {
+                        pb_ok = 0;
+                    }
+
+                    double dvec_best[3] = {0};
+                    double in_row_best = 0;
+
+                    if (pb_ok) {
+                        int lo = 0, hi = in_rows - 1;
+                        double f_lo = dvec_lo[1];
+                        memcpy(dvec_best, dvec_lo, sizeof(dvec_lo));
+
+                        for (int iter = 0; iter < 20 && hi - lo > 1; iter++) {
+                            int mid = (lo + hi) / 2;
+                            double dvec_mid[3];
+                            if (eval_pushbroom_frame(spoint,
+                                                     et + (mid - mid_line_f) * spice_info.line_rate,
+                                                     fixref, cam.frame, target_upper,
+                                                     spice_info.observer, dvec_mid) < 0) {
+                                pb_ok = 0;
+                                break;
+                            }
+                            if (f_lo * dvec_mid[1] <= 0.0) {
+                                hi = mid;
+                                memcpy(dvec_best, dvec_mid, sizeof(dvec_mid));
+                            } else {
+                                lo = mid;
+                                f_lo = dvec_mid[1];
+                                memcpy(dvec_best, dvec_mid, sizeof(dvec_mid));
+                            }
+                        }
+                        in_row_best = (lo + hi) / 2.0;
+                    }
+
+                    if (!pb_ok || dvec_best[2] <= 0.0) {
+                        have_pixel = 0;
+                    } else {
+                        /* Cross-track inversion: dx = dvec[0] * f/dvec[2].
+                         * CRISM has no radial distortion (k1=0). */
+                        double dx = dvec_best[0] * cam.focal_length / dvec_best[2];
+                        in_col_f = cam.boresight_sample + dx / cam.pixel_pitch - 1.0;
+                        in_row_f = in_row_best;
                     }
                 }
             }

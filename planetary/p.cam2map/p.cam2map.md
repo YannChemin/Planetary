@@ -18,13 +18,24 @@ used throughout, matching `p.phocube`'s own forward convention; this
 needs care for distant targets where light time is non-negligible
 relative to the target's rotation rate (see NOTES).
 
-Only `ISS_NAC` and `ISS_WAC` are currently supported in camera mode.
-CRISM, MEX OMEGA, and Cassini VIMS are **not** supported here: their
-pointing is time-varying (CRISM's per-line gimbal CK) and/or
-sample-varying (OMEGA's whiskbroom scanning mirror; VIMS's 2-axis
-angular scan), which requires a 1-D or 2-D root-search inverse, not the
-closed-form algebraic inverse ISS's static single-epoch framing geometry
-allows. See `TODO.md` for the status of those instruments.
+Supported instruments in camera mode:
+
+- **`ISS_NAC` / `ISS_WAC`** (Cassini): closed-form algebraic inverse -- one
+  boresight epoch for the whole frame, real K1 radial distortion corrected by
+  5 fixed-point iterations. Per-filter focal length resolved from
+  `filter1=`/`filter2=` or the raster's `planetary.json` (written by
+  `p.in.archive`'s OPUS import).
+- **`CRISM_VNIR` / `CRISM_IR`** (MRO): pushbroom per-line binary search.
+  For each output pixel, the scan line whose along-track epoch has the surface
+  point exactly cross-track (dvec[1]≈0) is found by bisecting over
+  `et(line) = et_mid + (line − mid_line) × line_rate`; ~log₂(nrows) ≈ 9-10
+  iterations converge to sub-pixel. The cross-track sample is then a direct
+  algebraic inversion (no radial distortion). `line_rate=` must have been
+  passed to `p.spiceinit`. Per-pixel SPICE cost: ~30-60 calls (vs 3 for ISS).
+
+MEX OMEGA and Cassini VIMS are **not** yet supported: OMEGA needs a nested
+2-D root-search (line + mirror-DN); VIMS needs a 2-axis scan model inverse.
+See `TODO.md`.
 
 **Without -c** (legacy mode): a simple flat-field ellipsoid resample --
 for each output pixel, computes a local radius from the given ellipsoid
@@ -107,6 +118,20 @@ Back-project to a sinusoidal equal-area map (central meridian 0°):
 g.region n=30 s=-30 e=30 w=-30 res=0.1
 p.cam2map -c input=iss_nac output=iss_sinusoidal instrument=ISS_NAC \
     filter1=P0 filter2=CB2 projection=sinusoidal clon=0
+```
+
+Back-project a CRISM VNIR targeted cube onto a real lat/lon grid
+(requires `line_rate=` in `p.spiceinit` -- stored in the SPICE history):
+
+```sh
+p.spiceinit map=crism_vnir target=MARS observer=MRO \
+    time=2009-182T14:33:05 line_rate=0.03125 \
+    lsk=naif0012.tls sclk=MRO_SCLKSCET.00054.65536.tsc \
+    ik=crism_v10.ti,crismAddendum001.ti fk=mro_v16.tf \
+    pck=pck00010.tpc spk=mro_psp_rec.bsp ck=mro_sc_psp_091221_091227.bc
+
+g.region n=18.6 s=18.1 e=77.9 w=77.4 res=0.001
+p.cam2map -c input=crism_vnir output=crism_map instrument=CRISM_VNIR
 ```
 
 Legacy flat-field ellipsoid resample (no SPICE):
