@@ -1435,6 +1435,22 @@ Two-step inverse (no nested sincpt calls):
 - Mirror params (`INS-41420_MIRROR_CENTER_POSITION`, `INS-41420_MIRROR_SLOPE`)
   read from MEX_OMEGA_V03.TI via `p_spice_gdpool_d` at camera-model load time.
 
+**4-B-7. MEX/HRSC** (High Resolution Stereo Camera) -- **DONE**
+
+`hrsc=` option added. Archive: ESA PSA at
+`archives.esac.esa.int/psa/ftp/MARS-EXPRESS/HRSC/MEX-M-HRSC-3-RDR-V4.0/DATA/`.
+Fully open HTTP, no authentication required. Catalog has 2 nadir ND3 entries:
+- `mars_hrsc_hellas_nd3`: orbit 10, 2004-01-10, 54552×5176 px, 19.8 m/px,
+  lat 32–48°S lon 88–92°E — eastern Hellas Planitia rim (~542 MB).
+- `mars_hrsc_noachis_nd3`: orbit 1962, 2005-07-26, 35704×5176 px, 21.4 m/px,
+  lat 19–33°S lon ~297°E — Noachis Terra / southern Coprates (~355 MB).
+Format: single-band attached-label PDS3 `.IMG` (LABEL_RECORDS=2, ^IMAGE_HEADER=3,
+^IMAGE=4), 16-bit MSB signed int, calibrated reflectance. Imported via p.in.pds3.
+Nine HRSC channels available per orbit (ND3, BL3/GR3/RE3/IR3, P13/P23, S13/S23);
+pass a direct URL to import any channel. Sensor: MEX_HRSC, mission: MEX.
+Note: IIRS (Chandrayaan-2) is login-gated (ISRO PRADAN OAuth) — not tractable
+without an ISRO account; confirmed not on NASA PDS.
+
 **4-C-3. `p.cam2map -c` for VIMS_IR/VIMS_VIS (2-axis angular scan inverse)** -- **DONE**
 
 VIMS_IR and VIMS_VIS added to `p.cam2map -c`. Inverse is fully algebraic --

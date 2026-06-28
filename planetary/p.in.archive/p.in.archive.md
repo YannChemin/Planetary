@@ -564,6 +564,40 @@ sbnarchive.psi.edu to import any FC observation.
 | `vesta_fc2_snowman_lamo` | 2011-12-18 | 193 km | Vesta LAMO; Snowman craters Marcia/Calpurnia/Minucia at 22°N, 205°E |
 | `ceres_fc2_occator_lamo` | 2016-02-17 | 362 km | Ceres LAMO; Occator Crater (Cerealia/Vinalia Faculae bright spots) at 20°N, 238°E |
 
+### Mars Express HRSC nadir RDR images (`hrsc=`)
+
+```sh
+# List the built-in HRSC catalog
+p.in.archive -l
+
+# Import eastern Hellas Planitia rim nadir strip (orbit 10, ~542 MB)
+p.in.archive hrsc=mars_hrsc_hellas_nd3 output=hrsc_hellas
+
+# Import Noachis Terra / Coprates region nadir strip (orbit 1962, ~355 MB)
+p.in.archive hrsc=mars_hrsc_noachis_nd3 output=hrsc_noachis
+
+# Import any HRSC nadir file directly by URL
+p.in.archive hrsc=https://archives.esac.esa.int/psa/ftp/MARS-EXPRESS/HRSC/MEX-M-HRSC-3-RDR-V4.0/DATA/NNNN/HNNNN_0000_ND3.IMG output=hrsc_custom
+```
+
+Single-band attached-label PDS3 `.IMG` files from the ESA Planetary Science
+Archive (`archives.esac.esa.int`). HRSC is a pushbroom framing camera with
+nine CCD line detectors: nadir (`ND3`, catalogued here), two stereo channels
+(`S13`/`S23`), blue/green/red/IR color (`BL3`/`GR3`/`RE3`/`IR3`), and two
+photometric channels (`P13`/`P23`). Each `.IMG` is 5176 samples wide (full
+swath at nadir); line count varies by orbit length. `LABEL_RECORDS=2`,
+`^IMAGE_HEADER=3`, `^IMAGE=4`, 16-bit MSB signed integer, calibrated
+reflectance (use `REFLECTANCE_SCALING_FACTOR` from label to convert raw DN).
+Imported via `p.in.pds3`. Note: nadir strips are large (~350–550 MB each at
+~20 m/px regional resolution); use resumable download (`wget -c`) to recover
+from network interruptions. Pass a direct `https://` URL to import any
+HRSC `.IMG` not in the catalog.
+
+| Key | Date | Orbit | Resolution | Scene |
+|---|---|---|---|---|
+| `mars_hrsc_hellas_nd3` | 2004-01-10 | 10 | ~19.8 m/px | Eastern Hellas Planitia rim, 32–48°S, 88–92°E; deepest impact basin on Mars |
+| `mars_hrsc_noachis_nd3` | 2005-07-26 | 1962 | ~21.4 m/px | Noachis Terra / southern Coprates, 19–33°S, ~297°E; ancient cratered highlands |
+
 ## EXAMPLES
 
 ### List products matching a keyword
