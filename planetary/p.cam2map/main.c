@@ -93,11 +93,12 @@
 /* closed-form algebraic inverse. Deliberately not implemented yet      */
 /* (see TODO.md) -- instrument= fails loudly for them, not a guess.     */
 /* ------------------------------------------------------------------ */
-/* IssCameraModel covers ISS/CRISM/OMEGA/VIMS.
+/* IssCameraModel covers ISS/CRISM/OMEGA/VIMS/CTX.
  * ISS:   is_pushbroom=0, real K1 distortion, per-filter focal length.
  * CRISM: is_pushbroom=1, k1=0, per-line epoch from line_rate.
  * OMEGA: is_omega=1, is_pushbroom=1, per-line epoch + mirror scan.
- * VIMS:  is_vims=1, closed-form 2-axis angular scan inverse (no pushbroom).*/
+ * VIMS:  is_vims=1, closed-form 2-axis angular scan inverse (no pushbroom).
+ * CTX:   is_ctx=1, is_pushbroom=1, along-track=X axis, OD_K[3] distortion. */
 typedef struct {
     int    naif_id;
     char   frame[64];
@@ -106,7 +107,7 @@ typedef struct {
     double pixel_pitch;
     double focal_length;
     double k1;
-    int    is_pushbroom; /* 1=CRISM/OMEGA per-line epoch, 0=ISS/VIMS */
+    int    is_pushbroom; /* 1=CRISM/OMEGA/CTX per-line epoch, 0=ISS/VIMS */
     int    is_omega;     /* 1=OMEGA whiskbroom mirror scan */
     double omega_rot[3][3]; /* detector frame → MEX_SPACECRAFT rotation */
     double mirror_center;   /* INS-41420_MIRROR_CENTER_POSITION */
@@ -118,6 +119,8 @@ typedef struct {
     double vims_y_bore;     /* boresight line in 64x64 FOV grid */
     int    vims_samp_offset; /* swath sample offset into 64x64 grid */
     int    vims_line_offset; /* swath line offset into 64x64 grid */
+    int    is_ctx;       /* 1=MRO CTX: along-track=X, cross-track=Y, OD_K */
+    double odk[3];       /* CTX radial distortion: drOverR=odk[0]+r²*(odk[1]+r²*odk[2]) */
 } IssCameraModel;
 
 static void load_iss_camera_model(const char *instrument,
@@ -160,6 +163,12 @@ static void load_iss_camera_model(const char *instrument,
         cam->naif_id = -74018;
         snprintf(cam->frame, sizeof(cam->frame), "MRO_CRISM_IR");
         cam->is_pushbroom = 1;
+    }
+    else if (strcmp(instrument, "CTX") == 0) {
+        cam->naif_id = -74021;
+        snprintf(cam->frame, sizeof(cam->frame), "MRO_CTX");
+        cam->is_pushbroom = 1;
+        cam->is_ctx = 1;
     }
     else if (strcmp(instrument, "ISS_NAC") == 0) {
         cam->naif_id = -82360;
@@ -260,7 +269,7 @@ static void load_iss_camera_model(const char *instrument,
     else
         G_fatal_error(_("Camera mode (-c): unsupported instrument='%s' "
                         "(supported: CRISM_VNIR, CRISM_IR, OMEGA_SWIR_C, "
-                        "OMEGA_SWIR_L, OMEGA_VNIR, ISS_NAC, ISS_WAC, "
+                        "OMEGA_SWIR_L, OMEGA_VNIR, CTX, ISS_NAC, ISS_WAC, "
                         "VIMS_IR, VIMS_VIS)."),
                        instrument);
 
@@ -268,7 +277,8 @@ static void load_iss_camera_model(const char *instrument,
     int n;
 
     const char *iak_hint = cam->is_pushbroom
-        ? "the CRISM instrument addendum kernel (crismAddendum001.ti)"
+        ? (cam->is_ctx ? "the MROCTX addendum kernel (mroctxAddendum005.ti)"
+                       : "the CRISM addendum kernel (crismAddendum001.ti)")
         : "the IssNAAddendum/IssWAAddendum instrument addendum kernel";
 
     snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
@@ -287,9 +297,8 @@ static void load_iss_camera_model(const char *instrument,
         G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                        varname);
 
-    /* OMEGA/CRISM pushbroom: no K1, no summing correction, no per-filter
-     * focal length. OMEGA also needs the mirror parameters and the fixed
-     * detector-to-spacecraft rotation. Return early for both. */
+    /* Pushbroom instruments: no K1, no ISS summing correction, no per-filter
+     * focal length.  OMEGA also needs mirror params; CTX also needs OD_K. */
     if (cam->is_pushbroom) {
         if (cam->is_omega) {
             /* Mirror parameters live under the shared SWIR id (-41420) --
@@ -314,6 +323,20 @@ static void load_iss_camera_model(const char *instrument,
                                 "frame kernel (MEX_V16.TF) attached via "
                                 "p.spiceinit's fk=?"), cam->frame);
             snprintf(cam->frame, sizeof(cam->frame), "MEX_SPACECRAFT");
+            return;
+        }
+        if (cam->is_ctx) {
+            /* CTX: focal length + 3-coefficient OD_K radial distortion.
+             * Along-track = X axis (dvec[0]); cross-track = Y (dvec[1]). */
+            snprintf(varname, sizeof(varname), "INS%d_FOCAL_LENGTH", cam->naif_id);
+            if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
+                G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
+                                "IK -- has mroctxAddendum005.ti been attached via "
+                                "p.spiceinit's ik=?"), varname);
+            snprintf(varname, sizeof(varname), "INS%d_OD_K", cam->naif_id);
+            if (p_spice_gdpool_d(varname, 0, 3, &n, cam->odk) < 0 || n != 3)
+                G_fatal_error(_("Camera mode (-c): could not read %s (3 values) "
+                                "from the loaded IK."), varname);
             return;
         }
         /* CRISM: single FOCAL_LENGTH scalar */
@@ -601,10 +624,12 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = NO;
-    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,CTX,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
     opt_instrument->description = _("Instrument camera model to use with -c. "
-        "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch binary search, "
-        "requires line_rate= in p.spiceinit history). "
+        "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch, requires "
+        "line_rate= in p.spiceinit history). "
+        "CTX: MRO Context Camera pushbroom (per-line epoch, OD_K distortion, "
+        "requires line_rate= and mroctxAddendum005.ti via ik=). "
         "ISS_NAC/ISS_WAC: Cassini ISS framing camera (closed-form inverse).");
 
     opt_filter1 = G_define_option();
@@ -1034,7 +1059,8 @@ int main(int argc, char *argv[])
 #define OMEGA_F(dv) (cam.omega_rot[0][1]*(dv)[0] + \
                      cam.omega_rot[1][1]*(dv)[1] + \
                      cam.omega_rot[2][1]*(dv)[2])
-#define PUSHBROOM_F(dv) (cam.is_omega ? OMEGA_F(dv) : (dv)[1])
+/* CTX: along-track = X (dvec[0]); CRISM: along-track = Y (dvec[1]) */
+#define PUSHBROOM_F(dv) (cam.is_omega ? OMEGA_F(dv) : (cam.is_ctx ? (dv)[0] : (dv)[1]))
 
                     double mid_line_f = (in_rows - 1) / 2.0;
                     int pb_ok = 1;
@@ -1134,6 +1160,29 @@ int main(int argc, char *argv[])
                         if (frac > 1.0) frac = 1.0;
 
                         in_col_f = mlo + frac;
+                        in_row_f = in_row_best;
+                    } else if (cam.is_ctx) {
+                        /* CTX cross-track: dvec[1] (Y) is cross-track (sample).
+                         * Apply 3-coeff OD_K distortion (ISIS3
+                         * SetUndistortedFocalPlane): iteratively find the
+                         * distorted position dy from the undistorted uy. */
+                        double uy = dvec_best[1] * cam.focal_length / dvec_best[2];
+                        double rp = fabs(uy);
+                        double rp2 = rp * rp;
+                        double drOverR = cam.odk[0] + rp2*(cam.odk[1] + rp2*cam.odk[2]);
+                        double r = rp + drOverR * rp;
+                        for (int odk_it = 0; odk_it < 15; odk_it++) {
+                            double r2 = r * r;
+                            double drOverR_new = cam.odk[0] + r2*(cam.odk[1] + r2*cam.odk[2]);
+                            double r_new = rp + drOverR_new * r;
+                            drOverR = drOverR_new;
+                            if (fabs(r_new - r) < cam.pixel_pitch / 100.0) {
+                                r = r_new; break;
+                            }
+                            r = r_new;
+                        }
+                        double dy = (rp > 0.0) ? (uy / (1.0 - drOverR)) : 0.0;
+                        in_col_f = cam.boresight_sample + dy / cam.pixel_pitch - 1.0;
                         in_row_f = in_row_best;
                     } else {
                         /* CRISM cross-track inversion: pinhole, no distortion. */

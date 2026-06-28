@@ -45,6 +45,18 @@ Supported instruments in camera mode:
   sub-pixel by interpolation. The `mirror_dn=` raster (written by
   `p.in.pds3 -g` for OMEGA cubes) must be supplied.
 
+- **`CTX`** (MRO): pushbroom per-line binary search, same `line_rate=` mechanism as
+  CRISM. The detector frame has the along-track direction on the **X axis** (dvec[0])
+  and cross-track (sample) on **Y** (dvec[1]) -- the axis mapping is transposed
+  relative to CRISM. Cross-track sample inversion applies the full 3-coefficient
+  `OD_K` radial distortion polynomial from `mroctxAddendum005.ti` using the
+  `SetUndistortedFocalPlane` iteration (ISIS3 `CameraDistortionMap`): `drOverR =
+  K₀ + r²(K₁ + r²K₂)`, `r_distorted = r_undistorted + drOverR·r_prev` iterated to
+  `pixel_pitch/100` convergence, then `sample = boresight_sample +
+  dy_distorted/pixel_pitch - 1`. Assumes full-resolution data (SpatialSumming=1,
+  5176 columns); binned CTX data would need manual boresight rescaling.
+  `mroctxAddendum005.ti` must be included in `p.spiceinit`'s `ik=` list.
+
 - **`VIMS_IR` / `VIMS_VIS`** (Cassini): closed-form algebraic inverse -- single epoch
   for the whole frame (no per-line timing). Ported from ISIS3's `VimsGroundMap::
   LookDirection()`: `θ = acos(dvec[1])`, `φ = atan2(-dvec[2], dvec[0])`, then
@@ -168,6 +180,21 @@ p.spiceinit map=vims_ir target=TITAN observer=CASSINI \
 
 g.region n=75 s=-75 e=110 w=-70 res=1
 p.cam2map -c input=vims_ir output=vims_map instrument=VIMS_IR
+```
+
+Back-project an MRO CTX image onto a real lat/lon grid
+(requires `line_rate=` from the label's `LINE_EXPOSURE_DURATION` and
+`mroctxAddendum005.ti` in the IAK list):
+
+```sh
+p.spiceinit map=ctx target=MARS observer=MRO \
+    time=2012-245T08:40:00 line_rate=0.0015904 \
+    lsk=naif0012.tls sclk=MRO_SCLKSCET.00054.65536.tsc \
+    ik=mro_ctx_v11.ti,mroctxAddendum005.ti fk=mro_v16.tf \
+    pck=pck00010.tpc spk=mro_psp_rec.bsp ck=mro_sc_psp_120901_120907.bc
+
+g.region n=-4.8 s=-5.1 e=137.4 w=137.1 res=0.0001
+p.cam2map -c input=ctx output=ctx_map instrument=CTX
 ```
 
 Back-project a MEX OMEGA SWIR_C cube onto a real lat/lon grid

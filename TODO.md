@@ -1469,3 +1469,23 @@ look vector, and the inverse is closed-form):
 - No is_pushbroom flag (single epoch for whole cube); new is_vims flag added to
   IssCameraModel struct to distinguish from ISS framing.
 - Per-pixel SPICE cost: ~3 calls (spkpos + 2 pxform) -- same as ISS.
+
+**4-C-4. `p.cam2map -c` for CTX (pushbroom + OD_K radial distortion)** -- **DONE**
+
+MRO CTX (`instrument=CTX`) added to `p.cam2map -c`. Same per-line binary-search
+mechanism as CRISM, with two instrument-specific differences:
+- **Axis swap**: CTX's focal plane has along-track = X (dvec[0]) and cross-track
+  (sample) = Y (dvec[1]), the opposite of CRISM (which has cross-track = X, along-
+  track = Y). `PUSHBROOM_F(dv)` now returns `dv[0]` for CTX vs. `dv[1]` for CRISM.
+- **OD_K distortion**: CTX carries a 3-coefficient radial polynomial
+  (`odk[0]=-0.00734`, `odk[1]=+2.84e-5`, `odk[2]=+1.28e-8` from
+  `mroctxAddendum005.ti`). Sample inversion applies ISIS3's
+  `CameraDistortionMap::SetUndistortedFocalPlane()` iteration: starting from
+  `r_undist`, iterate `r = r_undist + drOverR·r_prev` until `|Δr| <
+  pixel_pitch/100` (≤15 iterations), then `dy = uy/(1−drOverR)`,
+  `sample = boresight_sample + dy/pixel_pitch − 1`.
+- IAK key: `INS-74021_FOCAL_LENGTH`, `INS-74021_OD_K` (3 values),
+  `INS-74021_PIXEL_PITCH`, `INS-74021_BORESIGHT_SAMPLE` from
+  `mroctxAddendum005.ti`; frame `MRO_CTX` (NAIF ID −74021).
+- Full-resolution (SpatialSumming=1, 5176 columns) assumed; binned data needs
+  manual boresight rescaling (not in scope).
