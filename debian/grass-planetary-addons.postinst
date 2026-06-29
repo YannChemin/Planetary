@@ -71,14 +71,23 @@ case "$1" in
                 ln -sf "$f" "$gisbase/bin/$(basename "$f")"
             done
 
-            # Link spectral/body data files (e.g. p.matter.bands.json) so
-            # GISBASE/etc/planetary/<file> resolves for modules that look up
-            # their database via $GISBASE/etc/planetary/ when no db= is given.
+            # Link spectral/body data files (e.g. p.matter.bands.json) and
+            # subdirectories (e.g. spectra/planetary/) so GISBASE/etc/planetary/
+            # resolves for modules that look up their database there.
             if [ -d "$ADDON_DIR/etc/planetary" ]; then
                 mkdir -p "$gisbase/etc/planetary"
                 for f in "$ADDON_DIR"/etc/planetary/*; do
-                    [ -f "$f" ] || continue
-                    ln -sf "$f" "$gisbase/etc/planetary/$(basename "$f")"
+                    [ -f "$f" ] && ln -sf "$f" "$gisbase/etc/planetary/$(basename "$f")"
+                done
+                # Handle subdirectories (e.g. spectra/planetary/)
+                for subdir in "$ADDON_DIR"/etc/planetary/*/; do
+                    [ -d "$subdir" ] || continue
+                    subdirname=$(basename "$subdir")
+                    mkdir -p "$gisbase/etc/planetary/$subdirname"
+                    for f2 in "$subdir"*; do
+                        [ -f "$f2" ] || continue
+                        ln -sf "$f2" "$gisbase/etc/planetary/$subdirname/$(basename "$f2")"
+                    done
                 done
                 echo "grass-planetary-addons: linked etc/planetary data → $gisbase/etc/planetary/"
             fi

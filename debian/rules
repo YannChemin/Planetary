@@ -109,6 +109,10 @@ override_dh_auto_install:
 	mkdir -p $(ADDONS)/etc/planetary
 	install -m 0644 data/matter_bands.json \
 	    $(ADDONS)/etc/planetary/matter_bands.json
+	# Built-in planetary spectral library (USGS splib07a extracts)
+	mkdir -p $(ADDONS)/etc/planetary/spectra/planetary
+	install -m 0644 planetary/p.spec.library/spectra/planetary/*.csv \
+	    $(ADDONS)/etc/planetary/spectra/planetary/
 	for f in missions/*.json missions/README.md; do \
 	    [ -f "$$f" ] && install -m 0644 $$f \
 	        $(ADDONS)/missions/$$(basename $$f) || true; \
