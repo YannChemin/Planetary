@@ -93,7 +93,7 @@
 /* closed-form algebraic inverse. Deliberately not implemented yet      */
 /* (see TODO.md) -- instrument= fails loudly for them, not a guess.     */
 /* ------------------------------------------------------------------ */
-/* IssCameraModel covers ISS/CRISM/OMEGA/VIMS/CTX/LROC_NAC/HRSC.
+/* IssCameraModel covers ISS/CRISM/OMEGA/VIMS/CTX/LROC_NAC/HRSC/CaSSIS.
  * ISS:      is_pushbroom=0, real K1 distortion, per-filter focal length.
  * CRISM:    is_pushbroom=1, along-track=Y, cross-track=X (pushbroom_x_sign=+1).
  * OMEGA:    is_omega=1, is_pushbroom=1, per-line epoch + mirror scan.
@@ -102,7 +102,9 @@
  * LROC_NAC: is_lroc_nac=1, is_pushbroom=1, along-track=X, custom K1 model;
  *            pushbroom_y_sign=+1 (NACL) or -1 (NACR, flipped cross-track).
  * HRSC_*:   is_pushbroom=1, along-track=Y (same as CRISM), no distortion,
- *            frame=MEX_HRSC_HEAD (-41210) for all 9 channels, pushbroom_x_sign=-1. */
+ *            frame=MEX_HRSC_HEAD (-41210) for all 9 channels, pushbroom_x_sign=-1.
+ * CaSSIS:   is_cassis=1, is_pushbroom=0, rational 6-coeff polynomial distortion
+ *            (A1/A2/A3 DIST model from EPFL; boresight adjusted per filter strip). */
 typedef struct {
     int    naif_id;
     char   frame[64];
@@ -111,7 +113,7 @@ typedef struct {
     double pixel_pitch;
     double focal_length;
     double k1;
-    int    is_pushbroom; /* 1=CRISM/OMEGA/CTX per-line epoch, 0=ISS/VIMS */
+    int    is_pushbroom; /* 1=CRISM/OMEGA/CTX per-line epoch, 0=ISS/VIMS/CaSSIS */
     int    is_omega;     /* 1=OMEGA whiskbroom mirror scan */
     double omega_rot[3][3]; /* detector frame → MEX_SPACECRAFT rotation */
     double mirror_center;   /* INS-41420_MIRROR_CENTER_POSITION */
@@ -143,6 +145,15 @@ typedef struct {
     double hirise_transy0;   /* TRANSY[0]: constant y_fp at boresight_sample */
     double hirise_transy1;   /* TRANSY[1]: y_fp per sample (−0.012 mm/px for all REDs) */
     double transx_bore;      /* TRANSX[0]/focal_length: along-track BS zero-crossing target */
+    /* TGO CaSSIS: framing camera, rational polynomial distortion.
+     * Boresight/pitch adjusted for the filter strip position and on-chip binning.
+     * cassis_row_start is the 0-based first line of the filter strip in the
+     * full 2048×2048 detector: PAN=354, RED=712, NIR=1048, BLU=1392. */
+    int    is_cassis;
+    int    cassis_row_start; /* 0-based full-frame line of the filter strip */
+    double cassis_a1[6];     /* INS-143400_OD_A1_DIST: undistorted→distorted numerator X */
+    double cassis_a2[6];     /* INS-143400_OD_A2_DIST: undistorted→distorted numerator Y */
+    double cassis_a3[6];     /* INS-143400_OD_A3_DIST: shared denominator */
 } IssCameraModel;
 
 static void load_iss_camera_model(const char *instrument,
@@ -293,6 +304,26 @@ static void load_iss_camera_model(const char *instrument,
         cam->naif_id = -82361;
         snprintf(cam->frame, sizeof(cam->frame), "CASSINI_ISS_WAC_USGS");
     }
+    else if (strcmp(instrument, "CASSIS_PAN") == 0) {
+        cam->naif_id = -143400;
+        snprintf(cam->frame, sizeof(cam->frame), "TGO_CASSIS_FSA");
+        cam->is_cassis = 1; cam->cassis_row_start = 354;
+    }
+    else if (strcmp(instrument, "CASSIS_RED") == 0) {
+        cam->naif_id = -143400;
+        snprintf(cam->frame, sizeof(cam->frame), "TGO_CASSIS_FSA");
+        cam->is_cassis = 1; cam->cassis_row_start = 712;
+    }
+    else if (strcmp(instrument, "CASSIS_NIR") == 0) {
+        cam->naif_id = -143400;
+        snprintf(cam->frame, sizeof(cam->frame), "TGO_CASSIS_FSA");
+        cam->is_cassis = 1; cam->cassis_row_start = 1048;
+    }
+    else if (strcmp(instrument, "CASSIS_BLU") == 0) {
+        cam->naif_id = -143400;
+        snprintf(cam->frame, sizeof(cam->frame), "TGO_CASSIS_FSA");
+        cam->is_cassis = 1; cam->cassis_row_start = 1392;
+    }
     else if (strcmp(instrument, "VIMS_IR")  == 0 ||
              strcmp(instrument, "VIMS_VIS") == 0) {
         int is_ir = (strcmp(instrument, "VIMS_IR") == 0);
@@ -388,7 +419,8 @@ static void load_iss_camera_model(const char *instrument,
                         "HRSC_NADIR, HRSC_RED, HRSC_GREEN, HRSC_BLUE, HRSC_IR, "
                         "HRSC_P1, HRSC_P2, HRSC_S1, HRSC_S2, "
                         "HIRISE_RED0..RED9, HIRISE_BG0, HIRISE_BG1, HIRISE_IR0, HIRISE_IR1, "
-                        "VIMS_IR, VIMS_VIS, ISS_NAC, ISS_WAC)."),
+                        "VIMS_IR, VIMS_VIS, ISS_NAC, ISS_WAC, "
+                        "CASSIS_PAN, CASSIS_RED, CASSIS_NIR, CASSIS_BLU)."),
                        instrument);
 
     char varname[80];
@@ -400,6 +432,7 @@ static void load_iss_camera_model(const char *instrument,
          : cam->is_hirise      ? "mro_hirise_v11.ti (standard NAIF MRO IK)"
          : (cam->naif_id >= -41219 && cam->naif_id <= -41211) ? "the HRSC IAK (hrscAddendum004.ti)"
                                 : "the CRISM addendum kernel (crismAddendum001.ti)")
+        : cam->is_cassis ? "the TGO CaSSIS IK (em16_tgo_cassis_vNN.ti)"
         : "the IssNAAddendum/IssWAAddendum instrument addendum kernel";
 
     /* HiRISE: pixel pitch from PIXEL_SIZE[0]; boresight from CCD_CENTER.
@@ -414,6 +447,24 @@ static void load_iss_camera_model(const char *instrument,
         (void)p_spice_gdpool_d(varname, 0, 2, &n, cc);
         cam->boresight_sample = cc[0];  /* centre of the CCD (1-based) */
         cam->boresight_line   = cc[1];
+    } else if (cam->is_cassis) {
+        /* CaSSIS physical constants.  The standard ESA PSA IK (em16_tgo_cassis_vNN.ti)
+         * does NOT store PIXEL_PITCH/BORESIGHT; these live in ISISDATA kernel pool
+         * entries injected by spiceinit.  Fall back to the instrument's published
+         * physical values (10 µm pitch, 880 mm focal length, 2048×2048 full frame)
+         * so the tool works with raw ESA PSA kernels too. */
+        cam->pixel_pitch      = 0.01;   /* 10 µm */
+        cam->boresight_sample = 1024.5; /* centre of 2048-wide detector */
+        cam->boresight_line   = 1024.5;
+        {
+            double v;
+            if (p_spice_gdpool_d("INS-143400_PIXEL_PITCH",      0, 1, &n, &v) == 0 && n == 1)
+                cam->pixel_pitch = v;
+            if (p_spice_gdpool_d("INS-143400_BORESIGHT_SAMPLE", 0, 1, &n, &v) == 0 && n == 1)
+                cam->boresight_sample = v;
+            if (p_spice_gdpool_d("INS-143400_BORESIGHT_LINE",   0, 1, &n, &v) == 0 && n == 1)
+                cam->boresight_line = v;
+        }
     } else {
         snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
         if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->pixel_pitch) < 0 || n != 1)
@@ -559,6 +610,53 @@ static void load_iss_camera_model(const char *instrument,
         if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) < 0 || n != 1)
             G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                            varname);
+        return;
+    }
+
+    /* CaSSIS: framing camera, rational polynomial distortion.
+     * boresight_sample/line (set above) are for the full 2048×2048 detector.
+     * Adjust them for the filter strip window position and on-chip binning factor,
+     * then load A1/A2/A3_DIST distortion coefficients from the IK.
+     * The binning factor b (1, 2, or 4) is stored in planetary.json by p.in.archive
+     * as "cassis_binning"; default to 1 (no binning) if not present. */
+    if (cam->is_cassis) {
+        int b = 1;
+        char binning_buf[8] = "1";
+        if (p_meta_read_string_field(input_map, "raster", "cassis_binning",
+                                      binning_buf, sizeof(binning_buf)) == 0)
+            b = atoi(binning_buf);
+        if (b < 1) b = 1;
+
+        /* Product pixel → full-frame center: full = row_start + (l-1)*b + (b+1)/2
+         * Solve for boresight (full=1024.5):
+         *   l_bore = (1024.5 - row_start - (b+1)/2) / b + 1
+         * Column start is 0 for all CaSSIS filters (full width readout). */
+        double bh = (b + 1.0) / 2.0;
+        cam->boresight_sample = (cam->boresight_sample - 0.0               - bh) / b + 1.0;
+        cam->boresight_line   = (cam->boresight_line   - cam->cassis_row_start - bh) / b + 1.0;
+        cam->pixel_pitch     *= b;  /* effective pitch in the binned product */
+
+        cam->focal_length = 880.0; /* CaSSIS physical focal length (mm) */
+        {
+            double v;
+            if (p_spice_gdpool_d("INS-143400_FOCAL_LENGTH", 0, 1, &n, &v) == 0 && n == 1)
+                cam->focal_length = v;
+        }
+
+        if (p_spice_gdpool_d("INS-143400_OD_A1_DIST", 0, 6, &n, cam->cassis_a1) < 0 || n != 6)
+            G_fatal_error(_("Camera mode (-c): could not read INS-143400_OD_A1_DIST "
+                            "(6 values) from the loaded IK -- has %s been attached "
+                            "via p.spiceinit's ik=?"), iak_hint);
+        if (p_spice_gdpool_d("INS-143400_OD_A2_DIST", 0, 6, &n, cam->cassis_a2) < 0 || n != 6)
+            G_fatal_error(_("Camera mode (-c): could not read INS-143400_OD_A2_DIST "
+                            "from the loaded IK."));
+        if (p_spice_gdpool_d("INS-143400_OD_A3_DIST", 0, 6, &n, cam->cassis_a3) < 0 || n != 6)
+            G_fatal_error(_("Camera mode (-c): could not read INS-143400_OD_A3_DIST "
+                            "from the loaded IK."));
+        G_message(_("Camera mode (-c): CaSSIS binning=%d, boresight=(%.2f,%.2f), "
+                    "pitch=%.4f mm, fl=%.1f mm."),
+                   b, cam->boresight_sample, cam->boresight_line,
+                   cam->pixel_pitch, cam->focal_length);
         return;
     }
 
@@ -845,7 +943,8 @@ int main(int argc, char *argv[])
                                "HIRISE_RED0,HIRISE_RED1,HIRISE_RED2,HIRISE_RED3,HIRISE_RED4,"
                                "HIRISE_RED5,HIRISE_RED6,HIRISE_RED7,HIRISE_RED8,HIRISE_RED9,"
                                "HIRISE_BG0,HIRISE_BG1,HIRISE_IR0,HIRISE_IR1,"
-                               "VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
+                               "VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC,"
+                               "CASSIS_PAN,CASSIS_RED,CASSIS_NIR,CASSIS_BLU";
     opt_instrument->description = _("Instrument camera model to use with -c. "
         "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch, requires "
         "line_rate= in p.spiceinit history). "
@@ -862,7 +961,10 @@ int main(int argc, char *argv[])
         "(frame=MRO_HIRISE_OPTICAL_AXIS; along-track=X, OD_K[3] from parent -74699, "
         "per-CCD TRANSX/TRANSY from mro_hirise_v11.ti; requires line_rate= via "
         "p.spiceinit; HIRISE_RED5 is the center CCD). "
-        "ISS_NAC/ISS_WAC: Cassini ISS framing camera (closed-form inverse).");
+        "ISS_NAC/ISS_WAC: Cassini ISS framing camera (closed-form inverse). "
+        "CASSIS_PAN/RED/NIR/BLU: TGO ExoMars CaSSIS framing camera (rational "
+        "polynomial distortion; requires em16_tgo_cassis_vNN.ti via ik=; "
+        "binning and filter read from planetary.json written by p.in.archive cassis=).");
 
     opt_filter1 = G_define_option();
     opt_filter1->key         = "filter1";
@@ -1409,17 +1511,37 @@ int main(int argc, char *argv[])
                             else {
                                 double t = cam.focal_length / dvec[2];
                                 double ux = dvec[0] * t, uy = dvec[1] * t;
-                                double dx = ux, dy = uy;
-                                for (int it = 0; it < 5; it++) {
-                                    double r2 = dx*dx + dy*dy;
-                                    double denom = 1.0 + cam.k1 * r2;
-                                    dx = ux / denom;
-                                    dy = uy / denom;
+                                double dx, dy;
+                                if (cam.is_cassis) {
+                                    /* CaSSIS rational polynomial: undistorted (ux,uy) → distorted (dx,dy).
+                                     * chi = [ux², ux·uy, uy², ux, uy, 1]
+                                     * dx = dot(A1,chi)/dot(A3,chi), dy = dot(A2,chi)/dot(A3,chi) */
+                                    double chi[6] = {ux*ux, ux*uy, uy*uy, ux, uy, 1.0};
+                                    double a1=0, a2=0, a3=0;
+                                    for (int j = 0; j < 6; j++) {
+                                        a1 += cam.cassis_a1[j] * chi[j];
+                                        a2 += cam.cassis_a2[j] * chi[j];
+                                        a3 += cam.cassis_a3[j] * chi[j];
+                                    }
+                                    if (a3 == 0.0) { have_pixel = 0; goto cassis_skip; }
+                                    dx = a1 / a3; dy = a2 / a3;
+                                } else {
+                                    /* ISS K1 radial distortion (iterative inverse). */
+                                    dx = ux; dy = uy;
+                                    for (int it = 0; it < 5; it++) {
+                                        double r2 = dx*dx + dy*dy;
+                                        double denom = 1.0 + cam.k1 * r2;
+                                        dx = ux / denom;
+                                        dy = uy / denom;
+                                    }
                                 }
-                                double sample_1based = cam.boresight_sample + dx / cam.pixel_pitch;
-                                double line_1based   = cam.boresight_line   + dy / cam.pixel_pitch;
-                                in_col_f = sample_1based - 1.0;
-                                in_row_f = line_1based   - 1.0;
+                                {
+                                    double sample_1based = cam.boresight_sample + dx / cam.pixel_pitch;
+                                    double line_1based   = cam.boresight_line   + dy / cam.pixel_pitch;
+                                    in_col_f = sample_1based - 1.0;
+                                    in_row_f = line_1based   - 1.0;
+                                }
+                                cassis_skip:;
                             }
                         }
                     }
