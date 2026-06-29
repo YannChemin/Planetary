@@ -114,7 +114,7 @@ def _relab(name, mineral_class, pi_code, set_code, spec_id):
     return _write_csv(name, mineral_class, "RELAB_2025", "various",
                       wls, refs)
 
-MINERALS = "Minerals"
+MINERALS = "ChapterM_Minerals"
 
 def main():
     print(f"Output: {OUT_DIR}")
