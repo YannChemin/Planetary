@@ -29,15 +29,17 @@ class TestCoregister(TestCase):
         # 64×64 at 1 m/px
         gs.run_command("g.region", rows=64, cols=64,
                        n=64, s=0, e=64, w=0, nsres=1, ewres=1)
-        # Textured master: multi-frequency sinusoid texture (not a Gaussian blob)
-        # High-frequency content is essential for phase correlation to work.
-        expr_m = ("coreg_master = sin(2*3.14159*row()/8) * cos(2*3.14159*col()/6)"
-                  " + 0.5*sin(2*3.14159*row()/13) + 0.3*cos(2*3.14159*col()/5)")
+        # Textured master: multi-frequency sinusoids with periods that DIVIDE 64
+        # evenly (8, 16, 4) so the DFT has exact integer-bin frequencies.
+        # This is required for phase correlation without Hann window; real imagery
+        # has broad spectral content and benefits from the Hann window instead.
+        pi = "3.14159265"
+        expr_m = (f"coreg_master = sin(2*{pi}*row()/8) + cos(2*{pi}*row()/16)"
+                  f" + cos(2*{pi}*col()/8) + sin(2*{pi}*col()/4)")
         gs.run_command("r.mapcalc", expression=expr_m, overwrite=True)
-        # Slave: master shifted 5 px east, 3 px south.
-        # Shift by changing col/row offsets by -5/-3 in the formula.
-        expr_s = ("coreg_slave = sin(2*3.14159*(row()-3)/8) * cos(2*3.14159*(col()-5)/6)"
-                  " + 0.5*sin(2*3.14159*(row()-3)/13) + 0.3*cos(2*3.14159*(col()-5)/5)")
+        # Slave: same pattern shifted 5 px east (col-5), 3 px south (row-3).
+        expr_s = (f"coreg_slave = sin(2*{pi}*(row()-3)/8) + cos(2*{pi}*(row()-3)/16)"
+                  f" + cos(2*{pi}*(col()-5)/8) + sin(2*{pi}*(col()-5)/4)")
         gs.run_command("r.mapcalc", expression=expr_s, overwrite=True)
         # Zero-shift slave (identical to master)
         gs.run_command("r.mapcalc",
@@ -68,17 +70,20 @@ class TestCoregister(TestCase):
 
     # ── phase correlation accuracy ────────────────────────────────────────────
     def test_shift_recovered_dx(self):
-        """Phase correlation recovers dx=5 px (east shift) within ±1.5 px."""
+        """Phase correlation recovers dx=5 px (east shift) within ±1 px.
+        Uses -w (no Hann window) because the test signal is DFT-aligned;
+        Hann window is recommended for real imagery with spectral leakage."""
         fd, rep = tempfile.mkstemp(suffix=".csv")
         os.close(fd)
         try:
             self.assertModule("p.coregister",
                               master="coreg_master", slave="coreg_slave",
-                              output="coreg_out_dx", report=rep, overwrite=True)
+                              output="coreg_out_dx", report=rep,
+                              flags="w", overwrite=True)
             result = _shift_report(rep)
             self.assertIsNotNone(result)
             dx_pix = result[0]
-            self.assertAlmostEqual(dx_pix, 5.0, delta=1.5,
+            self.assertAlmostEqual(dx_pix, 5.0, delta=1.0,
                                    msg=f"Expected dx≈5, got {dx_pix}")
         finally:
             os.remove(rep)
@@ -86,17 +91,18 @@ class TestCoregister(TestCase):
                        flags="f", quiet=True)
 
     def test_shift_recovered_dy(self):
-        """Phase correlation recovers dy=3 px (south shift) within ±1.5 px."""
+        """Phase correlation recovers dy=3 px (south shift) within ±1 px."""
         fd, rep = tempfile.mkstemp(suffix=".csv")
         os.close(fd)
         try:
             self.assertModule("p.coregister",
                               master="coreg_master", slave="coreg_slave",
-                              output="coreg_out_dy", report=rep, overwrite=True)
+                              output="coreg_out_dy", report=rep,
+                              flags="w", overwrite=True)
             result = _shift_report(rep)
             self.assertIsNotNone(result)
             dy_pix = result[1]
-            self.assertAlmostEqual(dy_pix, 3.0, delta=1.5,
+            self.assertAlmostEqual(dy_pix, 3.0, delta=1.0,
                                    msg=f"Expected dy≈3, got {dy_pix}")
         finally:
             os.remove(rep)
@@ -110,7 +116,8 @@ class TestCoregister(TestCase):
         try:
             self.assertModule("p.coregister",
                               master="coreg_master", slave="coreg_slave0",
-                              output="coreg_out_z", report=rep, overwrite=True)
+                              output="coreg_out_z", report=rep,
+                              flags="w", overwrite=True)
             result = _shift_report(rep)
             self.assertIsNotNone(result)
             dx_pix, dy_pix = result[0], result[1]
@@ -130,7 +137,8 @@ class TestCoregister(TestCase):
         try:
             self.assertModule("p.coregister",
                               master="coreg_master", slave="coreg_slave",
-                              output="coreg_out_mu", report=rep, overwrite=True)
+                              output="coreg_out_mu", report=rep,
+                              flags="w", overwrite=True)
             result = _shift_report(rep)
             dx_pix, dy_pix, dx_m, dy_m = result
             self.assertAlmostEqual(dx_m, dx_pix, places=5)

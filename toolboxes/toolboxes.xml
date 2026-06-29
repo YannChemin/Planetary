@@ -41,6 +41,7 @@
       <subtoolbox name="PlanetarySpectral"/>
       <separator/>
       <subtoolbox name="PlanetaryCrater"/>
+      <subtoolbox name="PlanetaryChangeDetection"/>
       <subtoolbox name="PlanetaryRings"/>
       <separator/>
       <subtoolbox name="PlanetaryNoiseCalibration"/>
@@ -340,6 +341,22 @@
       </module-item>
       <module-item name="p.crater.freq">
         <label>Crater size-frequency distribution</label>
+      </module-item>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Change Detection / Co-registration
+       Workflow: co-register first (p.coregister), then compute change (p.change)
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetaryChangeDetection">
+    <label>Change Detection</label>
+    <items>
+      <module-item name="p.coregister">
+        <label>Co-register two rasters by sub-pixel phase correlation</label>
+      </module-item>
+      <module-item name="p.change">
+        <label>Per-pixel temporal change (difference / ratio)</label>
       </module-item>
     </items>
   </toolbox>
