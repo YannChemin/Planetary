@@ -1,0 +1,20 @@
+{
+    "name": "Enceladus",
+    "isis_target": "ENCELADUS",
+    "semi_major_axis_m": 256600,
+    "semi_minor_axis_m": 248300,
+    "ellipsoid": "oblate",
+    "gravity_ms2": 0.11,
+    "solar_day_hours": 32.9,
+    "sidereal_period_days": 1.37,
+    "synodic_period_days": 1.37,
+    "axial_tilt_deg": 0.0,
+    "orbital_inclination_deg": 0.009,
+    "nutation_period_years": 0,
+    "solar_constant_Wm2": 14.82,
+    "atmosphere": false,
+    "proj4_longlat": "+proj=longlat +a=256600 +b=248300 +no_defs",
+    "proj4_south_stereo": "+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 +a=256600 +b=248300 +units=m +no_defs",
+    "proj4_north_stereo": "+proj=stere +lat_0=90 +lat_ts=90 +lon_0=0 +a=256600 +b=248300 +units=m +no_defs",
+    "notes": "IAU 2015 biaxial approximation (256.6×251.4×248.3 km). Cassini flyby reference. Active cryovolcanism from south pole tiger stripes (jets of H2O, organics, silica). Subsurface global ocean."
+}

@@ -1,0 +1,20 @@
+{
+    "name": "Mercury",
+    "isis_target": "MERCURY",
+    "semi_major_axis_m": 2439700,
+    "semi_minor_axis_m": 2439700,
+    "ellipsoid": "sphere",
+    "gravity_ms2": 3.70,
+    "solar_day_hours": 4222.6,
+    "sidereal_period_days": 87.97,
+    "synodic_period_days": 115.88,
+    "axial_tilt_deg": 0.034,
+    "orbital_inclination_deg": 7.0,
+    "nutation_period_years": 0,
+    "solar_constant_Wm2": 9116.4,
+    "atmosphere": false,
+    "proj4_longlat": "+proj=longlat +a=2439700 +b=2439700 +no_defs",
+    "proj4_south_stereo": "+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 +a=2439700 +b=2439700 +units=m +no_defs",
+    "proj4_north_stereo": "+proj=stere +lat_0=90 +lat_ts=90 +lon_0=0 +a=2439700 +b=2439700 +units=m +no_defs",
+    "notes": "IAU 2015 mean radius 2439.7 km (sphere). MESSENGER MLA reference. No significant atmosphere. Solar day ~176 Earth days (2 orbital periods)."
+}

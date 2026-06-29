@@ -99,7 +99,9 @@ override_dh_auto_install:
 	ln -sf /usr/lib/grass/addons/landing.qt/p_landing_qt.py \
 	    $(ADDONS)/bin/p-landing-qt
 	# Body and mission JSON data
-	for f in bodies/moon.json bodies/mars.json bodies/venus.json; do \
+	for f in bodies/moon.json bodies/mars.json bodies/venus.json \
+	         bodies/mercury.json bodies/titan.json bodies/ceres.json \
+	         bodies/enceladus.json bodies/europa.json; do \
 	    install -m 0644 $$f $(ADDONS)/$$f; \
 	done
 	# p.matter.bands spectral band database — installed under

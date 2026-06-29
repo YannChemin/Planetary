@@ -2,8 +2,18 @@
 <!DOCTYPE toolboxes SYSTEM "toolboxes.dtd">
 <!--
   Planetary Bridge for GRASS GIS — wxGUI menu extension.
-  Modules are ordered by keyword[1] (category) then keyword[2] (topic).
-  Placed in ~/.grass8/toolboxes/toolboxes.xml
+  Menu order reflects the astrogeologist/cartographer workflow:
+    1. Setup (location, target info)
+    2. Import & Export
+    3. SPICE & Camera Geometry
+    4. Terrain, Illumination, Visibility
+    5. Decision Support (landing)
+    6. Photometric Analysis
+    7. Spectral & Mineral Mapping  ← PCA → classification → library → indices
+    8. Crater Analysis
+    9. Ring Plane Analysis
+   10. Noise & Calibration
+   11. Mosaic
 -->
 <toolboxes>
 
@@ -13,6 +23,7 @@
   <toolbox name="Planetary">
     <label>P&amp;lanetary</label>
     <items>
+      <subtoolbox name="PlanetarySetup"/>
       <subtoolbox name="PlanetaryLanding"/>
       <separator/>
       <subtoolbox name="PlanetaryImportExport"/>
@@ -34,8 +45,23 @@
       <separator/>
       <subtoolbox name="PlanetaryNoiseCalibration"/>
       <subtoolbox name="PlanetaryMosaic"/>
-      <separator/>
-      <subtoolbox name="PlanetaryUtilities"/>
+    </items>
+  </toolbox>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       keyword[1] = Setup & Location
+       First step for any new planetary project: create the location,
+       check body constants.
+       ══════════════════════════════════════════════════════════════════ -->
+  <toolbox name="PlanetarySetup">
+    <label>Setup &amp; Location</label>
+    <items>
+      <module-item name="p.location.create">
+        <label>Create GRASS location for a planetary body</label>
+      </module-item>
+      <module-item name="p.target.info">
+        <label>Body physical constants (radius, gravity, tilt, day length)</label>
+      </module-item>
     </items>
   </toolbox>
 
@@ -262,17 +288,34 @@
 
   <!-- ══════════════════════════════════════════════════════════════════
        keyword[1] = Spectral & Mineral Mapping
-       Ordered by keyword[2]: spectral indices → mineral → special pixels
+       Workflow order: noise → PCA (dimensionality reduction) →
+         classification (mapping units) → library matching (identification)
+         → band-depth indices → matter (absorption database) → specpix
        ══════════════════════════════════════════════════════════════════ -->
   <toolbox name="PlanetarySpectral">
     <label>Spectral &amp; Mineral Mapping</label>
     <items>
+      <module-item name="p.spec.pca">
+        <label>PCA of hyperspectral group (decorrelation, noise reduction)</label>
+      </module-item>
+      <separator/>
+      <module-item name="p.spec.class">
+        <label>Spectral classification — k-means clustering or SAM threshold</label>
+      </module-item>
+      <module-item name="p.spec.library">
+        <label>Spectral library match — rank minerals by SAM angle</label>
+      </module-item>
+      <separator/>
       <module-item name="p.spectral.planet">
-        <label>Spectral analysis (band depth, continuum removal, SAM)</label>
+        <label>Per-pixel spectral analysis (band depth, continuum removal, SAM)</label>
       </module-item>
       <module-item name="p.mineral.indices">
-        <label>Mineralogy spectral indices</label>
+        <label>Spectral summary indices (CRISM/OMEGA/M3/MDIS targeted)</label>
       </module-item>
+      <module-item name="p.matter.bands">
+        <label>Detect matter by absorption-band depth (body-aware database)</label>
+      </module-item>
+      <separator/>
       <module-item name="p.specpix">
         <label>Special-pixel classification (NULL / LRS / LIS / HIS / HRS)</label>
       </module-item>
@@ -343,18 +386,6 @@
     <items>
       <module-item name="p.automos">
         <label>Multi-image mosaic with feathering</label>
-      </module-item>
-    </items>
-  </toolbox>
-
-  <!-- ══════════════════════════════════════════════════════════════════
-       keyword[1] = Utilities
-       ══════════════════════════════════════════════════════════════════ -->
-  <toolbox name="PlanetaryUtilities">
-    <label>Utilities</label>
-    <items>
-      <module-item name="p.target.info">
-        <label>Body physical constants (radius, gravity, tilt, day length)</label>
       </module-item>
     </items>
   </toolbox>

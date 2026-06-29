@@ -1,0 +1,20 @@
+{
+    "name": "Titan",
+    "isis_target": "TITAN",
+    "semi_major_axis_m": 2574730,
+    "semi_minor_axis_m": 2574730,
+    "ellipsoid": "sphere",
+    "gravity_ms2": 1.35,
+    "solar_day_hours": 382.7,
+    "sidereal_period_days": 15.95,
+    "synodic_period_days": 15.95,
+    "axial_tilt_deg": 0.0,
+    "orbital_inclination_deg": 0.33,
+    "nutation_period_years": 0,
+    "solar_constant_Wm2": 14.82,
+    "atmosphere": true,
+    "proj4_longlat": "+proj=longlat +a=2574730 +b=2574730 +no_defs",
+    "proj4_south_stereo": "+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 +a=2574730 +b=2574730 +units=m +no_defs",
+    "proj4_north_stereo": "+proj=stere +lat_0=90 +lat_ts=90 +lon_0=0 +a=2574730 +b=2574730 +units=m +no_defs",
+    "notes": "IAU 2015 mean radius 2574.73 km (sphere). Cassini RADAR reference. Dense N2/CH4 atmosphere (~146 kPa surface); VIMS sees surface at 2.0/2.7/5.0 µm windows. Tidally locked to Saturn."
+}
