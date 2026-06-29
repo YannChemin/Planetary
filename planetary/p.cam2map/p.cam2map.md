@@ -100,25 +100,36 @@ use SPICE or any real camera geometry; it predates the `-c` rebuild and
 is kept only for simple non-georeferenced inputs that already carry
 plausible lat/lon-like region bounds.
 
-*p.cam2map* supports three output map projections in camera mode, selected
-with `projection=`:
+*p.cam2map* supports nine output map projections in camera mode, selected
+with `projection=`.
 
-- **`latlon`** (default): the output region's north/south/east/west are
-  plain lat/lon degrees -- same behaviour as before.
-- **`sinusoidal`**: equal-area cylindrical. north/south are still latitude
-  degrees; east/west are `(lon − clon) × cos(lat)` degrees. Suitable for
-  whole-planet or wide-area maps where area fidelity matters. Set `clon=`
-  to the central meridian.
+**Degree-unit projections** (output region in degree-equivalent units):
+
+- **`latlon`** (default): east=lon, north=lat in plain degrees.
+- **`sinusoidal`**: equal-area cylindrical. north = latitude degrees;
+  east = `(lon − clon) × cos(lat)` degrees. Set `clon=`.
 - **`stereo_north`** / **`stereo_south`**: polar stereographic, true-scale
-  at the pole, on a sphere. east/west are `sin(lon − clon) × tan(π/4 −
-  |lat|/2) × 180/π` degrees and north/south are the corresponding
-  perpendicular component. Suitable for polar regions. Set `clon=` to the
-  desired central meridian.
+  at the pole. east/north are degree-unit angular offsets from the pole.
+  Set `clon=` to desired central meridian.
 
-For all non-`latlon` projections the output region's coordinates are in
-the projection's native units (degrees in the same angular scale as
-lat/lon for all three supported projections). `clon=` defaults to 0.
-Pixels that inverse-project outside ±90° latitude are set to NODATA.
+**Metre-unit projections** (output region in metres; use `a_radius=` for
+the body sphere radius in km; set `g.region` in metres before running):
+
+- **`eqc`**: equidistant cylindrical (simple cylindrical). x = R·lon_rad,
+  y = R·lat_rad. Set `clon=` for central meridian.
+- **`merc`**: Mercator. x = R·(lon−clon)_rad, y = R·ln(tan(π/4+lat/2)).
+  Set `clon=`.
+- **`lcc`**: Lambert Conformal Conic. Set `clon=` (central meridian),
+  `clat=` (origin latitude), `lat_1=` and `lat_2=` (standard parallels,
+  default 30° and 60°).
+- **`laea`**: Lambert Azimuthal Equal-Area. Set `clon=`/`clat=` (map
+  centre). Both hemispheres work; good for regional or polar maps.
+- **`ortho`**: Orthographic. Set `clon=`/`clat=` (sub-spacecraft point or
+  map centre). Only the visible hemisphere is produced; pixels beyond the
+  limb (ρ > R) are set to NODATA.
+
+`clon=` defaults to 0 for all projections. Pixels that inverse-project
+outside ±90° latitude are set to NODATA.
 
 ## NOTES
 

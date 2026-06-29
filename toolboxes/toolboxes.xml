@@ -105,6 +105,9 @@
       <module-item name="p.out.isis">
         <label>Export to ISIS3 cube (.cub)</label>
       </module-item>
+      <module-item name="p.out.pds4">
+        <label>Export to PDS4 GeoTIFF + XML label</label>
+      </module-item>
       <separator/>
       <module-item name="p.in.dem">
         <label>Import and prepare planetary DEM</label>

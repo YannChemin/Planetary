@@ -71,6 +71,18 @@ static const double NPF_VESTA_A[] = {
 };
 #define NPF_VESTA_N 11
 
+/* NPF Titan: Moon polynomial shape scaled by the Artemieva & Lunine (2003)
+ * outer solar system flux factor.  Titan's impact rate per unit area from
+ * cometary projectiles is ~0.5× the Moon's from asteroidal projectiles at
+ * equivalent surface ages (their Table 2, factor 0.5 for current epoch).
+ * a0 = a0_Moon + log10(0.5) = -3.0876 - 0.3010 = -3.3886.
+ * Reference: Artemieva N. & Lunine J. (2003), Icarus 164:471-480.          */
+static const double NPF_TITAN_A[] = {
+    -3.3886, -3.557528, 0.781027, 1.021521, -0.156012,
+    -0.444058, 0.019977, 0.086850, -0.005874, -0.006809, 0.000825
+};
+#define NPF_TITAN_N 11
+
 /* Select NPF coefficients and array length for the named body.
  * Returns 0 if body is unknown (caller should fall back to Moon).      */
 static int npf_for_body(const char *body,
@@ -81,6 +93,7 @@ static int npf_for_body(const char *body,
     if (strcasecmp(body, "mars")    == 0) { *a_out=NPF_MARS_A;    *n_out=NPF_MARS_N;    return 1; }
     if (strcasecmp(body, "mercury") == 0) { *a_out=NPF_MERCURY_A; *n_out=NPF_MERCURY_N; return 1; }
     if (strcasecmp(body, "vesta")   == 0) { *a_out=NPF_VESTA_A;   *n_out=NPF_VESTA_N;   return 1; }
+    if (strcasecmp(body, "titan")   == 0) { *a_out=NPF_TITAN_A;   *n_out=NPF_TITAN_N;   return 1; }
 fallback:
     *a_out=NPF_MOON_A; *n_out=NPF_MOON_N;
     return 0;
@@ -372,7 +385,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_csv, *opt_vec, *opt_lyr, *opt_col;
     struct Option  *opt_area, *opt_body, *opt_output;
     struct Option  *opt_dmin, *opt_dmax, *opt_nbins;
-    struct Flag    *flag_hartmann;
+    struct Flag    *flag_hartmann, *flag_rplot, *flag_poisson;
 
     G_gisinit(argv[0]);
     module = G_define_module();
@@ -432,11 +445,12 @@ int main(int argc, char *argv[])
     opt_body->type        = TYPE_STRING;
     opt_body->required    = NO;
     opt_body->answer      = "mars";
-    opt_body->options     = "moon,mars,mercury,vesta";
+    opt_body->options     = "moon,mars,mercury,vesta,titan";
     opt_body->description = _("Target body for production function. "
                                "Moon: Neukum 1983. Mars: Ivanov 2001. "
                                "Mercury: Neukum et al. 2001 (scaled Moon). "
-                               "Vesta: Schmedemann et al. 2014 (scaled Moon).");
+                               "Vesta: Schmedemann et al. 2014 (scaled Moon). "
+                               "Titan: Artemieva & Lunine 2003 (0.5x Moon flux).");
 
     opt_output = G_define_option();
     opt_output->key         = "output";
@@ -472,6 +486,19 @@ int main(int argc, char *argv[])
                                      "instead of NPF (note: '-h' is "
                                      "reserved for --help)");
 
+    flag_rplot = G_define_flag();
+    flag_rplot->key         = 'r';
+    flag_rplot->description = _("R-plot mode: output differential R-values "
+                                  "R = D^3 * n / (dD * area) instead of "
+                                  "cumulative N. Normalisation by D^3 makes "
+                                  "the production function appear ~flat.");
+
+    flag_poisson = G_define_flag();
+    flag_poisson->key         = 'p';
+    flag_poisson->description = _("Add Poisson ±1sigma uncertainty column "
+                                   "to output CSV (sigma = sqrt(n) / area "
+                                   "for cumulative N; propagated for age).");
+
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
 
@@ -493,6 +520,8 @@ int main(int argc, char *argv[])
     double dmax     = atof(opt_dmax->answer);
     int    nbins    = atoi(opt_nbins->answer);
     const char *body_name = opt_body->answer;
+    int    do_rplot   = flag_rplot->answer;
+    int    do_poisson = flag_poisson->answer;
     const double *npf_a;
     int           npf_n;
     if (!npf_for_body(body_name, &npf_a, &npf_n))
@@ -521,18 +550,22 @@ int main(int argc, char *argv[])
 
     /* Log-spaced bins */
     double logdmin = log10(dmin), logdmax = log10(dmax);
+    double step = (logdmax - logdmin) / nbins;
     double *bin_centers = (double *)G_malloc((size_t)nbins * sizeof(double));
+    double *bin_widths  = (double *)G_malloc((size_t)nbins * sizeof(double));
     int    *bin_counts  = (int    *)G_malloc((size_t)nbins * sizeof(int));
     for (int i = 0; i < nbins; i++) {
-        bin_centers[i] = pow(10.0,
-                              logdmin + (i + 0.5) * (logdmax - logdmin) / nbins);
-        bin_counts[i] = 0;
+        double d_lo = pow(10.0, logdmin + i       * step);
+        double d_hi = pow(10.0, logdmin + (i + 1) * step);
+        bin_centers[i] = pow(10.0, logdmin + (i + 0.5) * step);
+        bin_widths[i]  = d_hi - d_lo;
+        bin_counts[i]  = 0;
     }
 
     for (int ci = 0; ci < ncraters; ci++) {
         double d = diameters[ci];
         if (d < dmin || d > dmax) continue;
-        int bi = (int)((log10(d) - logdmin) / (logdmax - logdmin) * nbins);
+        int bi = (int)((log10(d) - logdmin) / step);
         if (bi < 0) bi = 0;
         if (bi >= nbins) bi = nbins - 1;
         bin_counts[bi]++;
@@ -547,12 +580,49 @@ int main(int argc, char *argv[])
         N_cum[i] = (double)(total - cumsum + bin_counts[i]) / area_km2;
     }
 
+    /* Differential R-values: R = D^3 * n / (dD * area) */
+    double *R_obs = (double *)G_malloc((size_t)nbins * sizeof(double));
+    for (int i = 0; i < nbins; i++) {
+        double D3 = bin_centers[i] * bin_centers[i] * bin_centers[i];
+        R_obs[i] = (bin_counts[i] > 0 && bin_widths[i] > 0.0)
+                   ? D3 * bin_counts[i] / (bin_widths[i] * area_km2)
+                   : 0.0;
+    }
+
+    /* Saturation equilibrium: N_sat(>D) = 0.2 * D^-2  [Hartmann standard].
+     * In R-space: R_sat = D^3 * |dN_sat/dD| / dD = D^3 * 0.4*D^-3 = 0.4 (constant). */
+    double *N_sat = (double *)G_malloc((size_t)nbins * sizeof(double));
+    for (int i = 0; i < nbins; i++)
+        N_sat[i] = 0.2 / (bin_centers[i] * bin_centers[i]);
+
+    /* Poisson ±1σ on cumulative N (sigma = sqrt(n_above) / area) */
+    double *sigma_N = (double *)G_malloc((size_t)nbins * sizeof(double));
+    double *sigma_R = (double *)G_malloc((size_t)nbins * sizeof(double));
+    {
+        long above = total;
+        for (int i = 0; i < nbins; i++) {
+            sigma_N[i] = (above > 0) ? sqrt((double)above) / area_km2 : 0.0;
+            double D3  = bin_centers[i] * bin_centers[i] * bin_centers[i];
+            sigma_R[i] = (bin_counts[i] > 0 && bin_widths[i] > 0.0)
+                         ? D3 * sqrt((double)bin_counts[i]) / (bin_widths[i] * area_km2)
+                         : 0.0;
+            above -= bin_counts[i];
+        }
+    }
+
     /* NPF reference and surface-age estimate */
     double N1_ref = pow(10.0, npf_logN(npf_a, npf_n, 1.0));
     double N1_obs = 0.0;
-    for (int i = 0; i < nbins; i++)
+    long   n1_count = 0;  /* craters with D >= 1 km (for Poisson sigma on age) */
+    for (int i = 0; i < nbins; i++) {
         if (bin_centers[i] >= 1.0) { N1_obs = N_cum[i]; break; }
+    }
+    for (int ci = 0; ci < ncraters; ci++)
+        if (diameters[ci] >= 1.0) n1_count++;
     double age_Ga = (N1_ref > 1e-20) ? N1_obs / N1_ref : 0.0;
+    double sigma_age = (n1_count > 0 && N1_ref > 1e-20)
+                       ? sqrt((double)n1_count) / (area_km2 * N1_ref)
+                       : 0.0;
 
     /* If -t requested, use a body-appropriate chronology. */
     if (flag_hartmann->answer) {
@@ -621,16 +691,25 @@ int main(int argc, char *argv[])
 
     G_message(_("Results for %s (area=%.1f km^2):"),
               opt_body->answer, area_km2);
-    G_message(_("  Craters: %d   N(D>=1km) = %.4e km^-2"),
-              ncraters, N1_obs);
+    G_message(_("  Craters: %d   N(D>=1km) = %.4e km^-2  "
+                 "(n_D>=1km=%ld, Poisson sigma_N1=%.4e)"),
+              ncraters, N1_obs, n1_count,
+              (n1_count > 0) ? sqrt((double)n1_count) / area_km2 : 0.0);
     G_message(_("  Power-law fit: log10(N) = %.4f + %.4f * log10(D)   "
                  "rmse_log10=%.4f  (n=%d bins used)"),
               intercept, slope, rmse, nfit);
-    G_message(_("  Estimated surface age: %.3f Ga%s"),
-              age_Ga,
-              flag_hartmann->answer
-                ? " (Hartmann 2005 isochron chi^2 best-fit)"
-                : " (Neukum 1983/Ivanov 2001 NPF ratio)");
+    if (sigma_age > 0.0)
+        G_message(_("  Estimated surface age: %.3f ± %.3f Ga%s"),
+                  age_Ga, sigma_age,
+                  flag_hartmann->answer
+                    ? " (Hartmann 2005 isochron chi^2 best-fit, Poisson 1-sigma)"
+                    : " (Neukum/Ivanov NPF ratio, Poisson 1-sigma)");
+    else
+        G_message(_("  Estimated surface age: %.3f Ga%s"),
+                  age_Ga,
+                  flag_hartmann->answer
+                    ? " (Hartmann 2005 isochron chi^2 best-fit)"
+                    : " (Neukum 1983/Ivanov 2001 NPF ratio)");
 
     FILE *out_fp = opt_output->answer ? fopen(opt_output->answer, "w") : stdout;
     if (!out_fp && opt_output->answer)
@@ -638,32 +717,93 @@ int main(int argc, char *argv[])
     if (out_fp) {
         const char *src = have_csv ? opt_csv->answer : opt_vec->answer;
         fprintf(out_fp, "# Crater SFD analysis\n");
-        fprintf(out_fp, "# body=%s  area=%.3f km^2  N=%d  age=%.4f Ga\n",
+        fprintf(out_fp, "# body=%s  area=%.3f km^2  N=%d  age=%.4f Ga",
                 opt_body->answer, area_km2, ncraters, age_Ga);
+        if (sigma_age > 0.0) fprintf(out_fp, " +/- %.4f Ga", sigma_age);
+        fprintf(out_fp, "\n");
         fprintf(out_fp, "# Power-law fit log10(N)=%.6f%+.6f*log10(D)  "
                           "rmse_log10=%.6f  nfit=%d\n",
                 intercept, slope, rmse, nfit);
         fprintf(out_fp, "# Source: %s\n", src);
+        if (do_rplot)
+            fprintf(out_fp, "# R-plot mode: R = D^3 * n_bin / (dD * area). "
+                              "R_sat = 0.4 (constant, Hartmann saturation "
+                              "equilibrium in R-space)\n");
         fprintf(out_fp, "#\n");
-        fprintf(out_fp, "# D_km  n_in_bin  N_cum_obs  N_npf_age  "
-                          "N_powerlaw_fit\n");
+        if (do_rplot) {
+            if (do_poisson)
+                fprintf(out_fp, "# D_km  n_in_bin  R_obs  R_npf_age  "
+                                  "R_powerlaw_fit  R_sat  sigma_R\n");
+            else
+                fprintf(out_fp, "# D_km  n_in_bin  R_obs  R_npf_age  "
+                                  "R_powerlaw_fit  R_sat\n");
+        } else {
+            if (do_poisson)
+                fprintf(out_fp, "# D_km  n_in_bin  N_cum_obs  N_npf_age  "
+                                  "N_powerlaw_fit  N_sat  sigma_N\n");
+            else
+                fprintf(out_fp, "# D_km  n_in_bin  N_cum_obs  N_npf_age  "
+                                  "N_powerlaw_fit  N_sat\n");
+        }
         for (int i = 0; i < nbins; i++) {
-            double D     = bin_centers[i];
-            double N_npf = pow(10.0, npf_logN(npf_a, npf_n, D))
-                              * N1_obs / N1_ref;
+            double D    = bin_centers[i];
+            double D3   = D * D * D;
+            double dD   = bin_widths[i];
+            /* NPF prediction at the fitted age */
+            double N_npf_age = (N1_ref > 1e-20)
+                               ? pow(10.0, npf_logN(npf_a, npf_n, D))
+                                 * N1_obs / N1_ref
+                               : 0.0;
+            /* Differential R from NPF: approximate dN/dD by central difference */
+            double N_npf_lo = pow(10.0, npf_logN(npf_a, npf_n, D * 0.95));
+            double N_npf_hi = pow(10.0, npf_logN(npf_a, npf_n, D * 1.05));
+            double dN_npf   = fabs(N_npf_lo - N_npf_hi) / (0.10 * D);
+            double R_npf_age = D3 * dN_npf * (N1_obs > 0.0 ? N1_obs / N1_ref : 1.0);
+            /* Power-law prediction */
             double N_pl  = (nfit >= 2)
-                              ? pow(10.0, intercept + slope * log10(D))
-                              : 0.0;
-            fprintf(out_fp,
-                    "%.6f  %d  %.6e  %.6e  %.6e\n",
-                    D, bin_counts[i], N_cum[i], N_npf, N_pl);
+                           ? pow(10.0, intercept + slope * log10(D))
+                           : 0.0;
+            double R_pl  = (nfit >= 2 && dD > 0.0)
+                           ? D3 * fabs(slope) * N_pl / D
+                           : 0.0;
+            /* Saturation */
+            double R_sat_val = 0.4;
+
+            if (do_rplot) {
+                if (do_poisson)
+                    fprintf(out_fp,
+                            "%.6f  %d  %.6e  %.6e  %.6e  %.6e  %.6e\n",
+                            D, bin_counts[i], R_obs[i], R_npf_age,
+                            R_pl, R_sat_val, sigma_R[i]);
+                else
+                    fprintf(out_fp,
+                            "%.6f  %d  %.6e  %.6e  %.6e  %.6e\n",
+                            D, bin_counts[i], R_obs[i], R_npf_age,
+                            R_pl, R_sat_val);
+            } else {
+                if (do_poisson)
+                    fprintf(out_fp,
+                            "%.6f  %d  %.6e  %.6e  %.6e  %.6e  %.6e\n",
+                            D, bin_counts[i], N_cum[i], N_npf_age,
+                            N_pl, N_sat[i], sigma_N[i]);
+                else
+                    fprintf(out_fp,
+                            "%.6f  %d  %.6e  %.6e  %.6e  %.6e\n",
+                            D, bin_counts[i], N_cum[i], N_npf_age,
+                            N_pl, N_sat[i]);
+            }
         }
         if (opt_output->answer) fclose(out_fp);
     }
 
     G_free(diameters);
     G_free(bin_centers);
+    G_free(bin_widths);
     G_free(bin_counts);
     G_free(N_cum);
+    G_free(R_obs);
+    G_free(N_sat);
+    G_free(sigma_N);
+    G_free(sigma_R);
     return EXIT_SUCCESS;
 }

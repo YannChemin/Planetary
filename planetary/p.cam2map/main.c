@@ -727,7 +727,7 @@ int main(int argc, char *argv[])
     struct Option  *opt_instrument, *opt_filter1, *opt_filter2, *opt_mirror_dn;
     struct Option  *opt_sampling_mode, *opt_x_offset, *opt_z_offset;
     struct Option  *opt_swath_width, *opt_swath_length, *opt_hrsc_macropixel;
-    struct Option  *opt_projection, *opt_clon;
+    struct Option  *opt_projection, *opt_clon, *opt_clat, *opt_lat1, *opt_lat2;
     struct Flag    *flag_camera;
     struct History  history;
 
@@ -870,23 +870,57 @@ int main(int argc, char *argv[])
     opt_projection->type        = TYPE_STRING;
     opt_projection->required    = NO;
     opt_projection->answer      = "latlon";
-    opt_projection->options     = "latlon,sinusoidal,stereo_north,stereo_south";
-    opt_projection->description = _("Output map projection (camera mode only). "
-        "latlon: output north/south/east/west are plain lat/lon degrees (default). "
-        "sinusoidal: equal-area; output north/south are lat degrees, "
-        "east/west are (lon-clon)*cos(lat) degrees. "
-        "stereo_north/stereo_south: polar stereographic; output east/west "
-        "are sin(lon-clon)*tan(pi/4-lat/2)*180/pi degrees from the pole, "
-        "north/south are -cos(lon-clon)*tan(pi/4-lat/2)*180/pi degrees. "
-        "For all non-latlon projections, set clon= to the central meridian.");
+    opt_projection->options     = "latlon,sinusoidal,stereo_north,stereo_south,"
+                                   "eqc,merc,lcc,laea,ortho";
+    opt_projection->description = _("Output map projection. "
+        "latlon: east=lon, north=lat (degrees). "
+        "sinusoidal/stereo_north/stereo_south: degree-unit variants (legacy). "
+        "eqc: equidistant cylindrical (simple cylindrical) in metres. "
+        "merc: Mercator in metres. "
+        "lcc: Lambert Conformal Conic in metres (needs lat_1=,lat_2=,clat=). "
+        "laea: Lambert Azimuthal Equal-Area in metres (needs clat=). "
+        "ortho: Orthographic in metres (needs clat=). "
+        "Metre projections use a_radius= as sphere radius; set g.region in metres.");
+    opt_projection->descriptions = _(
+        "latlon;Geographic lat/lon (degrees);"
+        "sinusoidal;Equal-area, degree units, clon=;"
+        "stereo_north;North polar stereographic, degree units;"
+        "stereo_south;South polar stereographic, degree units;"
+        "eqc;Equidistant cylindrical (simple cylindrical), metres;"
+        "merc;Mercator, metres;"
+        "lcc;Lambert Conformal Conic, metres (lat_1=,lat_2=,clat=);"
+        "laea;Lambert Azimuthal Equal-Area, metres (clat=);"
+        "ortho;Orthographic, metres (clat=)");
 
     opt_clon = G_define_option();
     opt_clon->key         = "clon";
     opt_clon->type        = TYPE_DOUBLE;
     opt_clon->required    = NO;
     opt_clon->answer      = "0";
-    opt_clon->description = _("Central longitude (degrees East) for sinusoidal "
-                               "or polar stereographic projections");
+    opt_clon->description = _("Central / reference longitude (degrees East) "
+                               "for all non-latlon projections");
+
+    opt_clat = G_define_option();
+    opt_clat->key         = "clat";
+    opt_clat->type        = TYPE_DOUBLE;
+    opt_clat->required    = NO;
+    opt_clat->answer      = "0";
+    opt_clat->description = _("Centre latitude (degrees) for laea, ortho, "
+                               "and lcc origin latitude");
+
+    opt_lat1 = G_define_option();
+    opt_lat1->key         = "lat_1";
+    opt_lat1->type        = TYPE_DOUBLE;
+    opt_lat1->required    = NO;
+    opt_lat1->answer      = "30";
+    opt_lat1->description = _("First standard parallel (degrees) for lcc");
+
+    opt_lat2 = G_define_option();
+    opt_lat2->key         = "lat_2";
+    opt_lat2->type        = TYPE_DOUBLE;
+    opt_lat2->required    = NO;
+    opt_lat2->answer      = "60";
+    opt_lat2->description = _("Second standard parallel (degrees) for lcc");
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -902,11 +936,21 @@ int main(int argc, char *argv[])
     double b_km = atof(opt_b->answer);
     double c_km = atof(opt_c->answer);
     int bilinear = (strcmp(opt_interp->answer, "bilinear") == 0);
-    double clon_deg = atof(opt_clon->answer);
+    double clon_deg  = atof(opt_clon->answer);
+    double clat_deg  = atof(opt_clat->answer);
+    double lat1_deg  = atof(opt_lat1->answer);
+    double lat2_deg  = atof(opt_lat2->answer);
     const char *proj_name = opt_projection->answer ? opt_projection->answer : "latlon";
     int proj_sinusoidal  = (strcmp(proj_name, "sinusoidal")  == 0);
     int proj_stereo_n    = (strcmp(proj_name, "stereo_north") == 0);
     int proj_stereo_s    = (strcmp(proj_name, "stereo_south") == 0);
+    int proj_eqc         = (strcmp(proj_name, "eqc")          == 0);
+    int proj_merc        = (strcmp(proj_name, "merc")         == 0);
+    int proj_lcc         = (strcmp(proj_name, "lcc")          == 0);
+    int proj_laea        = (strcmp(proj_name, "laea")         == 0);
+    int proj_ortho       = (strcmp(proj_name, "ortho")        == 0);
+    /* Sphere radius for metre projections (km → m) */
+    double R_m = a_km * 1000.0;
 
     /* Open input raster, find its mapset (needed for camera mode's
      * history read), and load it fully into memory for random-access
@@ -1078,6 +1122,102 @@ int main(int argc, char *argv[])
                 } else {
                     lat_deg = -90.0 + 2.0 * atan(rho_rad) * 180.0 / M_PI;
                     lon_deg = clon_deg + atan2(east, north) * 180.0 / M_PI;
+                }
+            }
+            else if (proj_eqc) {
+                /* Equidistant cylindrical (simple cylindrical), sphere, metres.
+                 * x = R*(lon-clon), y = R*lat → inverse: lat=y/R, lon=x/R+clon */
+                lat_deg = (north / R_m) * (180.0 / M_PI);
+                lon_deg = (east  / R_m) * (180.0 / M_PI) + clon_deg;
+            }
+            else if (proj_merc) {
+                /* Mercator, sphere, metres.
+                 * x = R*(lon-clon), y = R*ln(tan(π/4+lat/2))
+                 * Inverse: lat = 2*atan(exp(y/R)) - π/2, lon = x/R + clon */
+                lat_deg = (2.0 * atan(exp(north / R_m)) - M_PI / 2.0) * (180.0 / M_PI);
+                lon_deg = (east / R_m) * (180.0 / M_PI) + clon_deg;
+            }
+            else if (proj_lcc) {
+                /* Lambert Conformal Conic, sphere, metres.
+                 * Standard parallels lat_1/lat_2, origin clat/clon.
+                 * n = (ln cos(φ1) - ln cos(φ2)) / (ln tan(π/4+φ1/2) - ln tan(π/4+φ2/2))
+                 * F = cos(φ1)*tan(π/4+φ1/2)^n / n
+                 * ρ0 = R*F / tan(π/4+φ0/2)^n
+                 * x = ρ*sin(θ),  y = ρ0 - ρ*cos(θ)
+                 * Inverse: ρ = sign(n)*sqrt(x²+(ρ0-y)²),  θ = atan2(x, ρ0-y)
+                 * lat = 2*atan((R*F/ρ)^(1/n)) - π/2,  lon = θ/n + lon0 */
+                {
+                    double phi1 = lat1_deg * M_PI / 180.0;
+                    double phi2 = lat2_deg * M_PI / 180.0;
+                    double phi0 = clat_deg * M_PI / 180.0;
+                    double lam0 = clon_deg * M_PI / 180.0;
+                    double n    = (log(cos(phi1)) - log(cos(phi2))) /
+                                  (log(tan(M_PI/4 + phi1/2)) - log(tan(M_PI/4 + phi2/2)));
+                    double F    = cos(phi1) * pow(tan(M_PI/4 + phi1/2), n) / n;
+                    double rho0 = R_m * F / pow(tan(M_PI/4 + phi0/2), n);
+                    double rho  = copysign(sqrt(east*east + (rho0 - north)*(rho0 - north)), n);
+                    double theta = atan2(east, rho0 - north);
+                    double lat_r = 2.0 * atan(pow(R_m * F / rho, 1.0/n)) - M_PI/2.0;
+                    double lon_r = theta / n + lam0;
+                    lat_deg = lat_r * 180.0 / M_PI;
+                    lon_deg = lon_r * 180.0 / M_PI;
+                }
+            }
+            else if (proj_laea) {
+                /* Lambert Azimuthal Equal-Area, sphere, metres.
+                 * Centre at clat/clon.  ρ = sqrt(x²+y²), c = 2*asin(ρ/(2R))
+                 * lat = asin(cos(c)*sin(φ0) + y*sin(c)*cos(φ0)/ρ)
+                 * lon = clon + atan2(x*sin(c), ρ*cos(φ0)*cos(c) - y*sin(φ0)*sin(c))
+                 * (Snyder 1987, Eq. 24-17/24-18) */
+                {
+                    double phi0 = clat_deg * M_PI / 180.0;
+                    double rho  = sqrt(east*east + north*north);
+                    if (rho < 1.0e-10) {
+                        lat_deg = clat_deg;
+                        lon_deg = clon_deg;
+                    } else {
+                        double c    = 2.0 * asin(rho / (2.0 * R_m));
+                        double sc   = sin(c), cc = cos(c);
+                        double sp0  = sin(phi0), cp0 = cos(phi0);
+                        double lat_r = asin(cc * sp0 + north * sc * cp0 / rho);
+                        double lon_r = clon_deg * M_PI/180.0 +
+                                       atan2(east * sc,
+                                             rho * cp0 * cc - north * sp0 * sc);
+                        lat_deg = lat_r * 180.0 / M_PI;
+                        lon_deg = lon_r * 180.0 / M_PI;
+                    }
+                }
+            }
+            else if (proj_ortho) {
+                /* Orthographic, sphere, metres.
+                 * Centre at clat/clon.
+                 * x = R*cos(lat)*sin(lon-clon)
+                 * y = R*(cos(clat)*sin(lat) - sin(clat)*cos(lat)*cos(lon-clon))
+                 * Inverse: ρ = sqrt(x²+y²), c = asin(ρ/R)
+                 * lat = asin(cos(c)*sin(φ0) + y*sin(c)*cos(φ0)/ρ)
+                 * lon = clon + atan2(x*sin(c), ρ*cos(φ0)*cos(c) - y*sin(φ0)*sin(c))
+                 * (Same as LAEA but with c = asin(ρ/R) instead of 2*asin(ρ/2R)) */
+                {
+                    double phi0 = clat_deg * M_PI / 180.0;
+                    double rho  = sqrt(east*east + north*north);
+                    if (rho < 1.0e-10) {
+                        lat_deg = clat_deg;
+                        lon_deg = clon_deg;
+                    } else if (rho > R_m) {
+                        /* Outside the visible hemisphere: NULL */
+                        Rast_set_d_null_value(&out_buf[col], 1);
+                        continue;
+                    } else {
+                        double c    = asin(rho / R_m);
+                        double sc   = sin(c), cc = cos(c);
+                        double sp0  = sin(phi0), cp0 = cos(phi0);
+                        double lat_r = asin(cc * sp0 + north * sc * cp0 / rho);
+                        double lon_r = clon_deg * M_PI/180.0 +
+                                       atan2(east * sc,
+                                             rho * cp0 * cc - north * sp0 * sc);
+                        lat_deg = lat_r * 180.0 / M_PI;
+                        lon_deg = lon_r * 180.0 / M_PI;
+                    }
                 }
             }
             else {
