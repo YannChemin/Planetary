@@ -134,6 +134,15 @@ typedef struct {
      * HRSC:  pushbroom_x_sign=-1, focal_plane_x0=TRANSX[0] (TRANSX[1]=-pixel_pitch). */
     int    pushbroom_x_sign;  /* +1 CRISM, -1 HRSC (sign of TRANSX[1] / pixel_pitch) */
     double focal_plane_x0;   /* TRANSX[0] constant focal-plane X offset (mm); 0 for CRISM */
+    /* MRO HiRISE: along-track=X (dvec[0]), cross-track=Y (dvec[1]), OD_K from -74699.
+     * Each of the 14 CCDs has a large focal-plane X offset (TRANSX[0]) from the
+     * telescope optical axis.  transx_bore = TRANSX[0]/focal_length is the
+     * along-track binary-search target (replaces the dvec[0]=0 condition of CTX).
+     * The cross-track sample uses TRANSY[0] (Y offset) and TRANSY[1] (mm/sample). */
+    int    is_hirise;
+    double hirise_transy0;   /* TRANSY[0]: constant y_fp at boresight_sample */
+    double hirise_transy1;   /* TRANSY[1]: y_fp per sample (−0.012 mm/px for all REDs) */
+    double transx_bore;      /* TRANSX[0]/focal_length: along-track BS zero-crossing target */
 } IssCameraModel;
 
 static void load_iss_camera_model(const char *instrument,
@@ -232,6 +241,28 @@ static void load_iss_camera_model(const char *instrument,
         cam->naif_id = -41211;
         snprintf(cam->frame, sizeof(cam->frame), "MEX_HRSC_HEAD");
         cam->is_pushbroom = 1; cam->pushbroom_x_sign = -1;
+    }
+    /* MRO HiRISE: 10 RED CCDs + 2 IR + 2 BG, all share MRO_HIRISE_OPTICAL_AXIS (-74690).
+     * NAIF IDs: RED0-9 = -74600..-74609; BG0-1 = -74610..-74611; IR0-1 = -74612..-74613.
+     * OD_K + focal length are loaded from the parent ID (-74699) in the pushbroom block. */
+    else if (strncmp(instrument, "HIRISE_", 7) == 0) {
+        const char *ccd = instrument + 7;  /* e.g. "RED5", "BG0", "IR1" */
+        int ccd_id =
+            strcmp(ccd,"RED0")==0 ? -74600 : strcmp(ccd,"RED1")==0 ? -74601 :
+            strcmp(ccd,"RED2")==0 ? -74602 : strcmp(ccd,"RED3")==0 ? -74603 :
+            strcmp(ccd,"RED4")==0 ? -74604 : strcmp(ccd,"RED5")==0 ? -74605 :
+            strcmp(ccd,"RED6")==0 ? -74606 : strcmp(ccd,"RED7")==0 ? -74607 :
+            strcmp(ccd,"RED8")==0 ? -74608 : strcmp(ccd,"RED9")==0 ? -74609 :
+            strcmp(ccd,"BG0") ==0 ? -74610 : strcmp(ccd,"BG1") ==0 ? -74611 :
+            strcmp(ccd,"IR0") ==0 ? -74612 : strcmp(ccd,"IR1") ==0 ? -74613 : 0;
+        if (ccd_id == 0)
+            G_fatal_error(_("Camera mode (-c): unknown HiRISE CCD '%s' -- "
+                            "valid: HIRISE_RED0..RED9, HIRISE_BG0, HIRISE_BG1, "
+                            "HIRISE_IR0, HIRISE_IR1."), ccd);
+        cam->naif_id = ccd_id;
+        snprintf(cam->frame, sizeof(cam->frame), "MRO_HIRISE_OPTICAL_AXIS");
+        cam->is_pushbroom = 1;
+        cam->is_hirise = 1;
     }
     else if (strcmp(instrument, "CTX") == 0) {
         cam->naif_id = -74021;
@@ -356,6 +387,7 @@ static void load_iss_camera_model(const char *instrument,
                         "OMEGA_SWIR_L, OMEGA_VNIR, CTX, LROC_NACL, LROC_NACR, "
                         "HRSC_NADIR, HRSC_RED, HRSC_GREEN, HRSC_BLUE, HRSC_IR, "
                         "HRSC_P1, HRSC_P2, HRSC_S1, HRSC_S2, "
+                        "HIRISE_RED0..RED9, HIRISE_BG0, HIRISE_BG1, HIRISE_IR0, HIRISE_IR1, "
                         "VIMS_IR, VIMS_VIS, ISS_NAC, ISS_WAC)."),
                        instrument);
 
@@ -365,25 +397,40 @@ static void load_iss_camera_model(const char *instrument,
     const char *iak_hint = cam->is_pushbroom
         ? (cam->is_ctx        ? "the MROCTX addendum kernel (mroctxAddendum005.ti)"
          : cam->is_lroc_nac   ? "the LRO LROC IK (lro_lroc_v20.ti)"
+         : cam->is_hirise      ? "mro_hirise_v11.ti (standard NAIF MRO IK)"
          : (cam->naif_id >= -41219 && cam->naif_id <= -41211) ? "the HRSC IAK (hrscAddendum004.ti)"
                                 : "the CRISM addendum kernel (crismAddendum001.ti)")
         : "the IssNAAddendum/IssWAAddendum instrument addendum kernel";
 
-    snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
-    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->pixel_pitch) < 0 || n != 1)
-        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
-                        "IK -- has %s been attached via p.spiceinit's ik=, "
-                        "in addition to the regular IK?"), varname, iak_hint);
+    /* HiRISE: pixel pitch from PIXEL_SIZE[0]; boresight from CCD_CENTER.
+     * Both use the per-CCD naif_id (cam->naif_id = -74600..-74613). */
+    if (cam->is_hirise) {
+        double ps[2] = {0.012, 0.012};
+        snprintf(varname, sizeof(varname), "INS%d_PIXEL_SIZE", cam->naif_id);
+        (void)p_spice_gdpool_d(varname, 0, 2, &n, ps);
+        cam->pixel_pitch = ps[0];  /* 0.012 mm for all HiRISE CCDs */
+        double cc[2] = {1024.5, 64.5};
+        snprintf(varname, sizeof(varname), "INS%d_CCD_CENTER", cam->naif_id);
+        (void)p_spice_gdpool_d(varname, 0, 2, &n, cc);
+        cam->boresight_sample = cc[0];  /* centre of the CCD (1-based) */
+        cam->boresight_line   = cc[1];
+    } else {
+        snprintf(varname, sizeof(varname), "INS%d_PIXEL_PITCH", cam->naif_id);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->pixel_pitch) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read %s from the loaded "
+                            "IK -- has %s been attached via p.spiceinit's ik=, "
+                            "in addition to the regular IK?"), varname, iak_hint);
 
-    snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_SAMPLE", cam->naif_id);
-    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_sample) < 0 || n != 1)
-        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
-                       varname);
+        snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_SAMPLE", cam->naif_id);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_sample) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                           varname);
 
-    snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_LINE", cam->naif_id);
-    if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_line) < 0 || n != 1)
-        G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
-                       varname);
+        snprintf(varname, sizeof(varname), "INS%d_BORESIGHT_LINE", cam->naif_id);
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->boresight_line) < 0 || n != 1)
+            G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
+                           varname);
+    }
 
     /* Pushbroom instruments: no K1, no ISS summing correction, no per-filter
      * focal length.  OMEGA also needs mirror params; CTX also needs OD_K. */
@@ -480,6 +527,31 @@ static void load_iss_camera_model(const char *instrument,
             if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->nac_k1) < 0 || n != 1)
                 G_fatal_error(_("Camera mode (-c): could not read %s from the loaded IK."),
                                varname);
+            return;
+        }
+        if (cam->is_hirise) {
+            /* HiRISE: focal length + 3-coeff OD_K from parent -74699 (shared across
+             * all 14 CCDs; per-CCD naif_id used for TRANSX/TRANSY/CCD_CENTER above).
+             * Along-track = X (dvec[0]); cross-track = Y (dvec[1]).
+             * transx_bore = TRANSX[0]/focal_length is the along-track binary-search
+             * target (replaces the dvec[0]=0 condition used for CTX). */
+            if (p_spice_gdpool_d("INS-74699_FOCAL_LENGTH", 0, 1, &n,
+                                  &cam->focal_length) < 0 || n != 1)
+                G_fatal_error(_("Camera mode (-c): could not read "
+                                "INS-74699_FOCAL_LENGTH from the loaded IK -- "
+                                "is mro_hirise_v11.ti attached?"));
+            if (p_spice_gdpool_d("INS-74699_OD_K", 0, 3, &n, cam->odk) < 0 || n != 3)
+                G_fatal_error(_("Camera mode (-c): could not read "
+                                "INS-74699_OD_K from the loaded IK."));
+            double transx_buf[3] = {0.0, 0.0, 0.012};
+            snprintf(varname, sizeof(varname), "INS%d_TRANSX", cam->naif_id);
+            (void)p_spice_gdpool_d(varname, 0, 3, &n, transx_buf);
+            double transy_buf[3] = {0.0, -0.012, 0.0};
+            snprintf(varname, sizeof(varname), "INS%d_TRANSY", cam->naif_id);
+            (void)p_spice_gdpool_d(varname, 0, 3, &n, transy_buf);
+            cam->hirise_transy0 = transy_buf[0];
+            cam->hirise_transy1 = transy_buf[1];
+            cam->transx_bore    = transx_buf[0] / cam->focal_length;
             return;
         }
         /* CRISM: single FOCAL_LENGTH scalar */
@@ -767,7 +839,13 @@ int main(int argc, char *argv[])
     opt_instrument->key      = "instrument";
     opt_instrument->type     = TYPE_STRING;
     opt_instrument->required = NO;
-    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,CTX,LROC_NACL,LROC_NACR,HRSC_NADIR,HRSC_RED,HRSC_GREEN,HRSC_BLUE,HRSC_IR,HRSC_P1,HRSC_P2,HRSC_S1,HRSC_S2,VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
+    opt_instrument->options  = "CRISM_VNIR,CRISM_IR,OMEGA_SWIR_C,OMEGA_SWIR_L,OMEGA_VNIR,"
+                               "CTX,LROC_NACL,LROC_NACR,"
+                               "HRSC_NADIR,HRSC_RED,HRSC_GREEN,HRSC_BLUE,HRSC_IR,HRSC_P1,HRSC_P2,HRSC_S1,HRSC_S2,"
+                               "HIRISE_RED0,HIRISE_RED1,HIRISE_RED2,HIRISE_RED3,HIRISE_RED4,"
+                               "HIRISE_RED5,HIRISE_RED6,HIRISE_RED7,HIRISE_RED8,HIRISE_RED9,"
+                               "HIRISE_BG0,HIRISE_BG1,HIRISE_IR0,HIRISE_IR1,"
+                               "VIMS_IR,VIMS_VIS,ISS_NAC,ISS_WAC";
     opt_instrument->description = _("Instrument camera model to use with -c. "
         "CRISM_VNIR/CRISM_IR: MRO CRISM pushbroom (per-line epoch, requires "
         "line_rate= in p.spiceinit history). "
@@ -780,6 +858,10 @@ int main(int argc, char *argv[])
         "(all use frame MEX_HRSC_HEAD; along-track=Y, reversed cross-track X, "
         "per-channel TRANSX[0] offset; no distortion; requires line_rate= "
         "and hrscAddendum004.ti via ik=; HRSC_ND3 is an alias for HRSC_NADIR). "
+        "HIRISE_RED0..RED9/BG0/BG1/IR0/IR1: MRO HiRISE pushbroom CCDs "
+        "(frame=MRO_HIRISE_OPTICAL_AXIS; along-track=X, OD_K[3] from parent -74699, "
+        "per-CCD TRANSX/TRANSY from mro_hirise_v11.ti; requires line_rate= via "
+        "p.spiceinit; HIRISE_RED5 is the center CCD). "
         "ISS_NAC/ISS_WAC: Cassini ISS framing camera (closed-form inverse).");
 
     opt_filter1 = G_define_option();
@@ -1362,9 +1444,13 @@ int main(int argc, char *argv[])
 #define OMEGA_F(dv) (cam.omega_rot[0][1]*(dv)[0] + \
                      cam.omega_rot[1][1]*(dv)[1] + \
                      cam.omega_rot[2][1]*(dv)[2])
-/* CTX/LROC_NAC: along-track = X (dvec[0]); CRISM: along-track = Y (dvec[1]) */
+/* CTX/LROC_NAC/HiRISE: along-track = X (dvec[0]); CRISM/HRSC: along-track = Y.
+ * HiRISE CCDs are offset from the telescope optical axis by TRANSX[0]/fl in X,
+ * so the binary-search zero-crossing is at dvec[0] = transx_bore * dvec[2],
+ * not dvec[0] = 0 as for CTX (which has TRANSX[0] ≈ 0). */
 #define PUSHBROOM_F(dv) (cam.is_omega ? OMEGA_F(dv) \
-    : ((cam.is_ctx || cam.is_lroc_nac) ? (dv)[0] : (dv)[1]))
+    : (cam.is_hirise ? ((dv)[0] - cam.transx_bore * (dv)[2]) \
+    : ((cam.is_ctx || cam.is_lroc_nac) ? (dv)[0] : (dv)[1])))
 
                     double mid_line_f = (in_rows - 1) / 2.0;
                     int pb_ok = 1;
@@ -1464,6 +1550,31 @@ int main(int argc, char *argv[])
                         if (frac > 1.0) frac = 1.0;
 
                         in_col_f = mlo + frac;
+                        in_row_f = in_row_best;
+                    } else if (cam.is_hirise) {
+                        /* HiRISE cross-track: dvec[1] (Y) is cross-track.
+                         * OD_K inversion uses full 2D r² = ux²+uy² because the
+                         * CCD sits far off-axis: ux = TRANSX[0] ≈ ±89 mm. */
+                        double ux = cam.transx_bore * cam.focal_length;  /* ≈TRANSX[0] */
+                        double uy = dvec_best[1] * cam.focal_length / dvec_best[2];
+                        double rp2 = ux*ux + uy*uy;
+                        double rp  = sqrt(rp2);
+                        double drOverR = cam.odk[0] + rp2*(cam.odk[1] + rp2*cam.odk[2]);
+                        double r = rp + drOverR * rp;
+                        for (int odk_it = 0; odk_it < 15; odk_it++) {
+                            double r2 = r * r;
+                            double drOverR_new = cam.odk[0] + r2*(cam.odk[1] + r2*cam.odk[2]);
+                            double r_new = rp + drOverR_new * r;
+                            drOverR = drOverR_new;
+                            if (fabs(r_new - r) < cam.pixel_pitch / 100.0) {
+                                r = r_new; break;
+                            }
+                            r = r_new;
+                        }
+                        double dy = (rp > 0.0) ? (uy / (1.0 - drOverR)) : 0.0;
+                        /* TRANSY inverse: sample = CCD_CENTER[0] + (dy-TRANSY[0])/TRANSY[1] */
+                        in_col_f = (cam.boresight_sample - 1.0)
+                                 + (dy - cam.hirise_transy0) / cam.hirise_transy1;
                         in_row_f = in_row_best;
                     } else if (cam.is_ctx) {
                         /* CTX cross-track: dvec[1] (Y) is cross-track (sample).

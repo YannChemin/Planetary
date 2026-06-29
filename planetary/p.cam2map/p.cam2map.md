@@ -77,6 +77,21 @@ Supported instruments in camera mode:
   `pushbroom_y_sign=−1`, so `sample = boresight_sample − yt/pixel_pitch − 1`. Both
   cameras share `pixel_pitch=7 µm`; boresight_sample=2548 (NACL) / 2496 (NACR).
   Full-resolution (5064 columns, SpatialSumming=1) assumed.
+
+- **`HIRISE_RED0..RED9` / `HIRISE_BG0` / `HIRISE_BG1` / `HIRISE_IR0` / `HIRISE_IR1`**
+  (MRO): HiRISE 14-CCD pushbroom, frame `MRO_HIRISE_OPTICAL_AXIS` (NAIF −74690),
+  per-CCD NAIF IDs −74600..−74613 for TRANSX/TRANSY; focal length (11994.9988 mm) and
+  3-coefficient OD_K (−0.0048509, 2.41e-7, −1.62e-13) from the shared parent ID −74699
+  (`mro_hirise_v11.ti`). Axis orientation: along-track = **X** (dvec[0]), cross-track =
+  **Y** (dvec[1]) — same as CTX. Unlike CTX, each CCD's boresight is offset ~±90 mm from
+  the telescope optical axis in the focal-plane X direction (TRANSX[0]). The binary
+  search target is therefore `dvec[0] / dvec[2] = TRANSX[0] / focal_length ≈ ±0.0075`
+  rather than 0. Sample inversion uses TRANSY: `sample = CCD_CENTER[0] + (dy − TRANSY[0])
+  / TRANSY[1]`, where TRANSY[1] = −0.012 mm/px (sample increases with decreasing y_fp).
+  OD_K distortion uses full 2D r² = x_fp² + y_fp² (x_fp = TRANSX[0] at the binary-search
+  epoch). Pixel pitch 12 µm, CCD_CENTER[0] = 1024.5 for all CCDs. Requires `line_rate=`
+  via `p.spiceinit` and `mro_hirise_v11.ti` in the regular IK list (no separate IAK
+  needed). Start with `HIRISE_RED5` (center CCD).
   `lro_lroc_v20.ti` must be included in `p.spiceinit`'s `ik=` list.
 
 - **`VIMS_IR` / `VIMS_VIS`** (Cassini): closed-form algebraic inverse -- single epoch
