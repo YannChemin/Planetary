@@ -9,8 +9,8 @@ SPECTRA_OBJ = $(SPECTRA_DIR)/p_spectra.o
 LIBES        = $(RASTERLIB) $(GISLIB) $(MATHLIB)
 DEPENDENCIES = $(RASTERDEP) $(GISDEP)
 
-EXTRA_CFLAGS  = -I$(SPECTRA_DIR)
-EXTRA_LDFLAGS = -lm
+EXTRA_CFLAGS  = -I$(SPECTRA_DIR) -fopenmp
+EXTRA_LDFLAGS = -lm -fopenmp
 
 include $(MODULE_TOPDIR)/include/Make/Module.make
 

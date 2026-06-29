@@ -357,28 +357,16 @@ int main(int argc, char *argv[])
             break;
 
         case IDX_SLOPE: {
-            /* Linear slope: (R(wl_right) - R(wl_center)) / (wl_right - wl_center) */
-            /* Delegate as ratio first, then rescale per-pixel.                      */
-            double *r_lo = (double *)G_malloc((size_t)ncols * sizeof(double));
-            double *r_hi = (double *)G_malloc((size_t)ncols * sizeof(double));
-            p_spectra_apply_row_band_ratio(sd, ncols, nbands, spec,
-                midx->wl_center, midx->wl_right, 0, r_lo);  /* gets R(lo) */
-            p_spectra_apply_row_band_ratio(sd, ncols, nbands, spec,
-                midx->wl_right,  midx->wl_center, 0, r_hi); /* gets R(hi) */
-            /* Both calls give us one value; reconstruct slope from ratio:          */
-            /* slope = (R_hi - R_lo) / (wl_hi - wl_lo)                             */
-            /* But p_spectra_apply_row_band_ratio gives R(a)/R(b).                  */
-            /* We need R(lo) and R(hi) separately — use IBD approach with 2 pts.   */
-            /* Simple: compute slope as (ratio - 1) / (wl_right - wl_center)        */
-            /* where ratio = R(wl_right)/R(wl_center).                              */
+            /* Normalised spectral slope: (R_hi/R_lo - 1) / (wl_hi - wl_lo)
+               wl_center = lo wavelength, wl_right = hi wavelength.             */
             double dw = midx->wl_right - midx->wl_center;
+            /* band_ratio(wl_right, wl_center) = R(hi)/R(lo)                    */
+            p_spectra_apply_row_band_ratio(sd, ncols, nbands, spec,
+                midx->wl_right, midx->wl_center, 0, out_d);
             for (int c = 0; c < ncols; c++) {
-                if (r_lo[c] != r_lo[c])   { out_d[c] = NAN; continue; }
-                /* r_lo now holds R(wl_center)/R(wl_right); r_hi holds R(wl_right)/R(wl_center) */
-                /* Use r_hi (= R_hi/R_lo) → slope ∝ (r_hi - 1) / dw */
-                out_d[c] = (r_hi[c] - 1.0) / dw;
+                if (out_d[c] != out_d[c]) continue;
+                out_d[c] = (out_d[c] - 1.0) / dw;
             }
-            G_free(r_lo); G_free(r_hi);
             break;
         }
 
