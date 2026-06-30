@@ -573,15 +573,24 @@ static void load_pinhole_camera_model(const char *instrument,
 
     int got_focal = 0;
     if (f1[0] && f2[0]) {
+        /* Try label order first, then reversed (some filter pairs are only
+         * keyed in the IAK with wheels swapped). */
         snprintf(varname, sizeof(varname), "INS%d_%s_%s_FOCAL_LENGTH",
                  cam->naif_id, f1, f2);
-        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) == 0 && n == 1)
+        if (p_spice_gdpool_d(varname, 0, 1, &n, &cam->focal_length) == 0 && n == 1) {
             got_focal = 1;
-        else
-            G_warning(_("Camera mode (-c): %s not found in the loaded IAK "
-                        "(wrong filter order? real keys are label order, "
-                        "e.g. CL1_CL2 not CL2_CL1) -- falling back to "
-                        "DEFAULT_FOCAL_LENGTH."), varname);
+        } else {
+            char varname2[128];
+            snprintf(varname2, sizeof(varname2), "INS%d_%s_%s_FOCAL_LENGTH",
+                     cam->naif_id, f2, f1);
+            if (p_spice_gdpool_d(varname2, 0, 1, &n, &cam->focal_length) == 0 && n == 1) {
+                got_focal = 1;
+            } else {
+                G_warning(_("Camera mode (-c): neither %s nor %s found in the "
+                            "loaded IAK -- falling back to DEFAULT_FOCAL_LENGTH."),
+                          varname, varname2);
+            }
+        }
     }
     if (!got_focal) {
         snprintf(varname, sizeof(varname), "INS%d_DEFAULT_FOCAL_LENGTH", cam->naif_id);
@@ -748,7 +757,7 @@ int main(int argc, char *argv[])
                                  "pushbroom cubes) -- see NOTES.");
 
     flag_camera = G_define_flag(); flag_camera->key = 'c';
-    flag_camera->label = _("Camera mode: real per-pixel boresight ray (CRISM only, v1)");
+    flag_camera->label = _("Camera mode: real per-pixel boresight ray using instrument camera model");
     flag_camera->description = _("Builds a real per-pixel look-direction ray from the "
                                   "instrument's boresight + per-band camera-model "
                                   "coefficients (read from the IK attached via p.spiceinit) "
