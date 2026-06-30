@@ -3857,15 +3857,18 @@ def main():
         _wget_resumable(fits_url, local_fits)
 
         gs.message("Importing NH LORRI science image via r.in.gdal …")
+        # LORRI multi-HDU FITS: primary HDU is empty (NAXIS=0); science data
+        # (1024x1024 calibrated DN) is in extension 1.
+        fits_hdu1 = f"FITS:{local_fits}:1"
         try:
             gs.run_command("r.in.gdal",
                            flags="o",
-                           input=local_fits,
+                           input=fits_hdu1,
                            output=opt_output,
                            overwrite=True)
         except grass.exceptions.CalledModuleError:
             gs.run_command("r.in.gdal",
-                           input=local_fits,
+                           input=fits_hdu1,
                            output=opt_output,
                            overwrite=True)
 
