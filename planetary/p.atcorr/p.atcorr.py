@@ -121,19 +121,32 @@ import grass.script as gs
 
 
 def _load_matter_bands_module():
-    """Load p.matter.bands.py as a plain Python module (white-box reuse).
+    """Load p.matter.bands as a plain Python module (white-box reuse).
 
-    Its filename has dots in it so it cannot be `import`ed normally; this
-    mirrors the loading pattern already used by this repo's own
-    testsuites (e.g. p.matter.bands/testsuite/test_pmatterbands.py).
+    After dpkg installation both scripts land in the same scripts/ directory,
+    so check there first (installed path).  Fall back to the source-tree
+    sibling directory so the dev build also works.
     """
-    script_path = os.path.normpath(os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..", "p.matter.bands", "p.matter.bands.py"))
-    spec = importlib.util.spec_from_file_location("pmb_reuse", script_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        # installed: scripts/p.matter.bands  (no .py extension)
+        os.path.join(here, "p.matter.bands"),
+        # installed: scripts/p.matter.bands.py (if packaged with extension)
+        os.path.join(here, "p.matter.bands.py"),
+        # dev source tree: planetary/p.atcorr/../p.matter.bands/p.matter.bands.py
+        os.path.normpath(os.path.join(here, "..", "p.matter.bands", "p.matter.bands.py")),
+    ]
+    for script_path in candidates:
+        if os.path.isfile(script_path):
+            from importlib.machinery import SourceFileLoader
+            loader = SourceFileLoader("pmb_reuse", script_path)
+            spec = importlib.util.spec_from_loader("pmb_reuse", loader)
+            mod = importlib.util.module_from_spec(spec)
+            loader.exec_module(mod)
+            return mod
+    raise FileNotFoundError(
+        "p.matter.bands script not found. Searched:\n" +
+        "\n".join(f"  {p}" for p in candidates))
 
 
 pmb = _load_matter_bands_module()

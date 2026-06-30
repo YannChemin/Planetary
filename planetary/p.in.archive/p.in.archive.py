@@ -2541,14 +2541,14 @@ _MARSIS_PSA = ("https://archives.esac.esa.int/psa/ftp/MARS-EXPRESS/MARSIS")
 MARSIS_CATALOG = {
     # EXT1 - southern hemisphere pass, 2006
     "mars_marsis_orbit2419": (
-        f"{_MARSIS_PSA}/MEX-M-MARSIS-3-RDR-SS-EXT1-V1.0/DATA/RDR02415"
+        f"{_MARSIS_PSA}/MEX-M-MARSIS-3-RDR-SS-EXT1-V1.0/DATA/RDR0241X"
         "/R_02419_SS3_TRK_CMP_M.LBL",
         "Mars",
         "MEX MARSIS SS RDR, orbit 2419, EXT1, SS3_TRK_CMP mode "
-        "(1115 frames × 512 range samples, nadir/F1/dipole, southern hemisphere)"),
+        "(~1115 frames × 512 range samples, nadir/F1/dipole, southern hemisphere; ~26 MB)"),
     # EXT7 - north polar region, late mission
     "mars_marsis_orbit20221": (
-        f"{_MARSIS_PSA}/MEX-M-MARSIS-3-RDR-SS-EXT7-V1.0/DATA/RDR20220"
+        f"{_MARSIS_PSA}/MEX-M-MARSIS-3-RDR-SS-EXT7-V1.0/DATA/RDR2022X"
         "/R_20221_SS3_TRK_CMP_M.LBL",
         "Mars",
         "MEX MARSIS SS RDR, orbit 20221, EXT7, SS3_TRK_CMP mode "
