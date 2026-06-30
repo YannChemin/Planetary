@@ -636,7 +636,7 @@ static void load_iss_camera_model(const char *instrument,
         cam->boresight_line   = (cam->boresight_line   - cam->cassis_row_start - bh) / b + 1.0;
         cam->pixel_pitch     *= b;  /* effective pitch in the binned product */
 
-        cam->focal_length = 880.0; /* CaSSIS physical focal length (mm) */
+        cam->focal_length = 874.9; /* CaSSIS physical focal length (mm), em16_tgo_cassis_v09.ti */
         {
             double v;
             if (p_spice_gdpool_d("INS-143400_FOCAL_LENGTH", 0, 1, &n, &v) == 0 && n == 1)
