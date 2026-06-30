@@ -2456,7 +2456,13 @@ def print_cassis_catalog():
 
 
 def _parse_cassis_xml(xml_text):
-    """Extract CaSSIS framelet metadata from a PDS4 XML label using ElementTree."""
+    """Extract CaSSIS framelet metadata from a PDS4 XML label using ElementTree.
+
+    PDS4 Array_2D stores dimensions as a list of Axis_Array children with
+    axis_name ('Line'/'Sample') and elements sub-elements — NOT bare <lines>
+    and <samples>.  Binary image data_type lives under the Array_2D File_Area,
+    separate from ASCII data_type values in the Table_Character products.
+    """
     import xml.etree.ElementTree as ET
 
     def _strip_ns(tag):
@@ -2468,29 +2474,66 @@ def _parse_cassis_xml(xml_text):
         gs.fatal(f"Could not parse CaSSIS XML label: {exc}")
 
     info = {}
+    # Accumulate Axis_Array context: (axis_name, elements) pairs in order.
+    axis_pairs = []   # [(name, elements_str), ...]
+    _in_axis = [False]
+    _cur_axis = {}
 
-    def _walk(elem, axis_name=None):
+    def _walk(elem):
         local = _strip_ns(elem.tag)
         text = (elem.text or "").strip()
+
+        if local == 'Axis_Array':
+            # Parse all children of this Axis_Array then extract the pair.
+            axis_info = {}
+            for child in elem:
+                c_local = _strip_ns(child.tag)
+                c_text = (child.text or "").strip()
+                if c_local in ('axis_name', 'elements') and c_text:
+                    axis_info[c_local] = c_text
+            if 'axis_name' in axis_info and 'elements' in axis_info:
+                axis_pairs.append((axis_info['axis_name'], axis_info['elements']))
+            return  # children already processed above
+
         if text:
             if local == 'start_date_time' and 'start_date_time' not in info:
                 info['start_date_time'] = text
+            elif local == 'filter' and 'filter_name' not in info:
+                # CaSSIS uses <em16_tgo_cas:filter> not <filter_name>
+                info['filter_name'] = text.upper()
             elif local == 'filter_name' and 'filter_name' not in info:
                 info['filter_name'] = text.upper()
             elif local == 'file_name' and text.lower().endswith('.dat'):
                 info['file_name'] = text
-            elif local == 'data_type' and 'data_type' not in info:
-                info['data_type'] = text
-            elif local == 'lines':
-                info['lines'] = text           # CaSSIS-specific; last one wins
-            elif local == 'samples':
-                info['samples'] = text
-            elif local == 'binning':
+            elif local == 'data_type' and text.startswith(('Signed', 'Unsigned')):
+                if 'data_type' not in info:
+                    info['data_type'] = text
+            elif local == 'binning' and 'binning' not in info:
                 info['binning'] = text
+
         for child in elem:
             _walk(child)
 
     _walk(root)
+
+    # Map Axis_Array pairs → lines/samples (PDS4: first axis = Line, second = Sample)
+    axes = {name: val for name, val in axis_pairs}
+    if 'Line' in axes:
+        info['lines'] = axes['Line']
+    if 'Sample' in axes:
+        info['samples'] = axes['Sample']
+
+    # Infer binning from sample count if not explicit:
+    # CaSSIS full-frame is 2048 samples wide; 1024→2x, 512→4x.
+    if 'binning' not in info and 'samples' in info:
+        try:
+            ns = int(info['samples'])
+            if ns > 0 and 2048 % ns == 0:
+                import math
+                info['binning'] = str(int(math.log2(2048 // ns)))
+        except (ValueError, ZeroDivisionError):
+            pass
+
     return info
 
 
@@ -4004,7 +4047,7 @@ def main():
         if any((opt_doi, opt_lid, opt_search, opt_cog, opt_crism, opt_m3, opt_vims, opt_omega,
                 opt_dawn_vir, opt_fc, opt_mdis, opt_onc, opt_ctx, opt_virtis_vex, opt_virtis_rosetta,
                 opt_iuvs, opt_nims, opt_ssi, opt_lamp, opt_akatsuki, opt_leisa, opt_juno,
-                opt_lorri, opt_hrsc, opt_lronac, opt_cassis, opt_marsis, opt_opus, opt_opus_id)):
+                opt_lorri, opt_hrsc, opt_lronac, opt_marsis, opt_opus, opt_opus_id)):
             gs.fatal("cassis= cannot be combined with doi=/lid=/search=/cog=/crism=/m3=/vims="
                      "/omega=/dawn_vir=/fc=/mdis=/onc=/ctx=/virtis_vex=/virtis_rosetta=/iuvs=/nims=/ssi=/lamp="
                      "/akatsuki=/leisa=/juno=/lorri=/hrsc=/lronac=/marsis=/opus=/opus_id=.")
