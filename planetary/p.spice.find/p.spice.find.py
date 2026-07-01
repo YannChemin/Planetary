@@ -28,7 +28,7 @@
 # % key: instrument
 # % type: string
 # % label: Instrument name, for instruments needing extra kernels beyond the spacecraft default
-# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK), the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK), and (with kernels=...,iak) the crismAddendum IAK that CRISM's camera model needs. ISS_NAC, ISS_WAC (CASSINI) -- fetches the IssNAAddendum/IssWAAddendum IAK (with kernels=...,iak) that their pinhole camera models need. OMEGA_SWIR_C, OMEGA_SWIR_L (MEX) -- selects MEX_OMEGA_V03.TI as the ik= (no IAK exists; the whiskbroom camera model is built entirely from this public IK).
+# % description: Currently supported: CRISM (MRO) -- fetches the gimbal/articulation CK (mro_crm_*, separate from the regular spacecraft-body CK), the virtual SCLK (*.65536.tsc, separate from the regular spacecraft SCLK), and (with kernels=...,iak) the crismAddendum IAK that CRISM's camera model needs. HIRISE (MRO) -- selects mro_hirise_v12.ti as ik= and forces the spacecraft-body CK (mro_sc_psp_*) as the primary CK; no extra CK, no IAK needed (all geometry in the standard IK). ISS_NAC, ISS_WAC (CASSINI) -- fetches the IssNAAddendum/IssWAAddendum IAK (with kernels=...,iak) that their pinhole camera models need. OMEGA_SWIR_C, OMEGA_SWIR_L (MEX) -- selects MEX_OMEGA_V03.TI as the ik= (no IAK exists; the whiskbroom camera model is built entirely from this public IK).
 # % required: no
 # %end
 
@@ -204,6 +204,14 @@ INSTRUMENT = {
         "extra_ck_prefix": "mro_crm_",
         "extra_sclk_substr": ".65536.",
         "iak_prefix":      "crismAddendum",
+    },
+    "HIRISE": {
+        "spacecraft":  "MRO",
+        "ik":          "mro_hirise_v12.ti",
+        # Force spacecraft-body CK (mro_sc_psp_*) as primary; HiRISE has no
+        # separate gimbal CK. Without this prefix _best_ck may pick mro_hga_*
+        # (the high-gain antenna CK) which does not carry MRO_SPACECRAFT attitude.
+        "sc_ck_prefix": "mro_sc_psp_",
     },
     "ISS_NAC": {
         "spacecraft":      "CASSINI",
@@ -753,7 +761,10 @@ def main():
     if "ck" in ktypes:
         gs.message("Finding CK …")
         files = _list_dir(f"{base_url}/ck/", timeout)
-        fn = _best_ck(files, target_date, ck_pref)
+        # instrument may force a specific filename prefix for the primary
+        # spacecraft-body CK (e.g. HiRISE needs mro_sc_psp_*, not mro_hga_*)
+        sc_ck_pfx = (instr.get("sc_ck_prefix") if instr else None)
+        fn = _best_ck(files, target_date, ck_pref, name_prefix=sc_ck_pfx)
         if fn:
             p = _fetch("ck", "ck", fn)
             downloaded.append(p)
