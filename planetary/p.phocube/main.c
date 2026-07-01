@@ -1153,6 +1153,95 @@ int main(int argc, char *argv[])
 
     int spice_failed_pixels = 0;
 
+    /* Pre-flight boresight check: test the center pixel before the full loop.
+     * If the center ray misses the target body the entire output will be NULL.
+     * Skipped for OMEGA/VIMS (center-pixel ray needs the mirror-DN raster or
+     * scan geometry that isn't available yet). */
+    if (camera_mode && !cam.is_omega && !cam.is_vims) {
+        double et_ctr = et; /* framing: all rows share one epoch */
+        int   row_ctr = (nrows - 1) / 2;
+        int   col_ctr = (ncols - 1) / 2;
+        if (spice_info.have_line_rate)
+            et_ctr = et + (row_ctr - (nrows - 1) / 2.0) * spice_info.line_rate;
+
+        double dy_ctr = 0.0;
+        if (cam.is_framing)
+            dy_ctr = (row_ctr + 1.0 - cam.boresight_line) * cam.pixel_pitch;
+        double dx_ctr = (col_ctr + 1.0 - cam.boresight_sample) * cam.pixel_pitch;
+        double r2_ctr = dx_ctr * dx_ctr + dy_ctr * dy_ctr;
+        double dvec_ctr[3] = {
+            dx_ctr * (1.0 + cam.k1 * r2_ctr),
+            dy_ctr * (1.0 + cam.k1 * r2_ctr),
+            cam.focal_length
+        };
+
+        double pt_c[3], srv_c[3], trgepc_c;
+        int hit_ctr = p_spice_sincpt(camera_method, target_upper, et_ctr, fixref,
+                                      "LT+S", spice_info.observer, cam.frame,
+                                      dvec_ctr, pt_c, &trgepc_c, srv_c);
+        if (!hit_ctr) {
+            /* Compute off-axis angle for the diagnostic message.
+             * Rotate the (normalised) center dvec from cam.frame into fixref
+             * so we can compare it against the direction to the body center. */
+            double rot[3][3];
+            double dv_mag = sqrt(dvec_ctr[0]*dvec_ctr[0] + dvec_ctr[1]*dvec_ctr[1]
+                                 + dvec_ctr[2]*dvec_ctr[2]);
+            double dv_unit[3] = { dvec_ctr[0]/dv_mag, dvec_ctr[1]/dv_mag,
+                                   dvec_ctr[2]/dv_mag };
+            int rot_ok = (p_spice_pxform(cam.frame, fixref, et_ctr, rot) == 0);
+            if (rot_ok) {
+                /* boresight direction in fixref */
+                double b_fix[3];
+                for (int i = 0; i < 3; i++)
+                    b_fix[i] = rot[i][0]*dv_unit[0]
+                              + rot[i][1]*dv_unit[1]
+                              + rot[i][2]*dv_unit[2];
+
+                /* observer position relative to target body */
+                double obs_st[3]; double lt_dummy;
+                if (p_spice_pos(target_upper, et_ctr, fixref, "NONE",
+                                spice_info.observer, obs_st, &lt_dummy) == 0) {
+                    double range = sqrt(obs_st[0]*obs_st[0]
+                                       + obs_st[1]*obs_st[1]
+                                       + obs_st[2]*obs_st[2]);
+                    /* unit vector FROM observer TOWARD body center.
+                     * p_spice_pos(target, ..., observer) returns the
+                     * position of target relative to observer, so
+                     * obs_st already points from observer to target. */
+                    double to_body[3] = { obs_st[0]/range, obs_st[1]/range,
+                                          obs_st[2]/range };
+                    double dot = b_fix[0]*to_body[0]
+                               + b_fix[1]*to_body[1]
+                               + b_fix[2]*to_body[2];
+                    /* clamp for acos robustness */
+                    if (dot >  1.0) dot =  1.0;
+                    if (dot < -1.0) dot = -1.0;
+                    double off_deg  = acos(dot) * 180.0 / M_PI;
+                    /* angular radius of the largest (equatorial) axis */
+                    double max_r_km = (a_km > b_km ? a_km : b_km);
+                    double half_deg = 0.0;
+                    if (range > max_r_km)
+                        half_deg = asin(max_r_km / range) * 180.0 / M_PI;
+                    G_warning(_("Camera mode (-c): central boresight misses %s "
+                                "(off-center %.2f°, body half-angle only %.2f° "
+                                "from %.0f km). The output will be mostly or "
+                                "entirely NULL -- verify that time=, ck=, and "
+                                "target= are correct for this observation."),
+                              target_upper, off_deg, half_deg, range);
+                } else {
+                    G_warning(_("Camera mode (-c): central boresight misses %s "
+                                "-- the output will likely be entirely NULL. "
+                                "Verify time=, ck=, and target= are correct."),
+                              target_upper);
+                }
+            } else {
+                G_warning(_("Camera mode (-c): central boresight misses %s "
+                            "-- the output will likely be entirely NULL."),
+                          target_upper);
+            }
+        }
+    }
+
     for (int row = 0; row < nrows; row++) {
         G_percent(row, nrows, 2);
 
