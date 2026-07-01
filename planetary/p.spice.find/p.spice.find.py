@@ -147,6 +147,11 @@ SPACECRAFT = {
         "ik":      None,
         "fk":      None,
         "pck":     ["pck00010.tpc"],
+        # MRO spacecraft trajectory SPKs use sequentially-numbered names
+        # (mro_psp1.bsp, mro_psp2.bsp, …) without embedded date ranges, so
+        # _best_spk can't select them from the filename alone.  This prefix
+        # triggers label-based coverage lookup for those files.
+        "spk_lbl_prefix": "mro_psp",
     },
     "LRO": {
         "id":      -85,
@@ -480,6 +485,63 @@ def _best_ck(files, target_date, pref, name_prefix=None):
     return candidates[0][3]
 
 
+# Months as three-letter abbreviations (upper) → month number, for label parsing.
+_MONTH_MAP = {m: i+1 for i, m in enumerate(
+    ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"])}
+# Pattern matching "YYYY MON DD" in NAIF .lbl text (e.g. "2008 JAN 01")
+_RE_LBL_DATE = re.compile(r'(\d{4})\s+([A-Z]{3})\s+(\d{2})')
+
+
+def _lbl_date_range(url, timeout):
+    """Fetch a NAIF .lbl sidecar and return (start_date, end_date) or None.
+
+    Looks for the first two 'YYYY MON DD' dates in the label text, which in
+    NAIF comment sections appear as 'Start of Interval' / 'End of Interval'."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "p.spice.find/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            text = r.read().decode("utf-8", errors="replace")
+    except Exception:
+        return None
+    dates = []
+    for m in _RE_LBL_DATE.finditer(text):
+        y, mon, d = int(m.group(1)), m.group(2).upper(), int(m.group(3))
+        mo = _MONTH_MAP.get(mon)
+        if mo:
+            try:
+                dates.append(datetime.date(y, mo, d))
+            except ValueError:
+                pass
+        if len(dates) >= 2:
+            break
+    if len(dates) >= 2:
+        return min(dates), max(dates)
+    return None
+
+
+def _best_spk_via_lbl(files, target_date, lbl_base_url, prefix, timeout):
+    """Find the best SPK for files whose names match prefix but lack date ranges.
+
+    Fetches the companion .lbl file for each matching .bsp to determine
+    coverage, stopping as soon as a covering file is found.  Returns
+    (filename, start_date, end_date) or None."""
+    candidates = []
+    for f in sorted(f for f in files
+                    if f.lower().startswith(prefix.lower())
+                    and f.lower().endswith(".bsp")):
+        lbl_url = f"{lbl_base_url}/{f}.lbl"
+        r = _lbl_date_range(lbl_url, timeout)
+        if r is None:
+            continue
+        if r[0] <= target_date <= r[1]:
+            span = (r[1] - r[0]).days
+            candidates.append((span, f))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[0][1]
+
+
 def _best_spk(files, target_date):
     """Return the best SPK covering target_date (prefer SCPSE, shortest span)."""
     candidates = []
@@ -756,6 +818,22 @@ def main():
             gs.message(f"  selected: {fn}")
         else:
             gs.warning(f"No SPK covering {target_date} found.")
+
+        # Some spacecraft use sequentially-numbered SPK files whose names
+        # carry no date range (e.g. MRO's mro_psp6.bsp).  When the spacecraft
+        # entry has spk_lbl_prefix, fetch companion .lbl files to discover
+        # coverage and select the right trajectory SPK as an additional kernel.
+        lbl_prefix = sc.get("spk_lbl_prefix")
+        if lbl_prefix:
+            gs.message(f"Finding spacecraft trajectory SPK (via label files, prefix={lbl_prefix}*) …")
+            lbl_base = f"{base_url}/spk"
+            fn2 = _best_spk_via_lbl(files, target_date, lbl_base, lbl_prefix, timeout)
+            if fn2:
+                p = _fetch("spk", "spk", fn2)
+                downloaded.append(p)
+                gs.message(f"  selected (trajectory): {fn2}")
+            else:
+                gs.warning(f"No trajectory SPK with prefix '{lbl_prefix}' covering {target_date} found via label files.")
 
     # ── CK ────────────────────────────────────────────────────────────────
     if "ck" in ktypes:
